@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Projects by Mohibb Malik">
+<title>Mohibb Malik</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EDE8DD; --ink:#211D17; --ink-2:#5C554A; --ink-3:#8C8475;
+  --line:#211D17; --line-soft:#C9C0AE; --card:#F7F3EA;
+  --accent:#B4471F; --accent-ink:#8F371A; --live:#2E6F4F;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;line-height:1.5;min-height:100dvh;-webkit-font-smoothing:antialiased;}
+.wrap{width:100%;max-width:880px;margin:0 auto;padding:0 24px 72px;}
+
+.toprule{max-width:880px;margin:0 auto;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--line);}
+.toprule .name{font-size:13px;font-weight:700;letter-spacing:0.02em;}
+.toprule .loc{font-size:12px;color:var(--ink-2);font-weight:500;}
+
+.intro{padding:64px 0 56px;max-width:640px;}
+.eyebrow{font-family:'Newsreader',serif;font-style:italic;font-size:17px;color:var(--accent);margin-bottom:20px;}
+h1{font-size:clamp(40px,8vw,68px);font-weight:800;letter-spacing:-0.04em;line-height:0.98;margin-bottom:24px;}
+.lede{font-family:'Newsreader',serif;font-size:clamp(18px,2.6vw,22px);line-height:1.5;color:var(--ink-2);max-width:540px;}
+
+.group{margin-bottom:8px;}
+.group-head{display:flex;align-items:baseline;gap:14px;padding:18px 0 0;}
+.group-head .label{font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink);white-space:nowrap;}
+.group-head .count{font-size:12px;color:var(--ink-3);font-weight:600;}
+.group-head .rule{flex:1;height:1.5px;background:var(--line);}
+
+.projects{display:grid;grid-template-columns:1fr;border-left:1.5px solid var(--line);border-top:1.5px solid var(--line);margin-top:22px;}
+@media(min-width:640px){.projects{grid-template-columns:1fr 1fr;}}
+
+.project{display:block;text-decoration:none;color:inherit;position:relative;padding:24px 26px 26px;border-right:1.5px solid var(--line);border-bottom:1.5px solid var(--line);background:var(--card);transition:background .18s;}
+.project::before{content:"";position:absolute;left:0;top:0;height:100%;width:0;background:var(--accent);transition:width .18s;}
+.project:hover{background:#FCEFE6;}
+.project:hover::before{width:4px;}
+.project.soon{background:transparent;cursor:default;pointer-events:none;}
+.project.soon:hover{background:transparent;}
+
+.p-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.p-mark{font-family:'Newsreader',serif;font-size:15px;font-weight:500;color:var(--ink-3);letter-spacing:0.02em;}
+.tag{font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:3px 9px;border:1.5px solid var(--line);color:var(--ink);background:transparent;}
+.tag.live{border-color:var(--live);color:var(--live);}
+.tag.wip{border-color:var(--accent);color:var(--accent-ink);}
+
+.p-name{font-size:22px;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;display:flex;align-items:center;gap:10px;}
+.p-name .go{color:var(--accent);opacity:0;transform:translateX(-4px);transition:opacity .18s,transform .18s;}
+.project:hover .p-name .go{opacity:1;transform:translateX(0);}
+.p-desc{font-size:14px;color:var(--ink-2);line-height:1.5;max-width:42ch;}
+
+.empty{padding:28px;border:1.5px solid var(--line);border-top:none;font-family:'Newsreader',serif;font-style:italic;color:var(--ink-3);}
+
+footer{margin-top:48px;padding-top:24px;border-top:1.5px solid var(--line);font-size:13px;color:var(--ink-3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+footer a{color:var(--ink-2);text-decoration:none;font-weight:600;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
+footer a:hover{color:var(--accent);border-color:var(--accent);}
+
+@media(max-width:480px){.intro{padding:48px 0 40px;}.project{padding:20px;}}
+</style>
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2025 -->
+
+<div class="toprule">
+  <span class="name">MOHIBB MALIK</span>
+  <span class="loc">Oslo &middot; building things</span>
+</div>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">A small workshop of side projects</div>
+    <h1>Things I build.</h1>
+    <p class="lede">Data tools, dashboards, and experiments &mdash; mostly football, motorsport, and whatever else holds my attention long enough to ship.</p>
+  </div>
+
+  <div id="groups"></div>
+
+  <footer>
+    <span>&copy; <span id="year"></span> Mohibb Malik</span>
+    <span><a href="https://no.linkedin.com/in/mohibbmalik">LinkedIn</a></span>
+  </footer>
+
+</div>
+
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+const TAG = {
+  live: '<span class="tag live">Live</span>',
+  wip:  '<span class="tag wip">In progress</span>',
+  soon: '<span class="tag">Coming soon</span>',
+};
+
+function pad(n){ return String(n).padStart(2,'0'); }
+
+function cardHtml(item, i){
+  const isLive = item.status === 'live';
+  const cls = isLive ? 'project' : 'project soon';
+  const href = isLive ? item.url : '#';
+  const arrow = isLive ? ' <span class="go">&rarr;</span>' : '';
+  const tag = TAG[item.status] || TAG.soon;
+  return `<a class="${cls}" href="${href}">
+    <div class="p-top">
+      <span class="p-mark">${pad(i+1)} / ${item.category || ''}</span>
+      ${tag}
+    </div>
+    <div class="p-name">${item.name}${arrow}</div>
+    <div class="p-desc">${item.description || ''}</div>
+  </a>`;
+}
+
+function groupHtml(group){
+  const cards = group.items.map(cardHtml).join('');
+  return `<div class="group">
+    <div class="group-head">
+      <span class="label">${group.label}</span>
+      <span class="count">${pad(group.items.length)}</span>
+      <span class="rule"></span>
+    </div>
+    <div class="projects">${cards}</div>
+  </div>`;
+}
+
+async function render(){
+  const mount = document.getElementById('groups');
+  try {
+    const res = await fetch('./projects.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('load failed');
+    const data = await res.json();
+    mount.innerHTML = (data.groups || []).map(groupHtml).join('');
+  } catch (e) {
+    mount.innerHTML = '<div class="empty">Projects could not be loaded.</div>';
+  }
+}
+render();
+</script>
+</body>
+</html>

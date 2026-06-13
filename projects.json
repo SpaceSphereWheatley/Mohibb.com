@@ -1,0 +1,49 @@
+{
+  "groups": [
+    {
+      "label": "Projects",
+      "items": [
+        {
+          "name": "Spotkick",
+          "category": "Football",
+          "description": "Penalty intelligence built on open football data. Placement, conversion, and a pressure index.",
+          "url": "https://spotkick.mohibb.com",
+          "status": "soon"
+        },
+        {
+          "name": "F1 Dashboard",
+          "category": "Motorsport",
+          "description": "Live timing, qualifying analysis, and race telemetry built on FastF1.",
+          "url": "https://f1.mohibb.com",
+          "status": "soon"
+        },
+        {
+          "name": "Panello",
+          "category": "Home",
+          "description": "Family dashboard pulling calendar, photos, and weather into one shared screen.",
+          "url": "https://panello.mohibb.com",
+          "status": "soon"
+        },
+        {
+          "name": "Pulsar",
+          "category": "Markets",
+          "description": "Crypto dashboard tracking prices, holdings, and market signals.",
+          "url": "https://pulsar.mohibb.com",
+          "status": "soon"
+        }
+      ]
+    },
+    {
+      "label": "Tools",
+      "items": [
+        {
+          "name": "PDF Merger",
+          "category": "Utility",
+          "description": "Combine, reorder, and split PDF files entirely in the browser.",
+          "url": "https://pdf.mohibb.com",
+          "status": "soon"
+        }
+      ]
+    }
+  ]
+}
