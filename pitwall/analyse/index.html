@@ -343,6 +343,8 @@ const state = {
   charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null },
   history: null,         // cached cumulative-time data for the race-history chart
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
+  raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
+  raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
 };
 
 /* ---------- tiny DOM helpers ---------- */
@@ -421,15 +423,21 @@ function slimLaps(data){
     duration_sector_3: l.duration_sector_3, is_pit_out_lap: l.is_pit_out_lap, date_start: l.date_start,
   }));
 }
+// race_control carries flags/SC/VSC messages — keep only the fields we shade with
+function slimRC(data){
+  if (!Array.isArray(data)) return data;
+  return data.map(r => ({ date: r.date, lap_number: r.lap_number, category: r.category, flag: r.flag, scope: r.scope, message: r.message }));
+}
 const fetchLaps     = (sk) => cachedJSON(`pwa.${sk}.laps`,     `${OPENF1}laps?session_key=${sk}`, slimLaps);
 const fetchStints   = (sk) => cachedJSON(`pwa.${sk}.stints`,   `${OPENF1}stints?session_key=${sk}`);
 const fetchPit      = (sk) => cachedJSON(`pwa.${sk}.pit`,      `${OPENF1}pit?session_key=${sk}`);
 const fetchPosition = (sk) => cachedJSON(`pwa.${sk}.position`, `${OPENF1}position?session_key=${sk}`);
 const fetchDrivers  = (sk) => cachedJSON(`pwa.${sk}.drivers`,  `${OPENF1}drivers?session_key=${sk}`);
+const fetchRC       = (sk) => cachedJSON(`pwa.${sk}.rc`,       `${OPENF1}race_control?session_key=${sk}`, slimRC);
 
 /* clear every cache entry for a session (used by Reload) */
 function clearSessionCache(sk){
-  ['laps','stints','pit','position','drivers'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
+  ['laps','stints','pit','position','drivers','rc'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
 }
 
 /* ---------- rendering helpers ---------- */
@@ -556,6 +564,7 @@ const VIEW_SECTIONS = {
 };
 function showView(kind){
   destroyAllCharts();
+  state.raceRedraw = {};        // drop stale redraw closures from the previous session
   ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display = 'none'; });
   const ids = VIEW_SECTIONS[kind] || [];
   ids.forEach((id, i) => {
@@ -898,38 +907,128 @@ function rankMap(entries){
 }
 
 /* ---------- RACE: lap chart ---------- */
+/* ---------- RACE: shared helpers (SC/VSC shading + Top-N filter) ---------- */
+// Parse OpenF1 race_control into Safety Car / Virtual Safety Car periods.
+function parseSafety(rc){
+  const msgs = (Array.isArray(rc)?rc:[]).filter(r => r.date).slice().sort((a,b)=> new Date(a.date)-new Date(b.date));
+  const periods = []; let open = null;
+  const close = (m) => { if (open){ open.endDate = m.date; open.endLap = num(m.lap_number); periods.push(open); open = null; } };
+  for (const m of msgs){
+    const text = (m.message||'').toUpperCase(), flag = (m.flag||'').toUpperCase();
+    const vsc = text.includes('VIRTUAL SAFETY CAR'), sc = text.includes('SAFETY CAR') && !vsc;
+    if ((vsc || sc) && text.includes('DEPLOY')){
+      if (open) close(m);                                   // a new deploy supersedes any open period
+      open = { kind: vsc ? 'VSC' : 'SC', startDate: m.date, startLap: num(m.lap_number) };
+    } else if (vsc && open && open.kind === 'VSC' && text.includes('END')){
+      close(m);                                             // "VIRTUAL SAFETY CAR ENDING"
+    } else if (flag === 'GREEN' && (m.scope||'').toUpperCase() !== 'SECTOR' && open){
+      close(m);                                             // track-wide green ends a safety car (ignore local sector greens)
+    }
+  }
+  if (open) periods.push(open);                             // unterminated — keep what we have
+  return periods;
+}
+const safetyByLap  = (periods) => periods.filter(p => p.startLap!=null).map(p => ({ x0: p.startLap, x1: p.endLap ?? p.startLap, kind: p.kind }));
+const safetyByTime = (periods, t0) => periods.filter(p => p.startDate).map(p => ({
+  x0: (new Date(p.startDate).getTime() - t0) / 60000,
+  x1: ((p.endDate ? new Date(p.endDate) : new Date(p.startDate)).getTime() - t0) / 60000,
+  kind: p.kind,
+}));
+
+// Chart.js inline plugin: shade SC/VSC bands behind the data (reads options.plugins.scShade.periods).
+const scShadePlugin = {
+  id: 'scShade',
+  beforeDatasetsDraw(chart, _args, opts){
+    const periods = opts && opts.periods; if (!periods || !periods.length) return;
+    const x = chart.scales.x, area = chart.chartArea, ctx = chart.ctx; if (!x) return;
+    ctx.save();
+    for (const p of periods){
+      if (p.x0 == null) continue;
+      const a = x.getPixelForValue(p.x0), b = x.getPixelForValue(p.x1!=null ? p.x1 : p.x0);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      const left = Math.max(area.left, Math.min(a, b));
+      let right = Math.min(area.right, Math.max(a, b));
+      if (right - left < 2) right = Math.min(area.right, left + 2);   // keep a one-lap band visible
+      ctx.fillStyle = p.kind === 'VSC' ? 'rgba(242,193,78,0.16)' : 'rgba(242,193,78,0.30)';
+      ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
+      if (right - left > 24){
+        ctx.fillStyle = 'rgba(120,86,0,0.85)';
+        ctx.font = "600 9px 'IBM Plex Mono', ui-monospace, monospace";
+        ctx.textBaseline = 'top';
+        ctx.fillText(p.kind, left + 3, area.top + 3);
+      }
+    }
+    ctx.restore();
+  }
+};
+
+// Top-N driver filter shared across the three race charts.
+const TOPN = [ { n:3, label:'Top 3' }, { n:6, label:'Top 6' }, { n:8, label:'Top 8' }, { n:0, label:'All' } ];
+function topToolbar(){
+  return `<div class="seg topn">${TOPN.map(o => `<button type="button" data-n="${o.n}" class="${state.raceTopN===o.n?'active':''}">${esc(o.label)}</button>`).join('')}</div>`;
+}
+function wireTopN(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-n]'); if (!b) return;
+    const n = Number(b.dataset.n); if (state.raceTopN === n) return;
+    state.raceTopN = n;
+    document.querySelectorAll('.seg.topn button').forEach(x => x.classList.toggle('active', Number(x.dataset.n) === n));
+    Object.values(state.raceRedraw).forEach(fn => { try { fn && fn(); } catch (err){ logError('top-n redraw', err); } });
+  });
+}
+const topNSet = (order, n) => n > 0 ? new Set(order.slice(0, n)) : null;   // null = show all
+// finishing order from laps: most laps completed, then least cumulative time
+function orderByLaps(groups){
+  return Object.keys(groups).map(Number).map(n => {
+    let last = 0, total = 0;
+    for (const l of groups[n]){ const ln = num(l.lap_number); if (ln!=null && ln>last) last = ln; const d = num(l.lap_duration); if (d!=null && d>0) total += d; }
+    return { n, last, total };
+  }).sort((a,b)=> (b.last - a.last) || (a.total - b.total)).map(o => o.n);
+}
+
 async function renderLapChart(session_key){
   const body = $('lapchartBody'); body.innerHTML = loadingBox('Plotting lap times…');
   try {
-    const [laps, pit] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]) ]);
+    const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const groups = groupByDriver(laps);
     const drivers = Object.keys(groups).map(Number);
     if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
     // pit-in laps: {driverNumber-lapNumber}
     const pitSet = new Set((Array.isArray(pit)?pit:[]).map(p => `${num(p.driver_number)}-${num(p.lap_number)}`));
-
-    body.innerHTML = `<div class="chart-box"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps. Use the legend to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+    const order = orderByLaps(groups);
+    const bands = safetyByLap(parseSafety(rc));
 
     const all = laps.map(l => num(l.lap_duration)).filter(v => v!=null && v>0);
     const med = median(all) || 90;
     const yMin = Math.max(0, (Math.min(...all)||med) - 0.8);
     const yMax = med * 1.25;            // shows green-flag pace + most pit laps, clips SC/red-flag spikes
 
-    const datasets = drivers.sort((a,b)=> a-b).map(n => {
-      const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
-      const colour = drvColour(n);
-      const points = ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) }));
-      const radii = ls.map(l => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`)) ? 4 : 0);
-      const borders = ls.map(l => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`)) ? '#211D17' : colour);
-      return {
-        label: drv(n).acr, data: points, borderColor: colour, backgroundColor: colour,
-        borderWidth: 1.5, tension: 0.25, spanGaps: true,
-        pointRadius: radii, pointHoverRadius: 5, pointBorderColor: borders, pointBorderWidth: 1.5,
-        pointBackgroundColor: ls.map(l => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`)) ? '#F7F3EA' : colour),
-      };
-    });
-    drawLapChart(datasets, yMin, yMax);
+    body.innerHTML = `<div class="panel-toolbar">${topToolbar()}</div>
+      <div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps. <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+
+    const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
+    const redraw = () => {
+      const host = $('lapHost'); if (!host) return;
+      host.innerHTML = '<canvas id="lapCanvas"></canvas>';
+      const set = topNSet(order, state.raceTopN);
+      const datasets = drivers.filter(n => !set || set.has(n)).sort((a,b)=> a-b).map(n => {
+        const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
+        const colour = drvColour(n);
+        return {
+          label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) })),
+          borderColor: colour, backgroundColor: colour, borderWidth: 1.5, tension: 0.25, spanGaps: true,
+          pointRadius: ls.map(l => isPit(n,l)?4:0), pointHoverRadius: 5,
+          pointBorderColor: ls.map(l => isPit(n,l)?'#211D17':colour), pointBorderWidth: 1.5,
+          pointBackgroundColor: ls.map(l => isPit(n,l)?'#F7F3EA':colour),
+        };
+      });
+      drawLapChart(datasets, yMin, yMax, bands);
+    };
+    state.raceRedraw.lap = redraw;
+    wireTopN(body.querySelector('.seg.topn'));
+    redraw();
   } catch (e){ logError('lap chart', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
 }
 
@@ -960,21 +1059,25 @@ async function renderHistory(session_key){
       return (cum[a].get(lastLap[a]) ?? Infinity) - (cum[b].get(lastLap[b]) ?? Infinity);
     });
     if (!ranked.length){ body.innerHTML = stateBox('No data', 'Not enough lap timing to build the trace.'); return; }
-    state.history = { cum, lastLap, drivers: ranked };
+    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0] };
 
     const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
-    body.innerHTML = `<div class="hist-bar"><label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
-      <div class="chart-box"><canvas id="histCanvas"></canvas></div>
-      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
-    $('histRef').addEventListener('change', () => drawHistory(Number($('histRef').value)));
-    drawHistory(ranked[0]);
+    body.innerHTML = `<div class="panel-toolbar" style="justify-content:space-between">${topToolbar()}<label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
+      <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
+    $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
+    state.raceRedraw.hist = drawHistory;
+    wireTopN(body.querySelector('.seg.topn'));
+    drawHistory();
   } catch (e){ logError('history', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data for the race-history trace. Tap Reload to retry.', 'error'); }
 }
-function drawHistory(refN){
+function drawHistory(){
   const H = state.history; if (!H) return;
-  const refCum = H.cum[refN], refLast = H.lastLap[refN];
+  const refN = H.ref, refCum = H.cum[refN], refLast = H.lastLap[refN];
   if (!refCum || !refLast) return;
-  const datasets = H.drivers.map(n => {
+  const host = $('histHost'); if (host) host.innerHTML = '<canvas id="histCanvas"></canvas>';
+  const set = topNSet(H.drivers, state.raceTopN);
+  const datasets = H.drivers.filter(n => !set || set.has(n) || n===refN).map(n => {
     const map = H.cum[n], pts = [];
     for (let lap = 1; lap <= refLast; lap++){
       const rc = refCum.get(lap), dc = map.get(lap);
@@ -985,9 +1088,9 @@ function drawHistory(refN){
     return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour,
       borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true, pointRadius: 0, pointHoverRadius: 5 };
   });
-  drawHistoryChart(datasets);
+  drawHistoryChart(datasets, H.bands);
 }
-function drawHistoryChart(datasets){
+function drawHistoryChart(datasets, bands){
   if (!window.Chart) return;
   destroyChart('hist');
   const ctx = $('histCanvas'); if (!ctx) return;
@@ -995,10 +1098,12 @@ function drawHistoryChart(datasets){
   state.charts.hist = new Chart(ctx, {
     type:'line',
     data:{ datasets },
+    plugins:[scShadePlugin],
     options: Object.assign(chartBase({}), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
+        scShade:{ periods: bands || [] },
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtGap(it.parsed.y)}s` } },
@@ -1012,17 +1117,19 @@ function drawHistoryChart(datasets){
     })
   });
 }
-function drawLapChart(datasets, yMin, yMax){
+function drawLapChart(datasets, yMin, yMax, bands){
   if (!window.Chart) return;
   destroyChart('lap');
   const ctx = $('lapCanvas'); if (!ctx) return;
   state.charts.lap = new Chart(ctx, {
     type:'line',
     data:{ datasets },
+    plugins:[scShadePlugin],
     options: Object.assign(chartBase({ xTitle:'Lap', yTitle:'Lap time (s)' }), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
+        scShade:{ periods: bands || [] },
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtLap(it.parsed.y)}` } },
@@ -1093,34 +1200,53 @@ async function renderStrategy(session_key){
 async function renderPosition(session_key){
   const body = $('positionBody'); body.innerHTML = loadingBox('Tracing the order…');
   try {
-    const pos = await fetchPosition(session_key);
+    const [pos, rc] = await Promise.all([ fetchPosition(session_key), fetchRC(session_key).catch(()=>[]) ]);
     const list = (Array.isArray(pos)?pos:[]).filter(p => num(p.driver_number)!=null && num(p.position)!=null && p.date);
     if (!list.length){ destroyChart('pos'); body.innerHTML = stateBox('No data', 'No position data recorded for this session.'); return; }
     const t0 = Math.min(...list.map(p => new Date(p.date).getTime()));
     const byDrv = groupByDriver(list);
     let maxPos = 0;
-    const datasets = Object.keys(byDrv).map(Number).map(n => {
+    const series = {}, finals = [];
+    Object.keys(byDrv).map(Number).forEach(n => {
       const pts = byDrv[n].slice().sort((a,b)=> new Date(a.date)-new Date(b.date))
         .map(p => { const y = num(p.position); maxPos = Math.max(maxPos, y); return { x:(new Date(p.date).getTime()-t0)/60000, y }; });
-      const colour = drvColour(n);
-      return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
+      series[n] = pts;
+      finals.push({ n, lastY: pts.length ? pts[pts.length-1].y : 99 });
     });
-    body.innerHTML = `<div class="chart-box"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Toggle drivers in the legend to follow a recovery drive or an early-stop undercut.</div>`;
-    drawPositionChart(datasets, maxPos || 20);
+    const order = finals.sort((a,b)=> a.lastY - b.lastY).map(o => o.n);
+    const bands = safetyByTime(parseSafety(rc), t0);
+
+    body.innerHTML = `<div class="panel-toolbar">${topToolbar()}</div>
+      <div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
+    const redraw = () => {
+      const host = $('posHost'); if (!host) return;
+      host.innerHTML = '<canvas id="posCanvas"></canvas>';
+      const set = topNSet(order, state.raceTopN);
+      const datasets = order.filter(n => !set || set.has(n)).map(n => {
+        const colour = drvColour(n);
+        return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
+      });
+      drawPositionChart(datasets, maxPos || 20, bands);
+    };
+    state.raceRedraw.pos = redraw;
+    wireTopN(body.querySelector('.seg.topn'));
+    redraw();
   } catch (e){ logError('position', e); destroyChart('pos'); body.innerHTML = stateBox('Unavailable', 'Couldn’t load position data. Tap Reload to retry.', 'error'); }
 }
-function drawPositionChart(datasets, maxPos){
+function drawPositionChart(datasets, maxPos, bands){
   if (!window.Chart) return;
   destroyChart('pos');
   const ctx = $('posCanvas'); if (!ctx) return;
   state.charts.pos = new Chart(ctx, {
     type:'line',
     data:{ datasets },
+    plugins:[scShadePlugin],
     options: Object.assign(chartBase({}), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
+        scShade:{ periods: bands || [] },
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> (it[0]?.parsed.x ?? 0).toFixed(0) + ' min', label:(it)=> `${it.dataset.label}  P${it.parsed.y}` } },

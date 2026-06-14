@@ -81,5 +81,10 @@ The page is linked from the live Pit Wall toprule.
   (gap-to-pole bars) and Quali vs Practice Potential (signed delta bars,
   green = found more / accent = left on the table) each get a segmented
   Graph⇄Table switch, showing one view at a time.
+- **SC/VSC shading + Top-N filter** *(done)*: the race charts (lap times,
+  race history, position) shade Safety Car (darker) and Virtual Safety Car
+  (lighter) periods as translucent yellow bands from OpenF1 `/race_control`,
+  and share a Top 3 / Top 6 / Top 8 / All driver filter (by finishing order)
+  that refreshes all three charts at once.
 - Ideas for later: driver head-to-head (sector deltas), in-stint tyre
   degradation trend, extend the graph/table toggle to the practice panels.
