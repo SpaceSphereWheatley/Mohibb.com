@@ -10,10 +10,14 @@ dependencies, no framework.
 ## Structure
 
 ```
-index.html      page shell, styles, and render logic
-projects.json   the project list (edit this to update the page)
-pdf/            PDF Merger tool, served at mohibb.com/pdf/
-pitwall/        Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
+index.html              page shell, styles, and render logic
+projects.json           the project list (edit this to update the page)
+pdf/                     PDF Merger tool, served at mohibb.com/pdf/
+pitwall/                 Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
+pitwall/analyse/         Pit Wall companion: completed-session analysis, at mohibb.com/pitwall/analyse/
+favicon.svg, robots.txt, sitemap.xml   shared static assets
+.github/workflows/validate.yml         CI checks (see Validation below)
+.stylelintrc.json, .pa11yci.json       config for the CI checks
 README.md
 ```
 
@@ -72,6 +76,60 @@ standings, and an idle countdown to the next race when no session is live.
   numerals. All times shown in Europe/Oslo.
 - Served at `mohibb.com/pitwall/` as part of this same Pages deployment
   (output directory `/` includes `pitwall/`) — no separate project needed.
+- `pitwall/analyse/` is a companion page (own `index.html`, shares the same
+  design tokens and fonts) for digging into any *completed* session:
+  theoretical best laps, qualifying potential, race lap charts, tyre
+  strategy, and long-run race pace, all built on OpenF1's historical data.
+  Linked from Pit Wall and served at `mohibb.com/pitwall/analyse/`.
+
+## Design tokens
+
+Shared `:root` CSS custom properties, defined per-page (no shared stylesheet)
+but kept consistent across `index.html`, `pdf/`, and `pitwall/`:
+
+- Core palette: `--bg` (#EDE8DD), `--card` (#F7F3EA), `--ink` (#211D17),
+  `--ink-2`/`--ink-3` (muted text), `--line`/`--line-soft` (borders),
+  `--accent`/`--accent-ink` (#B4471F rust, used for highlights/links),
+  `--live` (#2E6F4F, "Live" status green).
+- `pitwall/` and `pitwall/analyse/` extend this with `--bg-2`, `--card-2`,
+  `--ink-4`, status colors `--green`/`--yellow`/`--red`/`--blue`/`--sc`, and
+  `--mono` (IBM Plex Mono).
+- Fonts (Google Fonts, loaded per-page): **Plus Jakarta Sans** for body/UI,
+  **Newsreader** italic for "eyebrow"/lede copy, **IBM Plex Mono** for
+  timing/numeric data in Pit Wall.
+
+When adding a new page, copy the `:root` block from the closest existing page
+rather than reinventing values.
+
+## Adding a new page
+
+Each page (`index.html`, `pdf/index.html`, `pitwall/index.html`,
+`pitwall/analyse/index.html`) repeats the same `<head>` boilerplate:
+canonical `<link>`, Open Graph + Twitter meta tags, `theme-color`, favicon
+link, and an `application/ld+json` block. When adding a new top-level page:
+
+- Copy and adapt this boilerplate (title, description, canonical/OG URLs,
+  ld+json) from the closest existing page.
+- Add the new URL to `sitemap.xml` (with appropriate `changefreq`/`priority`).
+- Add the new URL to `.pa11yci.json` so it's covered by the accessibility
+  check in CI.
+
+## Validation (CI)
+
+`.github/workflows/validate.yml` runs on every push/PR via `npx` (no
+package.json/lockfile needed — the site itself stays dependency-free):
+
+- **syntax**: every `*.json` file parses, and every inline `<script>` in
+  `*.html` (non-`src`, JS or `application/ld+json`) is syntactically valid.
+- **html**: `html-validate` against all `*.html`.
+- **css**: `stylelint` (config in `.stylelintrc.json`, extends
+  `stylelint-config-recommended`) against inline `<style>` blocks in all
+  `*.html`.
+- **accessibility**: `pa11y-ci` (WCAG2A, config in `.pa11yci.json`) against
+  the served site — currently `/`, `/pitwall/`, `/pitwall/analyse/`, `/pdf/`.
+
+When adding a new top-level page, add its URL to `.pa11yci.json` so it's
+covered by the accessibility check.
 
 ## Deployment
 
