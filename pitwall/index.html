@@ -55,6 +55,8 @@ a{color:inherit;}
 .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);}
 .pill.live{color:var(--live);border-color:var(--live);background:rgba(46,111,79,0.08);}
 .pill.live .dot{background:var(--live);box-shadow:0 0 0 0 rgba(46,111,79,0.5);animation:pulse 1.6s infinite;}
+.pill.locked{color:var(--accent-ink);border-color:var(--accent);background:rgba(180,71,31,0.08);}
+.pill.locked .dot{background:var(--accent);}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,111,79,0.45);}70%{box-shadow:0 0 0 7px rgba(46,111,79,0);}100%{box-shadow:0 0 0 0 rgba(46,111,79,0);}}
 .flag-pill{font-family:var(--mono);font-weight:600;}
 .flag-pill .swatch{width:10px;height:10px;border-radius:2px;background:var(--ink-3);}
@@ -259,6 +261,14 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
     <p class="cd-note">Live timing — race control, pit stops, overtakes, tyre strategy and weather — appears here automatically once the session goes green.</p>
   </div>
 
+  <!-- live-but-locked notice (OpenF1 restricts real-time data to API key holders) -->
+  <div class="countdown" id="lockedNotice" aria-live="polite">
+    <div class="cd-eyebrow">Session live · real-time data restricted</div>
+    <div class="cd-race">A session is live right now.</div>
+    <div class="cd-circuit">OpenF1 restricts real-time access to API key holders while a session is in progress.</div>
+    <p class="cd-note">Race control, pit stops, overtakes, tyre strategy and weather can't be shown here until the session ends and OpenF1's live lock lifts — usually within a few minutes of the chequered flag.</p>
+  </div>
+
   <!-- 1. STANDINGS -->
   <section class="section" id="sec-standings">
     <div class="sec-head">
@@ -371,7 +381,14 @@ function osloFull(iso){ try { return fmtDate.format(new Date(iso)); } catch { re
 /* ---------- fetch helpers ---------- */
 async function getJSON(url){
   const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
+  if (!res.ok){
+    let detail = '';
+    try { detail = (await res.json())?.detail || ''; } catch {}
+    const err = new Error('HTTP ' + res.status);
+    // OpenF1 locks the entire API to API-key holders while a session is live
+    if (res.status === 403 && /live f1 session in progress/i.test(detail)) err.liveLocked = true;
+    throw err;
+  }
   return res.json();
 }
 const of1 = (ep) => getJSON(OPENF1 + ep + (ep.includes('?') ? '&' : '?') + 'session_key=latest');
@@ -404,8 +421,12 @@ async function detect(){
    ============================================================ */
 function renderStatusBar(){
   const live = state.mode === 'LIVE';
+  const locked = state.mode === 'LOCKED';
   const eb = $('sbEyebrow'), title = $('sbTitle');
-  if (state.detectError){
+  if (locked){
+    eb.textContent = 'session';
+    title.textContent = 'Live — real-time data restricted';
+  } else if (state.detectError){
     eb.textContent = 'status'; title.textContent = 'Feed unavailable';
   } else if (live && state.session){
     const s = state.session;
@@ -418,8 +439,8 @@ function renderStatusBar(){
     title.textContent = 'No live session';
   }
   const pill = $('sbState');
-  pill.className = 'pill' + (live ? ' live' : '');
-  $('sbStateText').textContent = live ? 'Live' : 'Idle';
+  pill.className = 'pill' + (live ? ' live' : locked ? ' locked' : '');
+  $('sbStateText').textContent = live ? 'Live' : (locked ? 'Locked' : 'Idle');
 }
 
 function setUpdated(){
@@ -840,6 +861,8 @@ function tickCountdown(){
   $('cdD').textContent = p(d); $('cdH').textContent = p(h); $('cdM').textContent = p(m); $('cdS').textContent = p(s);
 }
 function hideCountdown(){ $('countdown').classList.remove('show'); if (state.cdTimer){ clearInterval(state.cdTimer); state.cdTimer=null; } }
+function showLocked(){ $('lockedNotice').classList.add('show'); }
+function hideLocked(){ $('lockedNotice').classList.remove('show'); }
 
 /* the five live-only sections — shown only while a session is live */
 const LIVE_SECTIONS = ['sec-rc','sec-pit','sec-ot','sec-stints','sec-wx'];
@@ -866,20 +889,32 @@ async function cycle(){
   let mode;
   state.detectError = false;
   try { mode = await detect(); }
-  catch { mode = 'IDLE'; state.detectError = true; }
+  catch (e) {
+    if (e && e.liveLocked) mode = 'LOCKED';
+    else { mode = 'IDLE'; state.detectError = true; }
+  }
   state.mode = mode;
   renderStatusBar();
 
   if (mode === 'LIVE'){
     hideCountdown();
+    hideLocked();
     showLiveSections(true);
     await loadDrivers();
     setFlag([]);                 // reset, race control will set it
     await pollLive();
     state.pollTimer = setInterval(pollLive, POLL_MS);
+  } else if (mode === 'LOCKED'){
+    setFlag([]);
+    showLiveSections(false);     // hide live-only sections — OpenF1 won't serve them right now
+    hideCountdown();
+    showLocked();
+    setUpdated();
+    state.pollTimer = setInterval(cycle, POLL_MS * 4); // re-check until the lock lifts
   } else {
     setFlag([]);
     showLiveSections(false);     // hide live-only sections entirely when nothing is live
+    hideLocked();
     await loadNextRace();
     showCountdown();
     setUpdated();
@@ -899,7 +934,7 @@ cycle();
 // pause polling when tab hidden; resume (and re-detect) when visible — courteous to APIs
 document.addEventListener('visibilitychange', () => {
   if (document.hidden){ stopPolling(); }
-  else if (state.mode === 'LIVE'){ cycle(); }
+  else if (state.mode === 'LIVE' || state.mode === 'LOCKED'){ cycle(); }
 });
 </script>
 </body>
