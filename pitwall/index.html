@@ -227,8 +227,8 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
       <span class="title" id="sbTitle">Connecting…</span>
     </div>
     <span class="sb-spacer"></span>
-    <span class="pill" id="sbState"><span class="dot"></span><span id="sbStateText">…</span></span>
-    <span class="pill flag-pill" id="sbFlag"><span class="swatch"></span><span id="sbFlagText">—</span></span>
+    <span class="pill" id="sbState" title="Session status — whether an F1 session is running right now"><span class="dot"></span><span id="sbStateText">…</span></span>
+    <span class="pill flag-pill" id="sbFlag" title="Current track flag (green, yellow, red, safety car)" style="display:none"><span class="swatch"></span><span id="sbFlagText">—</span></span>
     <div class="sb-meta">
       <span class="upd">Updated <b id="sbUpdated">—</b></span>
       <button class="refresh" id="refreshBtn" type="button" aria-label="Refresh data"><span class="ico">⟳</span> Refresh</button>
@@ -435,19 +435,21 @@ const FLAG_MAP = {
   BLUE:['blue','#2E5FA3'],
 };
 function setFlag(rc){
-  let cls = 'neutral', colour = '#8C8475', text = 'Green';
+  const fp = $('sbFlag');
+  // the track flag only means something during a live session — hide it otherwise
+  if (state.mode !== 'LIVE'){ fp.style.display = 'none'; return; }
+  fp.style.display = '';
+  let colour = '#8C8475', text = 'Green';
   if (Array.isArray(rc) && rc.length){
     const sorted = [...rc].sort((a,b)=> new Date(b.date) - new Date(a.date));
     for (const m of sorted){
       const cat = (m.category||'').toUpperCase();
       const flag = (m.flag||'').toUpperCase();
       const msg = (m.message||'').toUpperCase();
-      if (cat === 'SAFETYCAR' || msg.includes('SAFETY CAR') || msg.includes('VIRTUAL SAFETY')){ cls='sc'; colour='#7A5BB0'; text = msg.includes('VIRTUAL')?'VSC':'Safety Car'; break; }
+      if (cat === 'SAFETYCAR' || msg.includes('SAFETY CAR') || msg.includes('VIRTUAL SAFETY')){ colour='#7A5BB0'; text = msg.includes('VIRTUAL')?'VSC':'Safety Car'; break; }
       if (flag && FLAG_MAP[flag]){ [,colour]=FLAG_MAP[flag]; text = flag.charAt(0)+flag.slice(1).toLowerCase(); break; }
     }
   }
-  if (state.mode !== 'LIVE'){ colour = '#8C8475'; text = 'Idle'; }
-  const fp = $('sbFlag');
   fp.querySelector('.swatch').style.background = colour;
   $('sbFlagText').textContent = text;
 }
