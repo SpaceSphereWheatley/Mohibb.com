@@ -8,6 +8,7 @@
   "urls": [
     "http://localhost:8123/",
     "http://localhost:8123/pitwall/",
+    "http://localhost:8123/pitwall/analyse/",
     "http://localhost:8123/pdf/"
   ]
 }
