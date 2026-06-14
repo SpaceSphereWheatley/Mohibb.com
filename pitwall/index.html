@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Pit Wall — a live F1 control-room dashboard. Race control, pit stops, overtakes, tyre strategy, weather, and championship standings in real time.">
+<title>Pit Wall — Live F1 — Mohibb Malik</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{
+  /* control-room base */
+  --bg:#0B0E11; --bg-2:#0E1217; --panel:#13181E; --panel-2:#171D24;
+  --line:#242B33; --line-soft:#1B2128;
+  --ink:#E9ECEF; --ink-2:#9BA4AE; --ink-3:#646E79; --ink-4:#3D454E;
+  /* the one hot accent — the live pulse only */
+  --red:#E10600;
+  /* flag semantics */
+  --green:#22B26B; --yellow:#F2C14E; --blue:#3E82F7; --sc:#C77DFF;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;line-height:1.5;
+  min-height:100dvh;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(1200px 600px at 50% -10%,rgba(225,6,0,0.05),transparent 70%);
+}
+.wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 24px 88px;}
+a{color:inherit;}
+::selection{background:var(--red);color:#fff;}
+
+/* ---------- focus ---------- */
+:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:2px;}
+
+/* ---------- top rule (echoes the landing page) ---------- */
+.toprule{max-width:1080px;margin:0 auto;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--line);}
+.toprule .name{font-size:13px;font-weight:700;letter-spacing:0.04em;text-decoration:none;color:var(--ink);}
+.toprule .back{font-size:12px;color:var(--ink-2);font-weight:600;text-decoration:none;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
+.toprule .back:hover{color:var(--red);border-color:var(--red);}
+
+/* ---------- status bar (sticky) ---------- */
+.statusbar{position:sticky;top:0;z-index:40;background:rgba(11,14,17,0.86);backdrop-filter:blur(10px);border-bottom:1.5px solid var(--line);}
+.statusbar.flash{animation:tick .6s ease;}
+@keyframes tick{0%{box-shadow:inset 0 -2px 0 var(--red);}100%{box-shadow:inset 0 0 0 transparent;}}
+.status-inner{max-width:1080px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.sb-session{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.sb-session .eyebrow{font-family:'Newsreader',serif;font-style:italic;font-size:14px;color:var(--ink-3);line-height:1;}
+.sb-session .title{font-size:17px;font-weight:800;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-spacer{flex:1;}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:6px 12px;border:1.5px solid var(--line);border-radius:999px;color:var(--ink-2);white-space:nowrap;}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);}
+.pill.live{color:#fff;border-color:var(--red);}
+.pill.live .dot{background:var(--red);box-shadow:0 0 0 0 rgba(225,6,0,0.6);animation:pulse 1.6s infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(225,6,0,0.55);}70%{box-shadow:0 0 0 7px rgba(225,6,0,0);}100%{box-shadow:0 0 0 0 rgba(225,6,0,0);}}
+.flag-pill{font-family:var(--mono);font-weight:600;}
+.flag-pill .swatch{width:10px;height:10px;border-radius:2px;background:var(--ink-3);}
+.sb-meta{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.sb-meta .upd b{color:var(--ink-2);font-weight:600;}
+.refresh{display:inline-flex;align-items:center;gap:7px;font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.04em;color:var(--ink);background:var(--panel-2);border:1.5px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer;transition:border-color .15s,background .15s;}
+.refresh:hover{border-color:var(--red);background:var(--panel);}
+.refresh .ico{display:inline-block;transition:transform .5s ease;}
+.refresh.spin .ico{transform:rotate(360deg);}
+
+/* ---------- hero / intro ---------- */
+.intro{padding:54px 0 8px;max-width:680px;}
+.intro .eyebrow{font-family:'Newsreader',serif;font-style:italic;font-size:18px;color:var(--red);margin-bottom:16px;}
+h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-height:0.96;margin-bottom:18px;}
+.lede{font-family:'Newsreader',serif;font-size:clamp(17px,2.4vw,21px);line-height:1.5;color:var(--ink-2);max-width:560px;}
+
+/* ---------- idle countdown hero ---------- */
+.countdown{margin:40px 0 8px;border:1.5px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--bg-2));border-radius:4px;padding:34px 32px;display:none;}
+.countdown.show{display:block;}
+.cd-eyebrow{font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px;}
+.cd-race{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-0.03em;line-height:1.02;margin-bottom:6px;}
+.cd-circuit{font-family:'Newsreader',serif;font-style:italic;font-size:18px;color:var(--ink-2);margin-bottom:4px;}
+.cd-when{font-family:var(--mono);font-size:13px;color:var(--ink-3);margin-bottom:26px;font-variant-numeric:tabular-nums;}
+.cd-clock{display:flex;gap:14px;flex-wrap:wrap;}
+.cd-unit{min-width:78px;text-align:center;border:1.5px solid var(--line);border-radius:4px;background:var(--bg-2);padding:14px 10px;}
+.cd-unit .num{font-family:var(--mono);font-weight:700;font-size:clamp(28px,5vw,40px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;}
+.cd-unit .lbl{font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-3);margin-top:8px;}
+
+/* ---------- section scaffold ---------- */
+.section{margin-top:38px;}
+.sec-head{display:flex;align-items:baseline;gap:14px;padding-bottom:0;}
+.sec-head .idx{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-4);}
+.sec-head .label{font-size:13px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink);white-space:nowrap;}
+.sec-head .note{font-family:'Newsreader',serif;font-style:italic;font-size:13px;color:var(--ink-3);}
+.sec-head .rule{flex:1;height:1.5px;background:var(--line);}
+.panel{margin-top:18px;border:1.5px solid var(--line);background:var(--panel);border-radius:4px;overflow:hidden;}
+
+/* generic states */
+.state{padding:26px 24px;display:flex;gap:14px;align-items:flex-start;}
+.state .badge{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);border:1.5px solid var(--line);border-radius:3px;padding:4px 8px;white-space:nowrap;flex-shrink:0;}
+.state .msg{font-family:'Newsreader',serif;font-size:15px;color:var(--ink-2);line-height:1.5;}
+.state.error .badge{color:var(--red);border-color:var(--red);}
+.state.error .msg{color:var(--ink);}
+
+/* ---------- tables ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;}
+.tbl th{text-align:left;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);padding:12px 14px;border-bottom:1.5px solid var(--line);background:var(--bg-2);position:sticky;top:0;}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--line-soft);vertical-align:middle;}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tbody tr{transition:background .12s;}
+.tbl tbody tr:hover{background:var(--panel-2);}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+.tar{text-align:right;}
+.pos{font-family:var(--mono);font-weight:700;color:var(--ink-3);width:34px;}
+.code{font-family:var(--mono);font-weight:700;letter-spacing:0.02em;}
+.accent-cell{position:relative;padding-left:18px;}
+.accent-cell::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:4px;height:18px;border-radius:2px;background:var(--team,var(--ink-4));}
+.muted{color:var(--ink-3);}
+
+/* standings split */
+.split{display:grid;grid-template-columns:1fr;gap:0;}
+@media(min-width:760px){.split{grid-template-columns:1fr 1fr;}.split .col+.col{border-left:1.5px solid var(--line);}}
+.col-head{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);padding:14px 14px 0;}
+.tbl-scroll{max-height:520px;overflow:auto;}
+
+/* ---------- race control feed ---------- */
+.feed{max-height:440px;overflow:auto;}
+.feed-row{display:grid;grid-template-columns:84px 52px 1fr;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-soft);border-left:3px solid transparent;align-items:start;}
+.feed-row:last-child{border-bottom:none;}
+.feed-row .t{font-family:var(--mono);font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.feed-row .lap{font-family:var(--mono);font-size:11px;color:var(--ink-3);}
+.feed-row .body{font-size:13.5px;color:var(--ink);line-height:1.45;}
+.feed-row .who{font-family:var(--mono);font-weight:700;font-size:12px;margin-left:7px;color:var(--ink-2);}
+.feed-row.green{border-left-color:var(--green);}
+.feed-row.yellow{border-left-color:var(--yellow);}
+.feed-row.red{border-left-color:var(--red);}
+.feed-row.blue{border-left-color:var(--blue);}
+.feed-row.sc{border-left-color:var(--sc);}
+.feed-row .tagk{display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 6px;border-radius:3px;margin-right:8px;vertical-align:middle;}
+.tagk.green{color:var(--green);border:1px solid var(--green);}
+.tagk.yellow{color:var(--yellow);border:1px solid var(--yellow);}
+.tagk.red{color:var(--red);border:1px solid var(--red);}
+.tagk.blue{color:var(--blue);border:1px solid var(--blue);}
+.tagk.sc{color:var(--sc);border:1px solid var(--sc);}
+.tagk.neutral{color:var(--ink-3);border:1px solid var(--line);}
+
+/* ---------- pit highlight ---------- */
+tr.fastest td{background:rgba(225,6,0,0.08);}
+tr.fastest .code{color:#fff;}
+.fastest-badge{font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--red);border:1px solid var(--red);border-radius:3px;padding:1px 6px;margin-left:8px;}
+
+/* ---------- overtakes layout ---------- */
+.two-col{display:grid;grid-template-columns:1fr;gap:0;}
+@media(min-width:760px){.two-col{grid-template-columns:1.05fr 1fr;}.two-col .pane+.pane{border-left:1.5px solid var(--line);}}
+.pane{min-width:0;}
+.pane-head{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);padding:14px 16px 6px;}
+.chart-box{padding:8px 16px 18px;height:300px;position:relative;}
+.ot-list{max-height:300px;overflow:auto;}
+.ot-row{display:grid;grid-template-columns:48px 1fr;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line-soft);align-items:center;font-size:13px;}
+.ot-row:last-child{border-bottom:none;}
+.ot-row .t{font-family:var(--mono);font-size:11px;color:var(--ink-3);}
+.ot-move{font-family:var(--mono);font-size:13px;}
+.ot-move .gain{color:var(--green);font-weight:700;}
+.ot-move .arrow{color:var(--ink-3);margin:0 6px;}
+.ot-move .lost{color:var(--ink-2);}
+
+/* ---------- tyre strategy ---------- */
+.stints{padding:8px 16px 16px;}
+.stint-row{display:grid;grid-template-columns:54px 1fr;gap:12px;align-items:center;padding:7px 0;}
+.stint-row .drv{font-family:var(--mono);font-weight:700;font-size:12px;display:flex;align-items:center;gap:7px;}
+.stint-row .drv .chip{width:4px;height:14px;border-radius:2px;background:var(--team,var(--ink-4));}
+.bars{display:flex;width:100%;height:22px;border-radius:3px;overflow:hidden;background:var(--bg-2);border:1px solid var(--line-soft);}
+.bar{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:600;color:rgba(0,0,0,0.55);min-width:14px;overflow:hidden;white-space:nowrap;}
+.cmp-SOFT{background:#E8443B;}.cmp-MEDIUM{background:#F2C14E;}.cmp-HARD{background:#E7E7E7;}
+.cmp-INTERMEDIATE{background:#3FBF6F;}.cmp-WET{background:#3E82F7;color:rgba(255,255,255,0.8);}.cmp-UNKNOWN{background:var(--ink-4);color:var(--ink-2);}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:6px 16px 14px;font-size:11px;color:var(--ink-3);}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:11px;height:11px;border-radius:2px;display:inline-block;}
+
+/* ---------- weather ---------- */
+.wx{display:grid;grid-template-columns:1fr;gap:0;}
+@media(min-width:760px){.wx{grid-template-columns:0.9fr 1.1fr;}.wx .wx-chart{border-left:1.5px solid var(--line);}}
+.wx-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+.wx-cell{padding:16px;border-bottom:1px solid var(--line-soft);}
+.wx-cell:nth-child(odd){border-right:1px solid var(--line-soft);}
+.wx-cell .k{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px;}
+.wx-cell .v{font-family:var(--mono);font-weight:600;font-size:24px;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;}
+.wx-cell .v small{font-size:13px;color:var(--ink-3);font-weight:500;}
+.wx-chart{padding:14px 16px;}
+.wx-chart .pane-head{padding:0 0 8px;}
+.wx-canvas{height:200px;position:relative;}
+.rain-on{color:var(--blue) !important;}
+
+/* ---------- footer ---------- */
+footer{margin-top:56px;padding-top:22px;border-top:1.5px solid var(--line);font-size:12.5px;color:var(--ink-3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+footer a{color:var(--ink-2);text-decoration:none;font-weight:600;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
+footer a:hover{color:var(--red);border-color:var(--red);}
+footer .credit{font-family:'Newsreader',serif;font-style:italic;}
+
+/* ---------- responsive ---------- */
+@media(max-width:560px){
+  .intro{padding:40px 0 4px;}
+  .feed-row{grid-template-columns:70px 1fr;}
+  .feed-row .lap{display:none;}
+  .status-inner{gap:12px;}
+  .sb-meta{width:100%;justify-content:space-between;}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important;scroll-behavior:auto !important;}
+  .pill.live .dot{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <a class="back" href="/">&larr; All projects</a>
+</div>
+
+<!-- sticky status bar -->
+<div class="statusbar" id="statusbar">
+  <div class="status-inner">
+    <div class="sb-session">
+      <span class="eyebrow">current session</span>
+      <span class="title" id="sbTitle">Connecting…</span>
+    </div>
+    <span class="sb-spacer"></span>
+    <span class="pill" id="sbState"><span class="dot"></span><span id="sbStateText">…</span></span>
+    <span class="pill flag-pill" id="sbFlag"><span class="swatch"></span><span id="sbFlagText">—</span></span>
+    <div class="sb-meta">
+      <span class="upd">Updated <b id="sbUpdated">—</b></span>
+      <button class="refresh" id="refreshBtn" type="button" aria-label="Refresh data"><span class="ico">⟳</span> Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">A live pit-wall view of Formula 1</div>
+    <h1>Pit Wall.</h1>
+    <p class="lede">Race control, pit stops, overtakes, tyre strategy, weather and the championship — read straight from the live timing feeds while a session is green, and counting down to the next lights-out when it isn't.</p>
+  </div>
+
+  <!-- idle countdown hero -->
+  <div class="countdown" id="countdown" aria-live="polite">
+    <div class="cd-eyebrow">Next race · lights out in</div>
+    <div class="cd-race" id="cdRace">—</div>
+    <div class="cd-circuit" id="cdCircuit">—</div>
+    <div class="cd-when" id="cdWhen">—</div>
+    <div class="cd-clock" id="cdClock">
+      <div class="cd-unit"><div class="num" id="cdD">--</div><div class="lbl">Days</div></div>
+      <div class="cd-unit"><div class="num" id="cdH">--</div><div class="lbl">Hours</div></div>
+      <div class="cd-unit"><div class="num" id="cdM">--</div><div class="lbl">Mins</div></div>
+      <div class="cd-unit"><div class="num" id="cdS">--</div><div class="lbl">Secs</div></div>
+    </div>
+  </div>
+
+  <!-- 1. STANDINGS -->
+  <section class="section" id="sec-standings">
+    <div class="sec-head">
+      <span class="idx">01</span><span class="label">Standings</span>
+      <span class="note" id="standingsNote"></span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel">
+      <div class="split" id="standingsBody">
+        <div class="state"><span class="badge">Loading</span><span class="msg">Fetching championship standings…</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. RACE CONTROL -->
+  <section class="section" id="sec-rc">
+    <div class="sec-head">
+      <span class="idx">02</span><span class="label">Race Control</span>
+      <span class="note">official messages</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="rcBody"></div></div>
+  </section>
+
+  <!-- 3. PIT STOPS -->
+  <section class="section" id="sec-pit">
+    <div class="sec-head">
+      <span class="idx">03</span><span class="label">Pit Stops</span>
+      <span class="note">ranked by stationary time</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="pitBody"></div></div>
+  </section>
+
+  <!-- 4. OVERTAKES -->
+  <section class="section" id="sec-ot">
+    <div class="sec-head">
+      <span class="idx">04</span><span class="label">Overtakes</span>
+      <span class="note">on-track passes</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="otBody"></div></div>
+  </section>
+
+  <!-- 5. TYRE STRATEGY -->
+  <section class="section" id="sec-stints">
+    <div class="sec-head">
+      <span class="idx">05</span><span class="label">Tyre Strategy</span>
+      <span class="note">stints by compound</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="stintsBody"></div></div>
+  </section>
+
+  <!-- 6. WEATHER -->
+  <section class="section" id="sec-wx">
+    <div class="sec-head">
+      <span class="idx">06</span><span class="label">Weather</span>
+      <span class="note">trackside conditions</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="wxBody"></div></div>
+  </section>
+
+  <footer>
+    <span class="credit">Pit Wall — built by Mohibb Malik, Oslo · 2026</span>
+    <span>Data: <a href="https://openf1.org" target="_blank" rel="noopener">OpenF1</a> · <a href="https://jolpi.ca" target="_blank" rel="noopener">Jolpica</a> · <a href="/">All projects</a></span>
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   Pit Wall — live F1 dashboard
+   Single file. Vanilla JS. Chart.js is the only external lib.
+   ============================================================ */
+
+const OPENF1 = 'https://api.openf1.org/v1/';
+const JOLPI  = 'https://api.jolpi.ca/ergast/f1/';
+const POLL_MS = 5000;
+const GRACE_MS = 10 * 60 * 1000;            // keep "live" 10 min after session end
+const TZ = 'Europe/Oslo';
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const state = {
+  mode: null,            // 'LIVE' | 'IDLE'
+  session: null,
+  drivers: {},           // number -> {acr, name, team, colour}
+  pollTimer: null,
+  cdTimer: null,
+  nextRace: null,
+  charts: { ot: null, wx: null },
+  standingsLoaded: false,
+};
+
+/* ---------- tiny DOM helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num = (x) => { const n = Number(x); return Number.isFinite(n) ? n : null; };
+
+/* ---------- time formatting (always Europe/Oslo) ---------- */
+const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+const fmtTime  = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour:'2-digit', minute:'2-digit', hour12:false });
+const fmtDate  = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:false });
+function oslo(iso){ try { return fmtTime.format(new Date(iso)); } catch { return '—'; } }
+function osloFull(iso){ try { return fmtDate.format(new Date(iso)); } catch { return '—'; } }
+
+/* ---------- fetch helpers ---------- */
+async function getJSON(url){
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+const of1 = (ep) => getJSON(OPENF1 + ep + (ep.includes('?') ? '&' : '?') + 'session_key=latest');
+
+/* ---------- state rendering helpers ---------- */
+function stateBox(badge, msg, kind){
+  return `<div class="state ${kind||''}"><span class="badge">${esc(badge)}</span><span class="msg">${esc(msg)}</span></div>`;
+}
+const IDLE_LINE = 'Race control resumes when the next session goes green — see the countdown above.';
+
+/* ============================================================
+   LIVENESS DETECTION
+   ============================================================ */
+async function detect(){
+  const arr = await of1('sessions');
+  const s = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
+  state.session = s;
+  if (!s) return 'IDLE';
+  const start = new Date(s.date_start).getTime();
+  const end = new Date(s.date_end).getTime();
+  const now = Date.now();
+  if (Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end + GRACE_MS) return 'LIVE';
+  return 'IDLE';
+}
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+function renderStatusBar(){
+  const s = state.session;
+  if (s){
+    const where = [s.circuit_short_name || s.location, s.session_name].filter(Boolean).join(' · ');
+    $('sbTitle').textContent = where || (s.session_name || 'F1 Session');
+  } else {
+    $('sbTitle').textContent = 'No session found';
+  }
+  const live = state.mode === 'LIVE';
+  const pill = $('sbState');
+  pill.className = 'pill' + (live ? ' live' : '');
+  $('sbStateText').textContent = live ? 'Live' : 'Idle';
+}
+
+function setUpdated(){
+  $('sbUpdated').textContent = fmtClock.format(new Date());
+  if (!REDUCED){
+    const bar = $('statusbar');
+    bar.classList.remove('flash'); void bar.offsetWidth; bar.classList.add('flash');
+  }
+}
+
+/* flag state from latest race control message */
+const FLAG_MAP = {
+  GREEN:['green','#22B26B'], CLEAR:['green','#22B26B'],
+  YELLOW:['yellow','#F2C14E'], 'DOUBLE YELLOW':['yellow','#F2C14E'],
+  RED:['red','#E10600'],
+  BLUE:['blue','#3E82F7'],
+};
+function setFlag(rc){
+  let cls = 'neutral', colour = '#646E79', text = 'Green';
+  if (Array.isArray(rc) && rc.length){
+    const sorted = [...rc].sort((a,b)=> new Date(b.date) - new Date(a.date));
+    for (const m of sorted){
+      const cat = (m.category||'').toUpperCase();
+      const flag = (m.flag||'').toUpperCase();
+      const msg = (m.message||'').toUpperCase();
+      if (cat === 'SAFETYCAR' || msg.includes('SAFETY CAR') || msg.includes('VIRTUAL SAFETY')){ cls='sc'; colour='#C77DFF'; text = msg.includes('VIRTUAL')?'VSC':'Safety Car'; break; }
+      if (flag && FLAG_MAP[flag]){ [,colour]=FLAG_MAP[flag]; text = flag.charAt(0)+flag.slice(1).toLowerCase(); break; }
+    }
+  }
+  if (state.mode !== 'LIVE'){ colour = '#646E79'; text = 'Idle'; }
+  const fp = $('sbFlag');
+  fp.querySelector('.swatch').style.background = colour;
+  $('sbFlagText').textContent = text;
+}
+
+/* ============================================================
+   1. STANDINGS  (Jolpica — once on load / manual refresh)
+   ============================================================ */
+async function loadStandings(){
+  const body = $('standingsBody');
+  const note = $('standingsNote');
+  note.textContent = '';
+  try {
+    let label = '';
+    let [drv, con] = await Promise.all([
+      getJSON(JOLPI + 'current/driverStandings.json'),
+      getJSON(JOLPI + 'current/constructorStandings.json'),
+    ]);
+    let dList = drv?.MRData?.StandingsTable?.StandingsLists?.[0];
+    let cList = con?.MRData?.StandingsTable?.StandingsLists?.[0];
+
+    if (!dList || !cList){
+      // season not populated yet — fall back to previous year
+      const prev = new Date().getFullYear() - 1;
+      [drv, con] = await Promise.all([
+        getJSON(JOLPI + prev + '/driverStandings.json'),
+        getJSON(JOLPI + prev + '/constructorStandings.json'),
+      ]);
+      dList = drv?.MRData?.StandingsTable?.StandingsLists?.[0];
+      cList = con?.MRData?.StandingsTable?.StandingsLists?.[0];
+      label = '(' + prev + ' final)';
+    } else {
+      label = '(' + (dList.season || '') + ')';
+    }
+    if (!dList || !cList) throw new Error('empty');
+    note.textContent = label;
+
+    const drvRows = (dList.DriverStandings||[]).map(d => {
+      const code = d.Driver?.code || (d.Driver?.familyName||'').slice(0,3).toUpperCase();
+      const name = `${d.Driver?.givenName||''} ${d.Driver?.familyName||''}`.trim();
+      const team = d.Constructors?.[0]?.name || '—';   // plural array — common gotcha
+      return `<tr>
+        <td class="pos">${esc(d.position)}</td>
+        <td class="accent-cell" style="--team:${teamColourByName(team)}"><span class="code">${esc(code)}</span> <span class="muted">${esc(name)}</span></td>
+        <td class="muted">${esc(team)}</td>
+        <td class="num tar"><b>${esc(num(d.points) ?? d.points)}</b></td>
+        <td class="num tar muted">${esc(d.wins||0)}</td>
+      </tr>`;
+    }).join('');
+
+    const conRows = (cList.ConstructorStandings||[]).map(c => {
+      const team = c.Constructor?.name || '—';
+      return `<tr>
+        <td class="pos">${esc(c.position)}</td>
+        <td class="accent-cell" style="--team:${teamColourByName(team)}">${esc(team)}</td>
+        <td class="num tar"><b>${esc(num(c.points) ?? c.points)}</b></td>
+        <td class="num tar muted">${esc(c.wins||0)}</td>
+      </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="col">
+        <div class="col-head">Drivers</div>
+        <div class="tbl-scroll"><table class="tbl">
+          <thead><tr><th>#</th><th>Driver</th><th>Team</th><th class="tar">Pts</th><th class="tar">Wins</th></tr></thead>
+          <tbody>${drvRows}</tbody>
+        </table></div>
+      </div>
+      <div class="col">
+        <div class="col-head">Constructors</div>
+        <div class="tbl-scroll"><table class="tbl">
+          <thead><tr><th>#</th><th>Team</th><th class="tar">Pts</th><th class="tar">Wins</th></tr></thead>
+          <tbody>${conRows}</tbody>
+        </table></div>
+      </div>`;
+    state.standingsLoaded = true;
+  } catch (e){
+    body.innerHTML = stateBox('Unavailable', 'Standings unavailable — Jolpica API not responding. Tap refresh to retry.', 'error');
+  }
+}
+
+/* known team colours so standings rows have an accent even without OpenF1 driver data */
+const TEAM_COLOURS = {
+  'red bull':'#3671C6','mclaren':'#FF8000','ferrari':'#E8002D','mercedes':'#27F4D2',
+  'aston martin':'#229971','alpine':'#0093CC','alpine f1 team':'#0093CC','williams':'#64C4FF',
+  'rb':'#6692FF','rb f1 team':'#6692FF','racing bulls':'#6692FF','haas':'#B6BABD','haas f1 team':'#B6BABD',
+  'sauber':'#52E252','kick sauber':'#52E252','alfa romeo':'#52E252',
+};
+function teamColourByName(name){
+  const k = (name||'').toLowerCase();
+  for (const key in TEAM_COLOURS){ if (k.includes(key)) return TEAM_COLOURS[key]; }
+  return 'var(--ink-4)';
+}
+
+/* ============================================================
+   DRIVERS lookup (OpenF1, once per session)
+   ============================================================ */
+async function loadDrivers(){
+  try {
+    const arr = await of1('drivers');
+    const map = {};
+    (Array.isArray(arr)?arr:[]).forEach(d => {
+      const n = num(d.driver_number);
+      if (n == null) return;
+      map[n] = {
+        acr: d.name_acronym || ('#'+n),
+        name: d.full_name || d.broadcast_name || ('#'+n),
+        team: d.team_name || '',
+        colour: d.team_colour ? ('#'+String(d.team_colour).replace('#','')) : null,
+      };
+    });
+    state.drivers = map;
+  } catch { state.drivers = {}; }
+}
+function drv(n){ const d = state.drivers[num(n)]; return d || { acr: (n!=null?'#'+n:'—'), name:'—', team:'', colour:null }; }
+
+/* ============================================================
+   2. RACE CONTROL
+   ============================================================ */
+function classifyRC(m){
+  const cat = (m.category||'').toUpperCase();
+  const flag = (m.flag||'').toUpperCase();
+  const msg = (m.message||'').toUpperCase();
+  if (cat==='SAFETYCAR' || msg.includes('SAFETY CAR') || msg.includes('VIRTUAL SAFETY')) return ['sc', msg.includes('VIRTUAL')?'VSC':'SC'];
+  if (flag==='RED' || msg.includes('RED FLAG')) return ['red','Red'];
+  if (flag==='YELLOW' || flag==='DOUBLE YELLOW') return ['yellow', flag==='DOUBLE YELLOW'?'2x Yellow':'Yellow'];
+  if (flag==='BLUE') return ['blue','Blue'];
+  if (flag==='GREEN' || flag==='CLEAR' || msg.includes('TRACK CLEAR') || msg.includes('GREEN')) return ['green','Green'];
+  if (msg.includes('PENALTY') || msg.includes('INVESTIGAT') || msg.includes('NOTED') || msg.includes('DELETED')) return ['neutral','Steward'];
+  return ['neutral', cat ? cat.charAt(0)+cat.slice(1).toLowerCase() : 'Info'];
+}
+async function renderRaceControl(){
+  const body = $('rcBody');
+  try {
+    const arr = await of1('race_control');
+    setFlag(arr);
+    const rows = (Array.isArray(arr)?arr:[]).slice().sort((a,b)=> new Date(b.date)-new Date(a.date));
+    if (!rows.length){ body.innerHTML = stateBox('Quiet', 'No race control messages yet this session.'); return; }
+    body.innerHTML = `<div class="feed">` + rows.map(m => {
+      const [cls,tag] = classifyRC(m);
+      const who = m.driver_number ? `<span class="who">${esc(drv(m.driver_number).acr)}</span>` : '';
+      const lap = m.lap_number!=null ? `L${esc(m.lap_number)}` : '';
+      return `<div class="feed-row ${cls}">
+        <span class="t">${oslo(m.date)}</span>
+        <span class="lap">${lap}</span>
+        <span class="body"><span class="tagk ${cls}">${esc(tag)}</span>${esc(m.message||'—')}${who}</span>
+      </div>`;
+    }).join('') + `</div>`;
+  } catch {
+    body.innerHTML = stateBox('Unavailable', 'Race control feed unavailable — retrying on next refresh.', 'error');
+  }
+}
+
+/* ============================================================
+   3. PIT STOPS
+   ============================================================ */
+async function renderPit(){
+  const body = $('pitBody');
+  try {
+    const arr = await of1('pit');
+    const rows = (Array.isArray(arr)?arr:[]).map(p => ({
+      n: p.driver_number, lap: p.lap_number,
+      dur: num(p.pit_duration) ?? num(p.stop_duration),
+      lane: num(p.lane_duration) ?? num(p.pit_lane_duration),
+    })).filter(p => p.dur != null).sort((a,b)=> a.dur - b.dur);
+    if (!rows.length){ body.innerHTML = stateBox('Quiet', 'No pit stops recorded yet this session.'); return; }
+    const fastest = rows[0].dur;
+    body.innerHTML = `<table class="tbl">
+      <thead><tr><th>Driver</th><th class="tar">Lap</th><th class="tar">Stop (s)</th><th class="tar">Lane (s)</th></tr></thead>
+      <tbody>${rows.map(p => {
+        const d = drv(p.n);
+        const fast = p.dur === fastest;
+        return `<tr class="${fast?'fastest':''}" style="--team:${d.colour||'var(--ink-4)'}">
+          <td class="accent-cell"><span class="code">${esc(d.acr)}</span>${fast?'<span class="fastest-badge">Fastest</span>':''}</td>
+          <td class="num tar muted">${p.lap!=null?esc(p.lap):'—'}</td>
+          <td class="num tar"><b>${p.dur.toFixed(1)}</b></td>
+          <td class="num tar muted">${p.lane!=null?p.lane.toFixed(1):'—'}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+  } catch {
+    body.innerHTML = stateBox('Unavailable', 'Pit data unavailable — retrying on next refresh.', 'error');
+  }
+}
+
+/* ============================================================
+   4. OVERTAKES
+   ============================================================ */
+async function renderOvertakes(){
+  const body = $('otBody');
+  try {
+    const arr = await of1('overtakes');
+    const list = (Array.isArray(arr)?arr:[]).slice().sort((a,b)=> new Date(a.date)-new Date(b.date));
+    if (!list.length){
+      destroyChart('ot');
+      body.innerHTML = stateBox('Quiet', 'No overtakes recorded yet this session.');
+      return;
+    }
+    const counts = {};
+    list.forEach(o => { const n = num(o.overtaking_driver_number); if (n!=null) counts[n] = (counts[n]||0)+1; });
+    const ranked = Object.entries(counts).map(([n,c])=>({ n:Number(n), c })).sort((a,b)=> b.c-a.c).slice(0,12);
+
+    body.innerHTML = `<div class="two-col">
+      <div class="pane"><div class="pane-head">Passes by driver</div><div class="chart-box"><canvas id="otChart"></canvas></div></div>
+      <div class="pane"><div class="pane-head">Chronological</div><div class="ot-list">${
+        list.slice().reverse().map(o => {
+          const a = drv(o.overtaking_driver_number), b = drv(o.overtaken_driver_number);
+          return `<div class="ot-row"><span class="t">${oslo(o.date)}</span>
+            <span class="ot-move"><span class="gain">${esc(a.acr)}</span><span class="arrow">›</span><span class="lost">${esc(b.acr)}</span></span></div>`;
+        }).join('')
+      }</div></div>
+    </div>`;
+
+    drawOvertakeChart(ranked);
+  } catch {
+    destroyChart('ot');
+    body.innerHTML = stateBox('Unavailable', 'Overtake data unavailable — retrying on next refresh.', 'error');
+  }
+}
+function drawOvertakeChart(ranked){
+  if (!window.Chart) return;
+  destroyChart('ot');
+  const ctx = $('otChart'); if (!ctx) return;
+  state.charts.ot = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: ranked.map(r => drv(r.n).acr),
+      datasets:[{
+        data: ranked.map(r => r.c),
+        backgroundColor: ranked.map(r => drv(r.n).colour || '#646E79'),
+        borderRadius:3, barThickness:'flex', maxBarThickness:22,
+      }]
+    },
+    options: chartBase({ indexAxis:'y', xTitle:'passes', integerX:true })
+  });
+}
+
+/* ============================================================
+   5. TYRE STRATEGY
+   ============================================================ */
+const COMPOUND = { SOFT:'SOFT', MEDIUM:'MEDIUM', HARD:'HARD', INTERMEDIATE:'INTERMEDIATE', INTERMEDIATES:'INTERMEDIATE', INTER:'INTERMEDIATE', WET:'WET' };
+async function renderStints(){
+  const body = $('stintsBody');
+  try {
+    const arr = await of1('stints');
+    const list = Array.isArray(arr)?arr:[];
+    if (!list.length){ body.innerHTML = stateBox('Quiet', 'No tyre stint data yet this session.'); return; }
+    const byDrv = {};
+    list.forEach(s => {
+      const n = num(s.driver_number); if (n==null) return;
+      (byDrv[n] = byDrv[n] || []).push(s);
+    });
+    const drivers = Object.keys(byDrv).map(Number).sort((a,b)=>a-b);
+    const rows = drivers.map(n => {
+      const stints = byDrv[n].slice().sort((a,b)=> (num(a.stint_number)||0)-(num(b.stint_number)||0));
+      const segs = stints.map(s => {
+        const start = num(s.lap_start) ?? 0, end = num(s.lap_end) ?? start;
+        const laps = Math.max(1, (end - start) + 1);
+        const cmp = COMPOUND[(s.compound||'').toUpperCase()] || 'UNKNOWN';
+        return { laps, cmp };
+      });
+      const total = segs.reduce((a,s)=> a+s.laps, 0) || 1;
+      const d = drv(n);
+      const bars = segs.map(s => `<span class="bar cmp-${s.cmp}" style="width:${(s.laps/total*100).toFixed(2)}%" title="${s.cmp} · ${s.laps} laps">${s.laps>=3?s.laps:''}</span>`).join('');
+      return `<div class="stint-row" style="--team:${d.colour||'var(--ink-4)'}">
+        <span class="drv"><span class="chip"></span>${esc(d.acr)}</span>
+        <span class="bars">${bars}</span></div>`;
+    }).join('');
+    body.innerHTML = `<div class="stints">${rows}</div>
+      <div class="legend">
+        <span><i class="cmp-SOFT" style="background:#E8443B"></i>Soft</span>
+        <span><i style="background:#F2C14E"></i>Medium</span>
+        <span><i style="background:#E7E7E7"></i>Hard</span>
+        <span><i style="background:#3FBF6F"></i>Inter</span>
+        <span><i style="background:#3E82F7"></i>Wet</span>
+      </div>`;
+  } catch {
+    body.innerHTML = stateBox('Unavailable', 'Tyre strategy unavailable — retrying on next refresh.', 'error');
+  }
+}
+
+/* ============================================================
+   6. WEATHER
+   ============================================================ */
+const WIND_DIR = (deg) => { const d = num(deg); if (d==null) return ''; const dirs=['N','NE','E','SE','S','SW','W','NW']; return dirs[Math.round(d/45)%8]; };
+async function renderWeather(){
+  const body = $('wxBody');
+  try {
+    const arr = await of1('weather');
+    const list = (Array.isArray(arr)?arr:[]).slice().sort((a,b)=> new Date(a.date)-new Date(b.date));
+    if (!list.length){ destroyChart('wx'); body.innerHTML = stateBox('Quiet', 'No weather samples yet this session.'); return; }
+    const w = list[list.length-1];
+    const rain = num(w.rainfall);
+    const cell = (k,v,sub,extra='') => `<div class="wx-cell"><div class="k">${k}</div><div class="v ${extra}">${v}${sub?`<small> ${sub}</small>`:''}</div></div>`;
+    body.innerHTML = `<div class="wx">
+      <div class="wx-grid">
+        ${cell('Air', fmtN(w.air_temperature), '°C')}
+        ${cell('Track', fmtN(w.track_temperature), '°C')}
+        ${cell('Humidity', fmtN(w.humidity), '%')}
+        ${cell('Wind', fmtN(w.wind_speed), 'm/s ' + WIND_DIR(w.wind_direction))}
+        ${cell('Pressure', fmtN(w.pressure), 'mbar')}
+        ${cell('Rain', rain>0?'Yes':'Dry', '', rain>0?'rain-on':'')}
+      </div>
+      <div class="wx-chart"><div class="pane-head">Track temp · this session</div><div class="wx-canvas"><canvas id="wxChart"></canvas></div></div>
+    </div>`;
+    const pts = list.map(s => ({ x: oslo(s.date), y: num(s.track_temperature) })).filter(p => p.y!=null);
+    if (pts.length > 1) drawWeatherChart(pts); else destroyChart('wx');
+  } catch {
+    destroyChart('wx');
+    body.innerHTML = stateBox('Unavailable', 'Weather data unavailable — retrying on next refresh.', 'error');
+  }
+}
+function fmtN(x){ const n = num(x); return n==null ? '—' : (Math.round(n*10)/10).toString(); }
+function drawWeatherChart(pts){
+  if (!window.Chart) return;
+  destroyChart('wx');
+  const ctx = $('wxChart'); if (!ctx) return;
+  state.charts.wx = new Chart(ctx, {
+    type:'line',
+    data:{ labels: pts.map(p=>p.x), datasets:[{
+      data: pts.map(p=>p.y), borderColor:'#E10600', backgroundColor:'rgba(225,6,0,0.12)',
+      borderWidth:2, pointRadius:0, tension:0.3, fill:true,
+    }]},
+    options: chartBase({ yTitle:'°C', sparseX:true })
+  });
+}
+
+/* ---------- Chart.js shared theme ---------- */
+function chartBase(opts){
+  opts = opts || {};
+  const grid = '#242B33', tick = '#646E79';
+  return {
+    indexAxis: opts.indexAxis || 'x',
+    responsive:true, maintainAspectRatio:false,
+    animation: REDUCED ? false : { duration: 300 },
+    plugins:{ legend:{ display:false },
+      tooltip:{ backgroundColor:'#13181E', borderColor:'#242B33', borderWidth:1, titleColor:'#E9ECEF', bodyColor:'#9BA4AE', bodyFont:{family:"'IBM Plex Mono',monospace"} } },
+    scales:{
+      x:{ grid:{ color: opts.indexAxis==='y'?grid:'transparent', drawBorder:false },
+          ticks:{ color:tick, font:{family:"'IBM Plex Mono',monospace",size:10},
+                  precision: opts.integerX?0:undefined,
+                  maxRotation:0, autoSkip:true, maxTicksLimit: opts.sparseX?6:12 },
+          title: opts.xTitle?{display:true,text:opts.xTitle,color:tick,font:{size:10}}:{display:false} },
+      y:{ grid:{ color: opts.indexAxis==='y'?'transparent':grid, drawBorder:false },
+          ticks:{ color:tick, font:{family:"'IBM Plex Mono',monospace",size:10} },
+          title: opts.yTitle?{display:true,text:opts.yTitle,color:tick,font:{size:10}}:{display:false} }
+    }
+  };
+}
+function destroyChart(key){ if (state.charts[key]){ try{ state.charts[key].destroy(); }catch{} state.charts[key]=null; } }
+
+/* ============================================================
+   IDLE — next race countdown
+   ============================================================ */
+async function loadNextRace(){
+  try {
+    const data = await getJSON(JOLPI + 'current.json');
+    const races = data?.MRData?.RaceTable?.Races || [];
+    const now = Date.now();
+    const upcoming = races
+      .map(r => ({ r, t: Date.parse(`${r.date}T${r.time || '00:00:00Z'}`) }))
+      .filter(x => Number.isFinite(x.t) && x.t > now)
+      .sort((a,b)=> a.t - b.t);
+    state.nextRace = upcoming.length ? upcoming[0] : null;
+  } catch { state.nextRace = null; }
+}
+function showCountdown(){
+  const box = $('countdown');
+  const nr = state.nextRace;
+  if (!nr){ box.classList.remove('show'); return; }
+  box.classList.add('show');
+  $('cdRace').textContent = nr.r.raceName || 'Next Grand Prix';
+  $('cdCircuit').textContent = nr.r.Circuit?.circuitName || nr.r.Circuit?.Location?.locality || '';
+  $('cdWhen').textContent = osloFull(nr.t) + ' · Oslo time';
+  tickCountdown();
+  if (state.cdTimer) clearInterval(state.cdTimer);
+  state.cdTimer = setInterval(tickCountdown, 1000);
+}
+function tickCountdown(){
+  const nr = state.nextRace; if (!nr) return;
+  let diff = Math.max(0, nr.t - Date.now());
+  const d = Math.floor(diff/86400000); diff -= d*86400000;
+  const h = Math.floor(diff/3600000); diff -= h*3600000;
+  const m = Math.floor(diff/60000); diff -= m*60000;
+  const s = Math.floor(diff/1000);
+  const p = (x)=> String(x).padStart(2,'0');
+  $('cdD').textContent = p(d); $('cdH').textContent = p(h); $('cdM').textContent = p(m); $('cdS').textContent = p(s);
+}
+function hideCountdown(){ $('countdown').classList.remove('show'); if (state.cdTimer){ clearInterval(state.cdTimer); state.cdTimer=null; } }
+
+/* idle empty states for live sections */
+function renderIdleSections(){
+  $('rcBody').innerHTML = stateBox('Idle', 'No active session. ' + IDLE_LINE);
+  $('pitBody').innerHTML = stateBox('Idle', 'No pit data — no live session.');
+  $('otBody').innerHTML = stateBox('Idle', 'No overtakes — no live session.');
+  $('stintsBody').innerHTML = stateBox('Idle', 'No stint data — no live session.');
+  $('wxBody').innerHTML = stateBox('Idle', 'No live weather — no active session.');
+  destroyChart('ot'); destroyChart('wx');
+}
+
+/* ============================================================
+   POLLING / ORCHESTRATION
+   ============================================================ */
+function stopPolling(){ if (state.pollTimer){ clearInterval(state.pollTimer); state.pollTimer = null; } }
+
+async function pollLive(){
+  // sections fail independently; one rejection must not blank the others
+  await Promise.allSettled([
+    renderRaceControl(), renderPit(), renderOvertakes(), renderStints(), renderWeather(),
+  ]);
+  setUpdated();
+}
+
+async function cycle(){
+  stopPolling();
+  let mode;
+  try { mode = await detect(); }
+  catch { mode = 'IDLE'; $('sbTitle').textContent = 'Feed unavailable'; }
+  state.mode = mode;
+  renderStatusBar();
+
+  if (mode === 'LIVE'){
+    hideCountdown();
+    await loadDrivers();
+    setFlag([]);                 // reset, race control will set it
+    await pollLive();
+    state.pollTimer = setInterval(pollLive, POLL_MS);
+  } else {
+    setFlag([]);
+    await loadNextRace();
+    showCountdown();
+    renderIdleSections();
+    setUpdated();
+  }
+}
+
+async function refresh(btn){
+  if (btn && !REDUCED){ btn.classList.add('spin'); setTimeout(()=> btn.classList.remove('spin'), 600); }
+  await Promise.allSettled([ loadStandings(), cycle() ]);
+}
+
+/* ---------- boot ---------- */
+$('refreshBtn').addEventListener('click', () => refresh($('refreshBtn')));
+loadStandings();
+cycle();
+
+// pause polling when tab hidden; resume (and re-detect) when visible — courteous to APIs
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden){ stopPolling(); }
+  else if (state.mode === 'LIVE'){ cycle(); }
+});
+</script>
+</body>
+</html>
