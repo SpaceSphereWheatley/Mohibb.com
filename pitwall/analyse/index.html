@@ -1057,7 +1057,7 @@ async function renderLapChart(session_key){
 async function renderHistory(session_key){
   const body = $('historyBody'); body.innerHTML = loadingBox('Building the race-history trace…');
   try {
-    const laps = await fetchLaps(session_key);
+    const [laps, rc] = await Promise.all([ fetchLaps(session_key), fetchRC(session_key).catch(()=>[]) ]);
     const groups = groupByDriver(laps);
     const drivers = Object.keys(groups).map(Number);
     if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
