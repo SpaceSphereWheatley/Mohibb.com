@@ -101,6 +101,9 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .sessbar .typepill.practice{color:var(--blue);border-color:var(--blue);}
 .sessbar .typepill.qualifying{color:var(--accent-ink);border-color:var(--accent);}
 .sessbar .typepill.race{color:var(--live);border-color:var(--live);}
+.sessbar .copylink{margin-left:auto;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--ink-2);background:var(--bg);border:1.5px solid var(--line-soft);border-radius:999px;padding:6px 13px;cursor:pointer;transition:border-color .15s,color .15s,background .15s;white-space:nowrap;}
+.sessbar .copylink:hover{border-color:var(--accent);color:var(--accent);background:var(--card-2);}
+.sessbar .copylink.copied{border-color:var(--live);color:var(--live);background:var(--bg);}
 
 /* ---------- section scaffold ---------- */
 .section{margin-top:38px;}
@@ -227,6 +230,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
       <span class="gp" id="sbGp">—</span>
       <span class="sub" id="sbSub">—</span>
     </div>
+    <button class="copylink" id="copyLink" type="button" title="Copy a shareable link to this exact session">Copy link</button>
     <span class="typepill" id="sbType">—</span>
   </div>
 
@@ -597,6 +601,7 @@ async function loadSession(session_key){
   if (!s){ return; }
   state.session = s;
   setSessionBanner(s);
+  writeHash();   // reflect the selection in the URL so it can be shared/bookmarked
 
   // guard: session not finished yet — historical endpoints would be empty
   if (new Date(s.date_end).getTime() >= Date.now()){
@@ -1000,12 +1005,74 @@ async function reload(){
   else await onYearChange();
 }
 
+/* ---------- deep-linking: encode the selection in the URL hash ---------- */
+let lastHash = '';                          // the hash we wrote ourselves (so hashchange ignores it)
+function parseHash(){
+  const raw = (location.hash || '').replace(/^#/, '');
+  if (!raw) return null;
+  const p = new URLSearchParams(raw);
+  const year = Number(p.get('y')), mk = p.get('m'), sk = p.get('s');
+  if (!Number.isFinite(year) || !sk) return null;
+  return { year, mk, sk };
+}
+function writeHash(){
+  if (!state.session) return;
+  const h = `#y=${state.year}&m=${state.session.meeting_key}&s=${state.session.session_key}`;
+  lastHash = h;
+  if (location.hash !== h){
+    try { history.replaceState(null, '', h); } catch { location.hash = h; }   // replaceState doesn't fire hashchange
+  }
+}
+// restore an exact selection from a shared/bookmarked link; throws if the season can't be loaded
+async function restoreFromHash(h){
+  const inRange = Array.from($('selYear').options).some(o => Number(o.value) === h.year);
+  if (!inRange) throw new Error('year out of range');
+  state.year = h.year; $('selYear').value = String(h.year);
+  await loadMeetings(h.year);
+  if (!state.meetings.length) throw new Error('no meetings');
+  if (h.mk != null && state.meetings.some(m => String(m.meeting_key) === String(h.mk))) $('selMeeting').value = String(h.mk);
+  await loadSessions(Number($('selMeeting').value));
+  if (!state.sessions.length) throw new Error('no sessions');
+  if (state.sessions.some(s => String(s.session_key) === String(h.sk))) $('selSession').value = String(h.sk);
+  await loadSession($('selSession').value);
+}
+// react to back/forward or a pasted/edited link
+async function onHashChange(){
+  if (location.hash === lastHash) return;   // our own replaceState round-trips through here on some browsers
+  const h = parseHash(); if (!h) return;
+  try { await restoreFromHash(h); }
+  catch (e){ logError('hashchange', e); }
+}
+function initCopyLink(){
+  const btn = $('copyLink'); if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const url = location.href;
+    try { await navigator.clipboard.writeText(url); }
+    catch {
+      const t = document.createElement('textarea'); t.value = url; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch {} t.remove();
+    }
+    const orig = btn.dataset.orig || (btn.dataset.orig = btn.textContent);
+    btn.textContent = 'Copied ✓'; btn.classList.add('copied');
+    clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1600);
+  });
+}
+
 async function boot(){
   populateYears();
   $('selYear').addEventListener('change', onYearChange);
   $('selMeeting').addEventListener('change', onMeetingChange);
   $('selSession').addEventListener('change', onSessionChange);
   $('refreshBtn').addEventListener('click', reload);
+  window.addEventListener('hashchange', onHashChange);
+  initCopyLink();
+
+  // a shared/bookmarked link wins over the default
+  const hash = parseHash();
+  if (hash){
+    try { await restoreFromHash(hash); return; }
+    catch (e){ logError('restore from hash', e); }   // fall through to the default selection
+  }
 
   // default to the latest season that actually has a completed weekend
   const cur = new Date().getFullYear();

@@ -58,3 +58,19 @@ forecast).
    data needs)
 3. Race lap chart + strategy (reuses existing chart/stint code)
 4. Long-run pace / race-pace-indicator panel (most exploratory, do last)
+
+## Status
+
+Stages 1–4 are all shipped (`analyse/index.html`):
+- Practice: theoretical best lap + long-run pace.
+- Qualifying: pace ranking, quali-vs-practice-potential, race-pace indicator.
+- Race: lap chart, tyre strategy + pit stops, position-over-time.
+The page is linked from the live Pit Wall toprule.
+
+## Next stages (post-plan)
+- **Shareable deep links** *(done)*: the selected year/meeting/session is
+  encoded in the URL hash (`#y=…&m=…&s=…`), restored on load and on
+  back/forward, with a "Copy link" button on the session banner — so any
+  analysis can be bookmarked or shared.
+- Ideas for later: driver head-to-head (sector deltas), in-stint tyre
+  degradation trend, gap-to-leader race chart.
