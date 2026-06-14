@@ -222,7 +222,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
 <div class="statusbar" id="statusbar">
   <div class="status-inner">
     <div class="sb-session">
-      <span class="eyebrow">current session</span>
+      <span class="eyebrow" id="sbEyebrow">current session</span>
       <span class="title" id="sbTitle">Connecting…</span>
     </div>
     <span class="sb-spacer"></span>
@@ -272,7 +272,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
   </section>
 
   <!-- 2. RACE CONTROL -->
-  <section class="section" id="sec-rc">
+  <section class="section live-only" id="sec-rc" style="display:none">
     <div class="sec-head">
       <span class="idx">02</span><span class="label">Race Control</span>
       <span class="note">official messages</span>
@@ -282,7 +282,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
   </section>
 
   <!-- 3. PIT STOPS -->
-  <section class="section" id="sec-pit">
+  <section class="section live-only" id="sec-pit" style="display:none">
     <div class="sec-head">
       <span class="idx">03</span><span class="label">Pit Stops</span>
       <span class="note">ranked by stationary time</span>
@@ -292,7 +292,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
   </section>
 
   <!-- 4. OVERTAKES -->
-  <section class="section" id="sec-ot">
+  <section class="section live-only" id="sec-ot" style="display:none">
     <div class="sec-head">
       <span class="idx">04</span><span class="label">Overtakes</span>
       <span class="note">on-track passes</span>
@@ -302,7 +302,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
   </section>
 
   <!-- 5. TYRE STRATEGY -->
-  <section class="section" id="sec-stints">
+  <section class="section live-only" id="sec-stints" style="display:none">
     <div class="sec-head">
       <span class="idx">05</span><span class="label">Tyre Strategy</span>
       <span class="note">stints by compound</span>
@@ -312,7 +312,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
   </section>
 
   <!-- 6. WEATHER -->
-  <section class="section" id="sec-wx">
+  <section class="section live-only" id="sec-wx" style="display:none">
     <div class="sec-head">
       <span class="idx">06</span><span class="label">Weather</span>
       <span class="note">trackside conditions</span>
@@ -378,7 +378,6 @@ const of1 = (ep) => getJSON(OPENF1 + ep + (ep.includes('?') ? '&' : '?') + 'sess
 function stateBox(badge, msg, kind){
   return `<div class="state ${kind||''}"><span class="badge">${esc(badge)}</span><span class="msg">${esc(msg)}</span></div>`;
 }
-const IDLE_LINE = 'Race control resumes when the next session goes green — see the countdown above.';
 
 /* ============================================================
    LIVENESS DETECTION
@@ -399,14 +398,20 @@ async function detect(){
    STATUS BAR
    ============================================================ */
 function renderStatusBar(){
-  const s = state.session;
-  if (s){
-    const where = [s.circuit_short_name || s.location, s.session_name].filter(Boolean).join(' · ');
-    $('sbTitle').textContent = where || (s.session_name || 'F1 Session');
-  } else {
-    $('sbTitle').textContent = 'No session found';
-  }
   const live = state.mode === 'LIVE';
+  const eb = $('sbEyebrow'), title = $('sbTitle');
+  if (state.detectError){
+    eb.textContent = 'status'; title.textContent = 'Feed unavailable';
+  } else if (live && state.session){
+    const s = state.session;
+    eb.textContent = 'current session';
+    const where = [s.circuit_short_name || s.location, s.session_name].filter(Boolean).join(' · ');
+    title.textContent = where || (s.session_name || 'F1 Session');
+  } else {
+    // nothing live — don't surface the most-recent (finished) session as if current
+    eb.textContent = 'session';
+    title.textContent = 'No live session';
+  }
   const pill = $('sbState');
   pill.className = 'pill' + (live ? ' live' : '');
   $('sbStateText').textContent = live ? 'Live' : 'Idle';
@@ -829,14 +834,11 @@ function tickCountdown(){
 }
 function hideCountdown(){ $('countdown').classList.remove('show'); if (state.cdTimer){ clearInterval(state.cdTimer); state.cdTimer=null; } }
 
-/* idle empty states for live sections */
-function renderIdleSections(){
-  $('rcBody').innerHTML = stateBox('Idle', 'No active session. ' + IDLE_LINE);
-  $('pitBody').innerHTML = stateBox('Idle', 'No pit data — no live session.');
-  $('otBody').innerHTML = stateBox('Idle', 'No overtakes — no live session.');
-  $('stintsBody').innerHTML = stateBox('Idle', 'No stint data — no live session.');
-  $('wxBody').innerHTML = stateBox('Idle', 'No live weather — no active session.');
-  destroyChart('ot'); destroyChart('wx');
+/* the five live-only sections — shown only while a session is live */
+const LIVE_SECTIONS = ['sec-rc','sec-pit','sec-ot','sec-stints','sec-wx'];
+function showLiveSections(show){
+  LIVE_SECTIONS.forEach(id => { const n = $(id); if (n) n.style.display = show ? '' : 'none'; });
+  if (!show){ destroyChart('ot'); destroyChart('wx'); }
 }
 
 /* ============================================================
@@ -855,22 +857,24 @@ async function pollLive(){
 async function cycle(){
   stopPolling();
   let mode;
+  state.detectError = false;
   try { mode = await detect(); }
-  catch { mode = 'IDLE'; $('sbTitle').textContent = 'Feed unavailable'; }
+  catch { mode = 'IDLE'; state.detectError = true; }
   state.mode = mode;
   renderStatusBar();
 
   if (mode === 'LIVE'){
     hideCountdown();
+    showLiveSections(true);
     await loadDrivers();
     setFlag([]);                 // reset, race control will set it
     await pollLive();
     state.pollTimer = setInterval(pollLive, POLL_MS);
   } else {
     setFlag([]);
+    showLiveSections(false);     // hide live-only sections entirely when nothing is live
     await loadNextRace();
     showCountdown();
-    renderIdleSections();
     setUpdated();
   }
 }
