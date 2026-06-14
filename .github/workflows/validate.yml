@@ -1,0 +1,57 @@
+name: validate
+
+# Lightweight, dependency-free checks. Cloudflare Pages handles the deploy;
+# this only guards against the two breakages that are easy to ship silently:
+#   1. invalid projects.json (breaks the whole landing page at runtime)
+#   2. a syntax error in an inline <script> in any HTML file
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+          const files = execSync('git ls-files "*.json"', { encoding: 'utf8' })
+            .split('\n').filter(Boolean);
+          let bad = 0;
+          for (const f of files) {
+            try { JSON.parse(fs.readFileSync(f, 'utf8')); console.log('ok   ' + f); }
+            catch (e) { bad++; console.error('FAIL ' + f + ' — ' + e.message); }
+          }
+          if (bad) process.exit(1);
+          if (!files.length) console.log('(no JSON files)');
+          EOF
+
+      - name: Syntax-check inline JS in HTML
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+          const files = execSync('git ls-files "*.html"', { encoding: 'utf8' })
+            .split('\n').filter(Boolean);
+          const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+          let bad = 0;
+          for (const f of files) {
+            const html = fs.readFileSync(f, 'utf8');
+            let m, i = 0;
+            while ((m = re.exec(html))) {
+              const attrs = m[1], code = m[2];
+              if (/\bsrc\s*=/.test(attrs)) continue;        // external script, nothing inline
+              if (!code.trim()) continue;
+              i++;
+              try { new Function(code); console.log(`ok   ${f} [script #${i}]`); }
+              catch (e) { bad++; console.error(`FAIL ${f} [script #${i}] — ${e.message}`); }
+            }
+          }
+          if (bad) process.exit(1);
+          if (!files.length) console.log('(no HTML files)');
+          EOF
