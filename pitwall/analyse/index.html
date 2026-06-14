@@ -835,16 +835,18 @@ function drawQtheoChart(rows){
     type:'bar',
     data:{ labels: withGap.map(r => drv(r.n).acr),
       datasets:[{ data: withGap.map(r => r.gap), backgroundColor: colours, borderColor: colours, borderWidth:1, borderRadius:2, barPercentage:0.84, categoryPercentage:0.84 }] },
+    plugins:[baselinePlugin],
     options: Object.assign(chartBase({}), {
       indexAxis:'y',
       plugins:{
+        baseline:{ axis:'x', color:'#211D17', width:1.5 },
         legend:{ display:false },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> { const r=withGap[it[0].dataIndex]; return `${drv(r.n).acr} — ${drv(r.n).name}`; },
             label:(it)=> { const r=withGap[it.dataIndex]; return [`Quali  ${fmtLap(r.q)}`, `Potential  ${fmtLap(r.t)}`, `Δ  ${fmtGap(r.gap)}`]; } } },
       },
       scales:{
-        x:{ grid:{ color:(c)=> c.tick.value===0 ? '#211D17' : '#C9C0AE', lineWidth:(c)=> c.tick.value===0 ? 1.5 : 1 },
+        x:{ grid:{ color:'#C9C0AE' },
             ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback:(v)=> fmtGap(v) },
             title:{ display:true, text:'Δ to potential (s) · left = found more', color:'#8C8475', font:{size:10} } },
         y:{ grid:{ color:'transparent' }, ticks:{ color:'#5C554A', font:{family:"'IBM Plex Mono',monospace",size:11} } },
@@ -959,6 +961,25 @@ const scShadePlugin = {
       }
     }
     ctx.restore();
+  }
+};
+
+// Chart.js inline plugin: draw a bold baseline at value 0 on the given axis.
+// (Replaces a scriptable grid colour using context.tick.value, which threw on
+//  the deployed Chart.js build when the grid context had no tick.)
+const baselinePlugin = {
+  id: 'baseline',
+  beforeDatasetsDraw(chart, _args, opts){
+    if (!opts || !opts.axis) return;
+    const scale = chart.scales[opts.axis]; if (!scale) return;
+    const area = chart.chartArea, ctx = chart.ctx, p = scale.getPixelForValue(0);
+    if (!Number.isFinite(p)) return;
+    ctx.save();
+    ctx.strokeStyle = opts.color || '#211D17'; ctx.lineWidth = opts.width || 1.5;
+    ctx.beginPath();
+    if (opts.axis === 'y'){ if (p >= area.top && p <= area.bottom){ ctx.moveTo(area.left, p); ctx.lineTo(area.right, p); } }
+    else { if (p >= area.left && p <= area.right){ ctx.moveTo(p, area.top); ctx.lineTo(p, area.bottom); } }
+    ctx.stroke(); ctx.restore();
   }
 };
 
@@ -1098,19 +1119,20 @@ function drawHistoryChart(datasets, bands){
   state.charts.hist = new Chart(ctx, {
     type:'line',
     data:{ datasets },
-    plugins:[scShadePlugin],
+    plugins:[scShadePlugin, baselinePlugin],
     options: Object.assign(chartBase({}), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
         scShade:{ periods: bands || [] },
+        baseline:{ axis:'y', color:'#211D17', width:1.5 },
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtGap(it.parsed.y)}s` } },
       },
       scales:{
         x:{ type:'linear', grid:{ color:'transparent' }, ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, precision:0, maxTicksLimit:14 }, title:{ display:true, text:'Lap', color:'#8C8475', font:{size:10} } },
-        y:{ grid:{ color:(c)=> c.tick.value===0 ? '#211D17' : '#C9C0AE', lineWidth:(c)=> c.tick.value===0 ? 1.5 : 1 },
+        y:{ grid:{ color:'#C9C0AE' },
             ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback: signed },
             title:{ display:true, text:'Ahead of reference', color:'#8C8475', font:{size:10} } },
       }
