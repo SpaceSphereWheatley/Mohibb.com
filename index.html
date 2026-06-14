@@ -126,7 +126,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
 const TAG = {
   live: '<span class="tag live">Live</span>',
   wip:  '<span class="tag wip">In progress</span>',
-  soon: '<span class="tag">Coming soon</span>',
+  soon: '<span class="tag">Under development</span>',
 };
 
 function pad(n){ return String(n).padStart(2,'0'); }
@@ -147,8 +147,12 @@ function cardHtml(item, i){
   </a>`;
 }
 
+const STATUS_ORDER = { live: 0, wip: 1, soon: 2 };
+
 function groupHtml(group){
-  const cards = group.items.map(cardHtml).join('');
+  const items = [...group.items].sort((a, b) =>
+    (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
+  const cards = items.map(cardHtml).join('');
   return `<div class="group">
     <div class="group-head">
       <span class="label">${group.label}</span>
