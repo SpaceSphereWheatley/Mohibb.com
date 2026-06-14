@@ -101,6 +101,9 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .sessbar .typepill.practice{color:var(--blue);border-color:var(--blue);}
 .sessbar .typepill.qualifying{color:var(--accent-ink);border-color:var(--accent);}
 .sessbar .typepill.race{color:var(--live);border-color:var(--live);}
+.sessbar .copylink{margin-left:auto;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--ink-2);background:var(--bg);border:1.5px solid var(--line-soft);border-radius:999px;padding:6px 13px;cursor:pointer;transition:border-color .15s,color .15s,background .15s;white-space:nowrap;}
+.sessbar .copylink:hover{border-color:var(--accent);color:var(--accent);background:var(--card-2);}
+.sessbar .copylink.copied{border-color:var(--live);color:var(--live);background:var(--bg);}
 
 /* ---------- section scaffold ---------- */
 .section{margin-top:38px;}
@@ -151,6 +154,19 @@ tr.best .code{color:var(--accent-ink);}
 
 /* ---------- charts ---------- */
 .chart-box{padding:14px 16px 18px;height:clamp(280px,52vw,440px);position:relative;}
+
+/* race-history reference picker */
+.hist-bar{display:flex;justify-content:flex-end;align-items:center;padding:12px 16px 0;}
+.hist-ref{display:inline-flex;align-items:center;gap:9px;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);}
+.sel-ref{text-transform:none;letter-spacing:0;min-width:200px;max-width:280px;}
+
+/* graph / table toggle */
+.panel-toolbar{display:flex;justify-content:flex-end;padding:12px 16px 0;}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:999px;overflow:hidden;}
+.seg button{font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-2);background:var(--card);border:none;padding:6px 15px;cursor:pointer;transition:background .15s,color .15s;}
+.seg button+button{border-left:1.5px solid var(--line);}
+.seg button.active{background:var(--ink);color:var(--bg);}
+.seg button:hover:not(.active){color:var(--accent);}
 
 /* ---------- tyre strategy (generalised from the live dashboard) ---------- */
 .stints{padding:10px 16px 14px;}
@@ -227,6 +243,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
       <span class="gp" id="sbGp">—</span>
       <span class="sub" id="sbSub">—</span>
     </div>
+    <button class="copylink" id="copyLink" type="button" title="Copy a shareable link to this exact session">Copy link</button>
     <span class="typepill" id="sbType">—</span>
   </div>
 
@@ -275,6 +292,12 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
       <div class="panel"><div id="lapchartBody"></div></div>
     </section>
 
+    <!-- RACE: race-history trace (gap to a reference car) -->
+    <section class="section view-race" id="sec-history" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Race History</span><span class="note">gap to a reference car · above = ahead</span><span class="rule"></span></div>
+      <div class="panel"><div id="historyBody"></div></div>
+    </section>
+
     <!-- RACE: tyre strategy + pit stops -->
     <section class="section view-race" id="sec-strategy" style="display:none">
       <div class="sec-head"><span class="idx"></span><span class="label">Tyre Strategy &amp; Pit Stops</span><span class="note">stints by compound</span><span class="rule"></span></div>
@@ -317,7 +340,11 @@ const state = {
   sessions: [],          // for the selected meeting
   session: null,         // the selected session object
   drivers: {},           // number -> {acr, name, team, colour}
-  charts: { lap: null, pos: null },
+  charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null },
+  history: null,         // cached cumulative-time data for the race-history chart
+  qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
+  raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
+  raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
 };
 
 /* ---------- tiny DOM helpers ---------- */
@@ -369,13 +396,23 @@ async function getJSON(url, retries = 1){
 }
 function logError(context, err){ console.warn('[analyse] ' + context + ':', err); }
 
-/* sessionStorage-cached JSON — completed-session data is immutable, so cache hard */
+/* sessionStorage-cached JSON — completed-session data is immutable, so cache hard.
+   Concurrent callers for the same data share one request (the race + practice
+   views fetch overlapping endpoints in parallel; without this, OpenF1 sees a
+   duplicate burst and rate-limits one of them). */
+const inflight = new Map();
 async function cachedJSON(cacheKey, url, slimmer){
   try { const c = sessionStorage.getItem(cacheKey); if (c) return JSON.parse(c); } catch {}
-  const data = await getJSON(url);
-  const out = slimmer ? slimmer(data) : data;
-  try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch {}   // quota — fine, just skip
-  return out;
+  if (inflight.has(cacheKey)) return inflight.get(cacheKey);
+  const p = (async () => {
+    const data = await getJSON(url);
+    const out = slimmer ? slimmer(data) : data;
+    try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch {}   // quota — fine, just skip
+    return out;
+  })();
+  inflight.set(cacheKey, p);
+  try { return await p; }
+  finally { inflight.delete(cacheKey); }
 }
 // /laps rows carry big segment arrays we never use — strip before caching to stay under quota
 function slimLaps(data){
@@ -386,15 +423,21 @@ function slimLaps(data){
     duration_sector_3: l.duration_sector_3, is_pit_out_lap: l.is_pit_out_lap, date_start: l.date_start,
   }));
 }
+// race_control carries flags/SC/VSC messages — keep only the fields we shade with
+function slimRC(data){
+  if (!Array.isArray(data)) return data;
+  return data.map(r => ({ date: r.date, lap_number: r.lap_number, category: r.category, flag: r.flag, scope: r.scope, message: r.message }));
+}
 const fetchLaps     = (sk) => cachedJSON(`pwa.${sk}.laps`,     `${OPENF1}laps?session_key=${sk}`, slimLaps);
 const fetchStints   = (sk) => cachedJSON(`pwa.${sk}.stints`,   `${OPENF1}stints?session_key=${sk}`);
 const fetchPit      = (sk) => cachedJSON(`pwa.${sk}.pit`,      `${OPENF1}pit?session_key=${sk}`);
 const fetchPosition = (sk) => cachedJSON(`pwa.${sk}.position`, `${OPENF1}position?session_key=${sk}`);
 const fetchDrivers  = (sk) => cachedJSON(`pwa.${sk}.drivers`,  `${OPENF1}drivers?session_key=${sk}`);
+const fetchRC       = (sk) => cachedJSON(`pwa.${sk}.rc`,       `${OPENF1}race_control?session_key=${sk}`, slimRC);
 
 /* clear every cache entry for a session (used by Reload) */
 function clearSessionCache(sk){
-  ['laps','stints','pit','position','drivers'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
+  ['laps','stints','pit','position','drivers','rc'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
 }
 
 /* ---------- rendering helpers ---------- */
@@ -513,14 +556,15 @@ function sessionKind(s){
   if (n.includes('qualifying') || n.includes('shootout')) return 'qualifying';
   return 'race';
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-lapchart','sec-strategy','sec-position'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-lapchart','sec-history','sec-strategy','sec-position'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun'],
   qualifying: ['sec-qpace','sec-qtheo','sec-rpi'],
-  race:       ['sec-lapchart','sec-strategy','sec-position'],
+  race:       ['sec-lapchart','sec-history','sec-strategy','sec-position'],
 };
 function showView(kind){
-  destroyChart('lap'); destroyChart('pos');
+  destroyAllCharts();
+  state.raceRedraw = {};        // drop stale redraw closures from the previous session
   ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display = 'none'; });
   const ids = VIEW_SECTIONS[kind] || [];
   ids.forEach((id, i) => {
@@ -597,10 +641,11 @@ async function loadSession(session_key){
   if (!s){ return; }
   state.session = s;
   setSessionBanner(s);
+  writeHash();   // reflect the selection in the URL so it can be shared/bookmarked
 
   // guard: session not finished yet — historical endpoints would be empty
   if (new Date(s.date_end).getTime() >= Date.now()){
-    hideAllSections(); destroyChart('lap'); destroyChart('pos');
+    hideAllSections(); destroyAllCharts();
     showNotice('Not finished yet',
       `${s.session_name} hasn’t run yet`,
       `This session is scheduled for ${osloDateTime(s.date_start)} (Oslo). OpenF1’s historical data — and these analyses — become available once it has finished. For a session in progress, head to the live Pit Wall.`);
@@ -624,6 +669,7 @@ async function loadSession(session_key){
     renderRPI(s);
   } else {
     renderLapChart(session_key);
+    renderHistory(session_key);
     renderStrategy(session_key);
     renderPosition(session_key);
   }
@@ -687,18 +733,53 @@ async function renderQualiPace(session_key){
     const rows = Object.keys(groups).map(Number).map(n => ({ n, best: bestLap(groups[n]) }))
       .filter(r => r.best!=null).sort((a,b)=> a.best - b.best);
     if (!rows.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
-    const pole = rows[0].best;
-    body.innerHTML = `<div class="tbl-scroll"><table class="tbl">
-      <thead><tr><th>#</th><th>Driver</th><th class="tar">Best lap</th><th class="tar">Gap</th><th class="tar">Interval</th></tr></thead>
-      <tbody>${rows.map((r,i)=> `<tr class="${i===0?'best':''}" style="--team:${drvColour(r.n)}">
-        <td class="pos">${i+1}</td>
-        ${drvCell(r.n)}
-        <td class="num tar"><b>${fmtLap(r.best)}</b>${i===0?'<span class="best-badge">Pole</span>':''}</td>
-        <td class="num tar ${i===0?'muted':''}">${i===0?'—':fmtGap(r.best-pole)}</td>
-        <td class="num tar muted">${i===0?'—':fmtGap(r.best-rows[i-1].best)}</td>
-      </tr>`).join('')}</tbody></table></div>
-      <div class="panel-note">Each driver’s single quickest lap of the session, regardless of which segment (Q1/Q2/Q3) it was set in. “Gap” is to the fastest lap; “Interval” is to the car immediately ahead.</div>`;
+    const mode = state.qualiView.qpace;
+    body.innerHTML = segToolbar('qpace', mode) + `<div id="qpaceView"></div>`
+      + `<div class="panel-note">Each driver’s single quickest lap of the session, regardless of which segment (Q1/Q2/Q3) it was set in. “Gap” is to the fastest lap; “Interval” is to the car immediately ahead.</div>`;
+    const paint = (m) => { if (m === 'graph') drawQpaceChart(rows); else { destroyChart('qpace'); $('qpaceView').innerHTML = qpaceTable(rows); } };
+    wireSeg('qpace', paint);
+    paint(mode);
   } catch (e){ logError('quali pace', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
+}
+function qpaceTable(rows){
+  const pole = rows[0].best;
+  return `<div class="tbl-scroll"><table class="tbl">
+    <thead><tr><th>#</th><th>Driver</th><th class="tar">Best lap</th><th class="tar">Gap</th><th class="tar">Interval</th></tr></thead>
+    <tbody>${rows.map((r,i)=> `<tr class="${i===0?'best':''}" style="--team:${drvColour(r.n)}">
+      <td class="pos">${i+1}</td>
+      ${drvCell(r.n)}
+      <td class="num tar"><b>${fmtLap(r.best)}</b>${i===0?'<span class="best-badge">Pole</span>':''}</td>
+      <td class="num tar ${i===0?'muted':''}">${i===0?'—':fmtGap(r.best-pole)}</td>
+      <td class="num tar muted">${i===0?'—':fmtGap(r.best-rows[i-1].best)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function drawQpaceChart(rows){
+  const pole = rows[0].best;
+  const view = $('qpaceView'); if (!view) return;
+  const h = Math.max(280, rows.length * 26 + 56);
+  view.innerHTML = `<div class="chart-box" style="height:${h}px"><canvas id="qpaceCanvas"></canvas></div>`;
+  destroyChart('qpace');
+  if (!window.Chart) return;
+  const ctx = $('qpaceCanvas'); if (!ctx) return;
+  const colours = rows.map(r => drvColour(r.n));
+  state.charts.qpace = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: rows.map(r => drv(r.n).acr),
+      datasets:[{ data: rows.map(r => r.best - pole), backgroundColor: colours, borderColor: colours, borderWidth:1, borderRadius:2, barPercentage:0.84, categoryPercentage:0.84 }] },
+    options: Object.assign(chartBase({}), {
+      indexAxis:'y',
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
+          callbacks:{ title:(it)=> { const r=rows[it[0].dataIndex]; return `${drv(r.n).acr} — ${drv(r.n).name}`; },
+            label:(it)=> { const r=rows[it.dataIndex]; return [`Best  ${fmtLap(r.best)}`, it.dataIndex===0 ? 'Pole' : `Gap  ${fmtGap(r.best-pole)}`]; } } },
+      },
+      scales:{
+        x:{ beginAtZero:true, grid:{ color:'#C9C0AE' }, ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback:(v)=> '+'+Number(v).toFixed(1) }, title:{ display:true, text:'Gap to pole (s)', color:'#8C8475', font:{size:10} } },
+        y:{ grid:{ color:'transparent' }, ticks:{ color:'#5C554A', font:{family:"'IBM Plex Mono',monospace",size:11} } },
+      }
+    })
+  });
 }
 
 /* ---------- QUALIFYING: actual vs practice theoretical ---------- */
@@ -721,17 +802,55 @@ async function renderQualiTheo(qSession){
       return { n, q, t, gap: (q!=null && t!=null) ? q - t : null };
     }).filter(r => r.q!=null).sort((a,b)=> a.q - b.q);
     if (!rows.length){ body.innerHTML = stateBox('No data', 'No qualifying lap times recorded for this session.'); return; }
-    body.innerHTML = `<div class="tbl-scroll"><table class="tbl">
-      <thead><tr><th>#</th><th>Driver</th><th class="tar">Quali best</th><th class="tar">Practice potential</th><th class="tar">Δ to potential</th></tr></thead>
-      <tbody>${rows.map((r,i)=> `<tr style="--team:${drvColour(r.n)}">
-        <td class="pos">${i+1}</td>
-        ${drvCell(r.n)}
-        <td class="num tar"><b>${fmtLap(r.q)}</b></td>
-        <td class="num tar muted">${fmtLap(r.t)}</td>
-        <td class="num tar ${r.gap==null?'muted':(r.gap<0?'gain':'loss')}">${r.gap==null?'—':fmtGap(r.gap)}</td>
-      </tr>`).join('')}</tbody></table></div>
-      <div class="panel-note">Practice potential is each driver’s theoretical best (quickest sectors summed) across all of practice. A <span class="gain">negative</span> delta means they found more in qualifying than practice suggested — track evolution, lower fuel, tow. A <span class="loss">positive</span> one means they left time on the table relative to their practice ceiling.</div>`;
+    const mode = state.qualiView.qtheo;
+    body.innerHTML = segToolbar('qtheo', mode) + `<div id="qtheoView"></div>`
+      + `<div class="panel-note">Practice potential is each driver’s theoretical best (quickest sectors summed) across all of practice. A <span class="gain">negative</span> delta means they found more in qualifying than practice suggested — track evolution, lower fuel, tow. A <span class="loss">positive</span> one means they left time on the table relative to their practice ceiling.</div>`;
+    const paint = (m) => { if (m === 'graph') drawQtheoChart(rows); else { destroyChart('qtheo'); $('qtheoView').innerHTML = qtheoTable(rows); } };
+    wireSeg('qtheo', paint);
+    paint(mode);
   } catch (e){ logError('quali-theo', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load practice/qualifying data. Tap Reload to retry.', 'error'); }
+}
+function qtheoTable(rows){
+  return `<div class="tbl-scroll"><table class="tbl">
+    <thead><tr><th>#</th><th>Driver</th><th class="tar">Quali best</th><th class="tar">Practice potential</th><th class="tar">Δ to potential</th></tr></thead>
+    <tbody>${rows.map((r,i)=> `<tr style="--team:${drvColour(r.n)}">
+      <td class="pos">${i+1}</td>
+      ${drvCell(r.n)}
+      <td class="num tar"><b>${fmtLap(r.q)}</b></td>
+      <td class="num tar muted">${fmtLap(r.t)}</td>
+      <td class="num tar ${r.gap==null?'muted':(r.gap<0?'gain':'loss')}">${r.gap==null?'—':fmtGap(r.gap)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function drawQtheoChart(rows){
+  const view = $('qtheoView'); if (!view) return;
+  const withGap = rows.filter(r => r.gap!=null).sort((a,b)=> a.gap - b.gap);   // most improved at the top
+  if (!withGap.length){ destroyChart('qtheo'); view.innerHTML = stateBox('No benchmark', 'No practice potential to compare against for these drivers (no clean practice laps).'); return; }
+  const h = Math.max(280, withGap.length * 26 + 56);
+  view.innerHTML = `<div class="chart-box" style="height:${h}px"><canvas id="qtheoCanvas"></canvas></div>`;
+  destroyChart('qtheo');
+  if (!window.Chart) return;
+  const ctx = $('qtheoCanvas'); if (!ctx) return;
+  const colours = withGap.map(r => r.gap < 0 ? '#2E6F4F' : '#B4471F');   // green = found more, accent = left on table
+  state.charts.qtheo = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: withGap.map(r => drv(r.n).acr),
+      datasets:[{ data: withGap.map(r => r.gap), backgroundColor: colours, borderColor: colours, borderWidth:1, borderRadius:2, barPercentage:0.84, categoryPercentage:0.84 }] },
+    options: Object.assign(chartBase({}), {
+      indexAxis:'y',
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
+          callbacks:{ title:(it)=> { const r=withGap[it[0].dataIndex]; return `${drv(r.n).acr} — ${drv(r.n).name}`; },
+            label:(it)=> { const r=withGap[it.dataIndex]; return [`Quali  ${fmtLap(r.q)}`, `Potential  ${fmtLap(r.t)}`, `Δ  ${fmtGap(r.gap)}`]; } } },
+      },
+      scales:{
+        x:{ grid:{ color:(c)=> c.tick.value===0 ? '#211D17' : '#C9C0AE', lineWidth:(c)=> c.tick.value===0 ? 1.5 : 1 },
+            ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback:(v)=> fmtGap(v) },
+            title:{ display:true, text:'Δ to potential (s) · left = found more', color:'#8C8475', font:{size:10} } },
+        y:{ grid:{ color:'transparent' }, ticks:{ color:'#5C554A', font:{family:"'IBM Plex Mono',monospace",size:11} } },
+      }
+    })
+  });
 }
 
 /* ---------- QUALIFYING: race pace indicator ---------- */
@@ -788,51 +907,229 @@ function rankMap(entries){
 }
 
 /* ---------- RACE: lap chart ---------- */
+/* ---------- RACE: shared helpers (SC/VSC shading + Top-N filter) ---------- */
+// Parse OpenF1 race_control into Safety Car / Virtual Safety Car periods.
+function parseSafety(rc){
+  const msgs = (Array.isArray(rc)?rc:[]).filter(r => r.date).slice().sort((a,b)=> new Date(a.date)-new Date(b.date));
+  const periods = []; let open = null;
+  const close = (m) => { if (open){ open.endDate = m.date; open.endLap = num(m.lap_number); periods.push(open); open = null; } };
+  for (const m of msgs){
+    const text = (m.message||'').toUpperCase(), flag = (m.flag||'').toUpperCase();
+    const vsc = text.includes('VIRTUAL SAFETY CAR'), sc = text.includes('SAFETY CAR') && !vsc;
+    if ((vsc || sc) && text.includes('DEPLOY')){
+      if (open) close(m);                                   // a new deploy supersedes any open period
+      open = { kind: vsc ? 'VSC' : 'SC', startDate: m.date, startLap: num(m.lap_number) };
+    } else if (vsc && open && open.kind === 'VSC' && text.includes('END')){
+      close(m);                                             // "VIRTUAL SAFETY CAR ENDING"
+    } else if (flag === 'GREEN' && (m.scope||'').toUpperCase() !== 'SECTOR' && open){
+      close(m);                                             // track-wide green ends a safety car (ignore local sector greens)
+    }
+  }
+  if (open) periods.push(open);                             // unterminated — keep what we have
+  return periods;
+}
+const safetyByLap  = (periods) => periods.filter(p => p.startLap!=null).map(p => ({ x0: p.startLap, x1: p.endLap ?? p.startLap, kind: p.kind }));
+const safetyByTime = (periods, t0) => periods.filter(p => p.startDate).map(p => ({
+  x0: (new Date(p.startDate).getTime() - t0) / 60000,
+  x1: ((p.endDate ? new Date(p.endDate) : new Date(p.startDate)).getTime() - t0) / 60000,
+  kind: p.kind,
+}));
+
+// Chart.js inline plugin: shade SC/VSC bands behind the data (reads options.plugins.scShade.periods).
+const scShadePlugin = {
+  id: 'scShade',
+  beforeDatasetsDraw(chart, _args, opts){
+    const periods = opts && opts.periods; if (!periods || !periods.length) return;
+    const x = chart.scales.x, area = chart.chartArea, ctx = chart.ctx; if (!x) return;
+    ctx.save();
+    for (const p of periods){
+      if (p.x0 == null) continue;
+      const a = x.getPixelForValue(p.x0), b = x.getPixelForValue(p.x1!=null ? p.x1 : p.x0);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      const left = Math.max(area.left, Math.min(a, b));
+      let right = Math.min(area.right, Math.max(a, b));
+      if (right - left < 2) right = Math.min(area.right, left + 2);   // keep a one-lap band visible
+      ctx.fillStyle = p.kind === 'VSC' ? 'rgba(242,193,78,0.16)' : 'rgba(242,193,78,0.30)';
+      ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
+      if (right - left > 24){
+        ctx.fillStyle = 'rgba(120,86,0,0.85)';
+        ctx.font = "600 9px 'IBM Plex Mono', ui-monospace, monospace";
+        ctx.textBaseline = 'top';
+        ctx.fillText(p.kind, left + 3, area.top + 3);
+      }
+    }
+    ctx.restore();
+  }
+};
+
+// Top-N driver filter shared across the three race charts.
+const TOPN = [ { n:3, label:'Top 3' }, { n:6, label:'Top 6' }, { n:8, label:'Top 8' }, { n:0, label:'All' } ];
+function topToolbar(){
+  return `<div class="seg topn">${TOPN.map(o => `<button type="button" data-n="${o.n}" class="${state.raceTopN===o.n?'active':''}">${esc(o.label)}</button>`).join('')}</div>`;
+}
+function wireTopN(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-n]'); if (!b) return;
+    const n = Number(b.dataset.n); if (state.raceTopN === n) return;
+    state.raceTopN = n;
+    document.querySelectorAll('.seg.topn button').forEach(x => x.classList.toggle('active', Number(x.dataset.n) === n));
+    Object.values(state.raceRedraw).forEach(fn => { try { fn && fn(); } catch (err){ logError('top-n redraw', err); } });
+  });
+}
+const topNSet = (order, n) => n > 0 ? new Set(order.slice(0, n)) : null;   // null = show all
+// finishing order from laps: most laps completed, then least cumulative time
+function orderByLaps(groups){
+  return Object.keys(groups).map(Number).map(n => {
+    let last = 0, total = 0;
+    for (const l of groups[n]){ const ln = num(l.lap_number); if (ln!=null && ln>last) last = ln; const d = num(l.lap_duration); if (d!=null && d>0) total += d; }
+    return { n, last, total };
+  }).sort((a,b)=> (b.last - a.last) || (a.total - b.total)).map(o => o.n);
+}
+
 async function renderLapChart(session_key){
   const body = $('lapchartBody'); body.innerHTML = loadingBox('Plotting lap times…');
   try {
-    const [laps, pit] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]) ]);
+    const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const groups = groupByDriver(laps);
     const drivers = Object.keys(groups).map(Number);
     if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
     // pit-in laps: {driverNumber-lapNumber}
     const pitSet = new Set((Array.isArray(pit)?pit:[]).map(p => `${num(p.driver_number)}-${num(p.lap_number)}`));
-
-    body.innerHTML = `<div class="chart-box"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps. Use the legend to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+    const order = orderByLaps(groups);
+    const bands = safetyByLap(parseSafety(rc));
 
     const all = laps.map(l => num(l.lap_duration)).filter(v => v!=null && v>0);
     const med = median(all) || 90;
     const yMin = Math.max(0, (Math.min(...all)||med) - 0.8);
     const yMax = med * 1.25;            // shows green-flag pace + most pit laps, clips SC/red-flag spikes
 
-    const datasets = drivers.sort((a,b)=> a-b).map(n => {
-      const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
-      const colour = drvColour(n);
-      const points = ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) }));
-      const radii = ls.map(l => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`)) ? 4 : 0);
-      const borders = ls.map(l => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`)) ? '#211D17' : colour);
-      return {
-        label: drv(n).acr, data: points, borderColor: colour, backgroundColor: colour,
-        borderWidth: 1.5, tension: 0.25, spanGaps: true,
-        pointRadius: radii, pointHoverRadius: 5, pointBorderColor: borders, pointBorderWidth: 1.5,
-        pointBackgroundColor: ls.map(l => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`)) ? '#F7F3EA' : colour),
-      };
-    });
-    drawLapChart(datasets, yMin, yMax);
+    body.innerHTML = `<div class="panel-toolbar">${topToolbar()}</div>
+      <div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps. <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+
+    const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
+    const redraw = () => {
+      const host = $('lapHost'); if (!host) return;
+      host.innerHTML = '<canvas id="lapCanvas"></canvas>';
+      const set = topNSet(order, state.raceTopN);
+      const datasets = drivers.filter(n => !set || set.has(n)).sort((a,b)=> a-b).map(n => {
+        const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
+        const colour = drvColour(n);
+        return {
+          label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) })),
+          borderColor: colour, backgroundColor: colour, borderWidth: 1.5, tension: 0.25, spanGaps: true,
+          pointRadius: ls.map(l => isPit(n,l)?4:0), pointHoverRadius: 5,
+          pointBorderColor: ls.map(l => isPit(n,l)?'#211D17':colour), pointBorderWidth: 1.5,
+          pointBackgroundColor: ls.map(l => isPit(n,l)?'#F7F3EA':colour),
+        };
+      });
+      drawLapChart(datasets, yMin, yMax, bands);
+    };
+    state.raceRedraw.lap = redraw;
+    wireTopN(body.querySelector('.seg.topn'));
+    redraw();
   } catch (e){ logError('lap chart', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
 }
-function drawLapChart(datasets, yMin, yMax){
+
+/* ---------- RACE: race-history trace (gap to a reference car) ---------- */
+async function renderHistory(session_key){
+  const body = $('historyBody'); body.innerHTML = loadingBox('Building the race-history trace…');
+  try {
+    const laps = await fetchLaps(session_key);
+    const groups = groupByDriver(laps);
+    const drivers = Object.keys(groups).map(Number);
+    if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
+    // per-driver cumulative race time, keyed by lap number; missing laps filled with that driver's median
+    const cum = {}, lastLap = {};
+    drivers.forEach(n => {
+      const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
+      const med = median(ls.map(l => num(l.lap_duration)).filter(v => v!=null && v>0));
+      const map = new Map(); let total = 0, last = 0;
+      ls.forEach(l => {
+        let d = num(l.lap_duration); if (d==null || d<=0) d = med;
+        if (d==null) return;
+        total += d; map.set(num(l.lap_number), total); last = num(l.lap_number);
+      });
+      cum[n] = map; lastLap[n] = last;
+    });
+    // reference defaults to the winner: most laps completed, then least cumulative time
+    const ranked = drivers.filter(n => lastLap[n] > 0).sort((a,b)=> {
+      if (lastLap[b] !== lastLap[a]) return lastLap[b] - lastLap[a];
+      return (cum[a].get(lastLap[a]) ?? Infinity) - (cum[b].get(lastLap[b]) ?? Infinity);
+    });
+    if (!ranked.length){ body.innerHTML = stateBox('No data', 'Not enough lap timing to build the trace.'); return; }
+    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0] };
+
+    const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
+    body.innerHTML = `<div class="panel-toolbar" style="justify-content:space-between">${topToolbar()}<label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
+      <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
+    $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
+    state.raceRedraw.hist = drawHistory;
+    wireTopN(body.querySelector('.seg.topn'));
+    drawHistory();
+  } catch (e){ logError('history', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data for the race-history trace. Tap Reload to retry.', 'error'); }
+}
+function drawHistory(){
+  const H = state.history; if (!H) return;
+  const refN = H.ref, refCum = H.cum[refN], refLast = H.lastLap[refN];
+  if (!refCum || !refLast) return;
+  const host = $('histHost'); if (host) host.innerHTML = '<canvas id="histCanvas"></canvas>';
+  const set = topNSet(H.drivers, state.raceTopN);
+  const datasets = H.drivers.filter(n => !set || set.has(n) || n===refN).map(n => {
+    const map = H.cum[n], pts = [];
+    for (let lap = 1; lap <= refLast; lap++){
+      const rc = refCum.get(lap), dc = map.get(lap);
+      if (rc==null || dc==null) continue;
+      pts.push({ x: lap, y: rc - dc });           // ahead of the reference => positive => above the line
+    }
+    const colour = drvColour(n);
+    return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour,
+      borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true, pointRadius: 0, pointHoverRadius: 5 };
+  });
+  drawHistoryChart(datasets, H.bands);
+}
+function drawHistoryChart(datasets, bands){
+  if (!window.Chart) return;
+  destroyChart('hist');
+  const ctx = $('histCanvas'); if (!ctx) return;
+  const signed = (v)=> (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(0) + 's';
+  state.charts.hist = new Chart(ctx, {
+    type:'line',
+    data:{ datasets },
+    plugins:[scShadePlugin],
+    options: Object.assign(chartBase({}), {
+      parsing:false,
+      interaction:{ mode:'nearest', intersect:false },
+      plugins:{
+        scShade:{ periods: bands || [] },
+        legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
+        tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
+          callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtGap(it.parsed.y)}s` } },
+      },
+      scales:{
+        x:{ type:'linear', grid:{ color:'transparent' }, ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, precision:0, maxTicksLimit:14 }, title:{ display:true, text:'Lap', color:'#8C8475', font:{size:10} } },
+        y:{ grid:{ color:(c)=> c.tick.value===0 ? '#211D17' : '#C9C0AE', lineWidth:(c)=> c.tick.value===0 ? 1.5 : 1 },
+            ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback: signed },
+            title:{ display:true, text:'Ahead of reference', color:'#8C8475', font:{size:10} } },
+      }
+    })
+  });
+}
+function drawLapChart(datasets, yMin, yMax, bands){
   if (!window.Chart) return;
   destroyChart('lap');
   const ctx = $('lapCanvas'); if (!ctx) return;
   state.charts.lap = new Chart(ctx, {
     type:'line',
     data:{ datasets },
+    plugins:[scShadePlugin],
     options: Object.assign(chartBase({ xTitle:'Lap', yTitle:'Lap time (s)' }), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
+        scShade:{ periods: bands || [] },
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtLap(it.parsed.y)}` } },
@@ -903,34 +1200,53 @@ async function renderStrategy(session_key){
 async function renderPosition(session_key){
   const body = $('positionBody'); body.innerHTML = loadingBox('Tracing the order…');
   try {
-    const pos = await fetchPosition(session_key);
+    const [pos, rc] = await Promise.all([ fetchPosition(session_key), fetchRC(session_key).catch(()=>[]) ]);
     const list = (Array.isArray(pos)?pos:[]).filter(p => num(p.driver_number)!=null && num(p.position)!=null && p.date);
     if (!list.length){ destroyChart('pos'); body.innerHTML = stateBox('No data', 'No position data recorded for this session.'); return; }
     const t0 = Math.min(...list.map(p => new Date(p.date).getTime()));
     const byDrv = groupByDriver(list);
     let maxPos = 0;
-    const datasets = Object.keys(byDrv).map(Number).map(n => {
+    const series = {}, finals = [];
+    Object.keys(byDrv).map(Number).forEach(n => {
       const pts = byDrv[n].slice().sort((a,b)=> new Date(a.date)-new Date(b.date))
         .map(p => { const y = num(p.position); maxPos = Math.max(maxPos, y); return { x:(new Date(p.date).getTime()-t0)/60000, y }; });
-      const colour = drvColour(n);
-      return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
+      series[n] = pts;
+      finals.push({ n, lastY: pts.length ? pts[pts.length-1].y : 99 });
     });
-    body.innerHTML = `<div class="chart-box"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Toggle drivers in the legend to follow a recovery drive or an early-stop undercut.</div>`;
-    drawPositionChart(datasets, maxPos || 20);
+    const order = finals.sort((a,b)=> a.lastY - b.lastY).map(o => o.n);
+    const bands = safetyByTime(parseSafety(rc), t0);
+
+    body.innerHTML = `<div class="panel-toolbar">${topToolbar()}</div>
+      <div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
+    const redraw = () => {
+      const host = $('posHost'); if (!host) return;
+      host.innerHTML = '<canvas id="posCanvas"></canvas>';
+      const set = topNSet(order, state.raceTopN);
+      const datasets = order.filter(n => !set || set.has(n)).map(n => {
+        const colour = drvColour(n);
+        return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
+      });
+      drawPositionChart(datasets, maxPos || 20, bands);
+    };
+    state.raceRedraw.pos = redraw;
+    wireTopN(body.querySelector('.seg.topn'));
+    redraw();
   } catch (e){ logError('position', e); destroyChart('pos'); body.innerHTML = stateBox('Unavailable', 'Couldn’t load position data. Tap Reload to retry.', 'error'); }
 }
-function drawPositionChart(datasets, maxPos){
+function drawPositionChart(datasets, maxPos, bands){
   if (!window.Chart) return;
   destroyChart('pos');
   const ctx = $('posCanvas'); if (!ctx) return;
   state.charts.pos = new Chart(ctx, {
     type:'line',
     data:{ datasets },
+    plugins:[scShadePlugin],
     options: Object.assign(chartBase({}), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
+        scShade:{ periods: bands || [] },
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> (it[0]?.parsed.x ?? 0).toFixed(0) + ' min', label:(it)=> `${it.dataset.label}  P${it.parsed.y}` } },
@@ -954,6 +1270,25 @@ function chartBase(opts){
   };
 }
 function destroyChart(key){ if (state.charts[key]){ try{ state.charts[key].destroy(); }catch{} state.charts[key]=null; } }
+function destroyAllCharts(){ Object.keys(state.charts).forEach(destroyChart); }
+
+/* graph / table segmented toggle (used by the qualifying panels) */
+function segToolbar(panel, mode){
+  return `<div class="panel-toolbar"><div class="seg" id="seg-${panel}">
+    <button type="button" data-mode="graph" class="${mode==='graph'?'active':''}">Graph</button>
+    <button type="button" data-mode="table" class="${mode==='table'?'active':''}">Table</button>
+  </div></div>`;
+}
+function wireSeg(panel, paint){
+  const seg = $('seg-'+panel); if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]'); if (!b) return;
+    const mode = b.dataset.mode; if (state.qualiView[panel] === mode) return;
+    state.qualiView[panel] = mode;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.mode === mode));
+    paint(mode);
+  });
+}
 
 /* ============================================================
    ORCHESTRATION + BOOT
@@ -981,7 +1316,7 @@ async function onSessionChange(){
   catch (e){ logError('session change', e); pickerError('Couldn’t analyse this session. Tap Reload to retry.'); }
 }
 function pickerError(msg){
-  hideAllSections(); $('sessbar').style.display = 'none'; destroyChart('lap'); destroyChart('pos');
+  hideAllSections(); $('sessbar').style.display = 'none'; destroyAllCharts();
   showNotice('Problem', 'Something went sideways', msg);
 }
 
@@ -1000,12 +1335,74 @@ async function reload(){
   else await onYearChange();
 }
 
+/* ---------- deep-linking: encode the selection in the URL hash ---------- */
+let lastHash = '';                          // the hash we wrote ourselves (so hashchange ignores it)
+function parseHash(){
+  const raw = (location.hash || '').replace(/^#/, '');
+  if (!raw) return null;
+  const p = new URLSearchParams(raw);
+  const year = Number(p.get('y')), mk = p.get('m'), sk = p.get('s');
+  if (!Number.isFinite(year) || !sk) return null;
+  return { year, mk, sk };
+}
+function writeHash(){
+  if (!state.session) return;
+  const h = `#y=${state.year}&m=${state.session.meeting_key}&s=${state.session.session_key}`;
+  lastHash = h;
+  if (location.hash !== h){
+    try { history.replaceState(null, '', h); } catch { location.hash = h; }   // replaceState doesn't fire hashchange
+  }
+}
+// restore an exact selection from a shared/bookmarked link; throws if the season can't be loaded
+async function restoreFromHash(h){
+  const inRange = Array.from($('selYear').options).some(o => Number(o.value) === h.year);
+  if (!inRange) throw new Error('year out of range');
+  state.year = h.year; $('selYear').value = String(h.year);
+  await loadMeetings(h.year);
+  if (!state.meetings.length) throw new Error('no meetings');
+  if (h.mk != null && state.meetings.some(m => String(m.meeting_key) === String(h.mk))) $('selMeeting').value = String(h.mk);
+  await loadSessions(Number($('selMeeting').value));
+  if (!state.sessions.length) throw new Error('no sessions');
+  if (state.sessions.some(s => String(s.session_key) === String(h.sk))) $('selSession').value = String(h.sk);
+  await loadSession($('selSession').value);
+}
+// react to back/forward or a pasted/edited link
+async function onHashChange(){
+  if (location.hash === lastHash) return;   // our own replaceState round-trips through here on some browsers
+  const h = parseHash(); if (!h) return;
+  try { await restoreFromHash(h); }
+  catch (e){ logError('hashchange', e); }
+}
+function initCopyLink(){
+  const btn = $('copyLink'); if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const url = location.href;
+    try { await navigator.clipboard.writeText(url); }
+    catch {
+      const t = document.createElement('textarea'); t.value = url; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch {} t.remove();
+    }
+    const orig = btn.dataset.orig || (btn.dataset.orig = btn.textContent);
+    btn.textContent = 'Copied ✓'; btn.classList.add('copied');
+    clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1600);
+  });
+}
+
 async function boot(){
   populateYears();
   $('selYear').addEventListener('change', onYearChange);
   $('selMeeting').addEventListener('change', onMeetingChange);
   $('selSession').addEventListener('change', onSessionChange);
   $('refreshBtn').addEventListener('click', reload);
+  window.addEventListener('hashchange', onHashChange);
+  initCopyLink();
+
+  // a shared/bookmarked link wins over the default
+  const hash = parseHash();
+  if (hash){
+    try { await restoreFromHash(hash); return; }
+    catch (e){ logError('restore from hash', e); }   // fall through to the default selection
+  }
 
   // default to the latest season that actually has a completed weekend
   const cur = new Date().getFullYear();

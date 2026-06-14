@@ -58,3 +58,33 @@ forecast).
    data needs)
 3. Race lap chart + strategy (reuses existing chart/stint code)
 4. Long-run pace / race-pace-indicator panel (most exploratory, do last)
+
+## Status
+
+Stages 1–4 are all shipped (`analyse/index.html`):
+- Practice: theoretical best lap + long-run pace.
+- Qualifying: pace ranking, quali-vs-practice-potential, race-pace indicator.
+- Race: lap chart, tyre strategy + pit stops, position-over-time.
+The page is linked from the live Pit Wall toprule.
+
+## Next stages (post-plan)
+- **Shareable deep links** *(done)*: the selected year/meeting/session is
+  encoded in the URL hash (`#y=…&m=…&s=…`), restored on load and on
+  back/forward, with a "Copy link" button on the session banner — so any
+  analysis can be bookmarked or shared.
+- **Race-history chart** *(done)*: a "gap to a reference car" trace. Each
+  car's cumulative race time is differenced against a reference driver
+  (default: the winner, selectable), so the bold zero line is the
+  reference's race and a trace above it was ahead at that lap, below was
+  behind. Reveals overtakes, undercuts, SC bunching and lapping at a glance.
+- **Graph/Table toggle on the qualifying panels** *(done)*: Qualifying Pace
+  (gap-to-pole bars) and Quali vs Practice Potential (signed delta bars,
+  green = found more / accent = left on the table) each get a segmented
+  Graph⇄Table switch, showing one view at a time.
+- **SC/VSC shading + Top-N filter** *(done)*: the race charts (lap times,
+  race history, position) shade Safety Car (darker) and Virtual Safety Car
+  (lighter) periods as translucent yellow bands from OpenF1 `/race_control`,
+  and share a Top 3 / Top 6 / Top 8 / All driver filter (by finishing order)
+  that refreshes all three charts at once.
+- Ideas for later: driver head-to-head (sector deltas), in-stint tyre
+  degradation trend, extend the graph/table toggle to the practice panels.
