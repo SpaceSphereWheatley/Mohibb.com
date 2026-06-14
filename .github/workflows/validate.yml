@@ -1,16 +1,22 @@
 name: validate
 
-# Lightweight, dependency-free checks. Cloudflare Pages handles the deploy;
-# this only guards against the two breakages that are easy to ship silently:
+# Lightweight checks. Cloudflare Pages handles the deploy; this guards
+# against breakages that are easy to ship silently:
 #   1. invalid projects.json (breaks the whole landing page at runtime)
 #   2. a syntax error in an inline <script> in any HTML file
+#   3. invalid HTML markup
+#   4. CSS errors/typos (stylelint, recommended ruleset)
+#   5. basic accessibility regressions (pa11y, WCAG2A)
+#
+# All tooling is pulled on-demand via npx — the site itself stays
+# dependency-free, no package.json/lockfile needed for the deploy.
 on:
   push:
     branches: ["**"]
   pull_request:
 
 jobs:
-  validate:
+  syntax:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,3 +61,39 @@ jobs:
           if (bad) process.exit(1);
           if (!files.length) console.log('(no HTML files)');
           EOF
+
+  html:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: html-validate
+        run: npx --yes html-validate "**/*.html"
+
+  css:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install stylelint (config extends need local node_modules)
+        run: npm install --no-save stylelint postcss-html stylelint-config-recommended
+      - name: stylelint (inline <style> blocks)
+        run: npx stylelint --customSyntax postcss-html "**/*.html"
+
+  accessibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Serve site
+        run: npx --yes serve -l 8123 . &
+      - name: Wait for server
+        run: npx --yes wait-on http://localhost:8123/
+      - name: pa11y-ci (WCAG2A)
+        run: npx --yes pa11y-ci --config .pa11yci.json

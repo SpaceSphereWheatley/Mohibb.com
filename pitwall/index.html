@@ -60,6 +60,7 @@ a{color:inherit;}
 .flag-pill .swatch{width:10px;height:10px;border-radius:2px;background:var(--ink-3);}
 .sb-meta{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
 .sb-meta .upd b{color:var(--ink-2);font-weight:600;}
+.sb-meta .upd .tz{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-4);}
 .refresh{display:inline-flex;align-items:center;gap:7px;font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.04em;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer;transition:border-color .15s,background .15s,color .15s;}
 .refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--card-2);}
 .refresh .ico{display:inline-block;transition:transform .5s ease;}
@@ -122,7 +123,7 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .tbl-scroll{max-height:520px;overflow:auto;}
 
 /* ---------- race control feed ---------- */
-.feed{max-height:440px;overflow:auto;}
+.feed{max-height:440px;overflow:auto;list-style:none;}
 .feed-row{display:grid;grid-template-columns:84px 52px 1fr;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-soft);border-left:3px solid transparent;align-items:start;}
 .feed-row:last-child{border-bottom:none;}
 .feed-row .t{font-family:var(--mono);font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
@@ -152,8 +153,8 @@ tr.fastest .code{color:var(--accent-ink);}
 @media(min-width:760px){.two-col{grid-template-columns:1.05fr 1fr;}.two-col .pane+.pane{border-left:1.5px solid var(--line);}}
 .pane{min-width:0;}
 .pane-head{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);padding:14px 16px 6px;}
-.chart-box{padding:8px 16px 18px;height:300px;position:relative;}
-.ot-list{max-height:300px;overflow:auto;}
+.chart-box{padding:8px 16px 18px;height:clamp(200px,42vw,300px);position:relative;}
+.ot-list{max-height:300px;overflow:auto;list-style:none;}
 .ot-row{display:grid;grid-template-columns:48px 1fr;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line-soft);align-items:center;font-size:13px;}
 .ot-row:last-child{border-bottom:none;}
 .ot-row .t{font-family:var(--mono);font-size:11px;color:var(--ink-3);}
@@ -187,7 +188,7 @@ tr.fastest .code{color:var(--accent-ink);}
 .wx-cell .v small{font-size:13px;color:var(--ink-3);font-weight:500;}
 .wx-chart{padding:14px 16px;}
 .wx-chart .pane-head{padding:0 0 8px;}
-.wx-canvas{height:200px;position:relative;}
+.wx-canvas{height:clamp(160px,38vw,200px);position:relative;}
 .rain-on{color:var(--blue) !important;}
 
 /* ---------- footer ---------- */
@@ -230,7 +231,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
     <span class="pill" id="sbState" title="Session status — whether an F1 session is running right now"><span class="dot"></span><span id="sbStateText">…</span></span>
     <span class="pill flag-pill" id="sbFlag" title="Current track flag (green, yellow, red, safety car)" style="display:none"><span class="swatch"></span><span id="sbFlagText">—</span></span>
     <div class="sb-meta">
-      <span class="upd">Updated <b id="sbUpdated">—</b></span>
+      <span class="upd">Updated <b id="sbUpdated">—</b> <span class="tz">Oslo</span></span>
       <button class="refresh" id="refreshBtn" type="button" aria-label="Refresh data"><span class="ico">⟳</span> Refresh</button>
     </div>
   </div>
@@ -340,19 +341,24 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
 const OPENF1 = 'https://api.openf1.org/v1/';
 const JOLPI  = 'https://api.jolpi.ca/ergast/f1/';
 const POLL_MS = 3000;
+const POLL_ENDED_MS = 15000;                // slower cadence once the session has ended but is still in its grace window
 const GRACE_MS = 10 * 60 * 1000;            // keep "live" 10 min after session end
+const STANDINGS_POLL_MS = 5 * 60 * 1000;    // re-check championship standings every 5 min while live
 const TZ = 'Europe/Oslo';
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const state = {
   mode: null,            // 'LIVE' | 'IDLE'
   session: null,
+  ended: false,          // session is over but still within its grace window
   drivers: {},           // number -> {acr, name, team, colour}
   pollTimer: null,
+  standingsTimer: null,
   cdTimer: null,
   nextRace: null,
   charts: { ot: null, wx: null },
   standingsLoaded: false,
+  standingsLoadedAt: null,
 };
 
 /* ---------- tiny DOM helpers ---------- */
@@ -369,11 +375,20 @@ function oslo(iso){ try { return fmtTime.format(new Date(iso)); } catch { return
 function osloFull(iso){ try { return fmtDate.format(new Date(iso)); } catch { return '—'; } }
 
 /* ---------- fetch helpers ---------- */
+const FETCH_TIMEOUT_MS = 15000;
 async function getJSON(url){
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
+/* surface fetch/parse failures in the console without breaking the per-section UI fallback */
+function logError(context, err){ console.warn('[pitwall] ' + context + ':', err); }
 const of1 = (ep) => getJSON(OPENF1 + ep + (ep.includes('?') ? '&' : '?') + 'session_key=latest');
 
 /* ---------- state rendering helpers ---------- */
@@ -388,11 +403,14 @@ async function detect(){
   const arr = await of1('sessions');
   const s = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
   state.session = s;
+  state.ended = false;
   if (!s) return 'IDLE';
   const start = new Date(s.date_start).getTime();
   const end = new Date(s.date_end).getTime();
   const now = Date.now();
-  if (Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end + GRACE_MS) return 'LIVE';
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 'IDLE';
+  if (now >= start && now <= end) return 'LIVE';
+  if (now > end && now <= end + GRACE_MS) { state.ended = true; return 'LIVE'; }
   return 'IDLE';
 }
 
@@ -484,7 +502,6 @@ async function loadStandings(){
       label = '(' + (dList.season || '') + ')';
     }
     if (!dList || !cList) throw new Error('empty');
-    note.textContent = label;
 
     const drvRows = (dList.DriverStandings||[]).map(d => {
       const code = d.Driver?.code || (d.Driver?.familyName||'').slice(0,3).toUpperCase();
@@ -513,19 +530,22 @@ async function loadStandings(){
       <div class="col">
         <div class="col-head">Drivers</div>
         <div class="tbl-scroll"><table class="tbl">
-          <thead><tr><th>#</th><th>Driver</th><th>Team</th><th class="tar">Pts</th><th class="tar">Wins</th></tr></thead>
+          <thead><tr><th scope="col">#</th><th scope="col">Driver</th><th scope="col">Team</th><th scope="col" class="tar">Pts</th><th scope="col" class="tar">Wins</th></tr></thead>
           <tbody>${drvRows}</tbody>
         </table></div>
       </div>
       <div class="col">
         <div class="col-head">Constructors</div>
         <div class="tbl-scroll"><table class="tbl">
-          <thead><tr><th>#</th><th>Team</th><th class="tar">Pts</th><th class="tar">Wins</th></tr></thead>
+          <thead><tr><th scope="col">#</th><th scope="col">Team</th><th scope="col" class="tar">Pts</th><th scope="col" class="tar">Wins</th></tr></thead>
           <tbody>${conRows}</tbody>
         </table></div>
       </div>`;
     state.standingsLoaded = true;
+    state.standingsLoadedAt = Date.now();
+    note.textContent = label + ' · loaded ' + fmtClock.format(new Date(state.standingsLoadedAt));
   } catch (e){
+    logError('standings', e);
     body.innerHTML = stateBox('Unavailable', 'Standings unavailable — Jolpica API not responding. Tap refresh to retry.', 'error');
   }
 }
@@ -561,7 +581,7 @@ async function loadDrivers(){
       };
     });
     state.drivers = map;
-  } catch { state.drivers = {}; }
+  } catch (e) { logError('drivers', e); state.drivers = {}; }
 }
 function drv(n){ const d = state.drivers[num(n)]; return d || { acr: (n!=null?'#'+n:'—'), name:'—', team:'', colour:null }; }
 
@@ -587,17 +607,18 @@ async function renderRaceControl(){
     setFlag(arr);
     const rows = (Array.isArray(arr)?arr:[]).slice().sort((a,b)=> new Date(b.date)-new Date(a.date));
     if (!rows.length){ body.innerHTML = stateBox('Quiet', 'No race control messages yet this session.'); return; }
-    body.innerHTML = `<div class="feed">` + rows.map(m => {
+    body.innerHTML = `<ul class="feed" role="feed" aria-label="Race control messages">` + rows.map(m => {
       const [cls,tag] = classifyRC(m);
       const who = m.driver_number ? `<span class="who">${esc(drv(m.driver_number).acr)}</span>` : '';
       const lap = m.lap_number!=null ? `L${esc(m.lap_number)}` : '';
-      return `<div class="feed-row ${cls}">
+      return `<li class="feed-row ${cls}">
         <span class="t">${oslo(m.date)}</span>
         <span class="lap">${lap}</span>
         <span class="body"><span class="tagk ${cls}">${esc(tag)}</span>${esc(m.message||'—')}${who}</span>
-      </div>`;
-    }).join('') + `</div>`;
-  } catch {
+      </li>`;
+    }).join('') + `</ul>`;
+  } catch (e) {
+    logError('race control', e);
     body.innerHTML = stateBox('Unavailable', 'Race control feed unavailable — retrying on next refresh.', 'error');
   }
 }
@@ -617,7 +638,7 @@ async function renderPit(){
     if (!rows.length){ body.innerHTML = stateBox('Quiet', 'No pit stops recorded yet this session.'); return; }
     const fastest = rows[0].dur;
     body.innerHTML = `<table class="tbl">
-      <thead><tr><th>Driver</th><th class="tar">Lap</th><th class="tar">Stop (s)</th><th class="tar">Lane (s)</th></tr></thead>
+      <thead><tr><th scope="col">Driver</th><th scope="col" class="tar">Lap</th><th scope="col" class="tar">Stop (s)</th><th scope="col" class="tar">Lane (s)</th></tr></thead>
       <tbody>${rows.map(p => {
         const d = drv(p.n);
         const fast = p.dur === fastest;
@@ -628,7 +649,8 @@ async function renderPit(){
           <td class="num tar muted">${p.lane!=null?p.lane.toFixed(1):'—'}</td>
         </tr>`;
       }).join('')}</tbody></table>`;
-  } catch {
+  } catch (e) {
+    logError('pit stops', e);
     body.innerHTML = stateBox('Unavailable', 'Pit data unavailable — retrying on next refresh.', 'error');
   }
 }
@@ -652,17 +674,18 @@ async function renderOvertakes(){
 
     body.innerHTML = `<div class="two-col">
       <div class="pane"><div class="pane-head">Passes by driver</div><div class="chart-box"><canvas id="otChart"></canvas></div></div>
-      <div class="pane"><div class="pane-head">Chronological</div><div class="ot-list">${
+      <div class="pane"><div class="pane-head">Chronological</div><ul class="ot-list" aria-label="Overtakes, most recent first">${
         list.slice().reverse().map(o => {
           const a = drv(o.overtaking_driver_number), b = drv(o.overtaken_driver_number);
-          return `<div class="ot-row"><span class="t">${oslo(o.date)}</span>
-            <span class="ot-move"><span class="gain">${esc(a.acr)}</span><span class="arrow">›</span><span class="lost">${esc(b.acr)}</span></span></div>`;
+          return `<li class="ot-row"><span class="t">${oslo(o.date)}</span>
+            <span class="ot-move"><span class="gain">${esc(a.acr)}</span><span class="arrow">›</span><span class="lost">${esc(b.acr)}</span></span></li>`;
         }).join('')
-      }</div></div>
+      }</ul></div>
     </div>`;
 
     drawOvertakeChart(ranked);
-  } catch {
+  } catch (e) {
+    logError('overtakes', e);
     destroyChart('ot');
     body.innerHTML = stateBox('Unavailable', 'Overtake data unavailable — retrying on next refresh.', 'error');
   }
@@ -688,7 +711,7 @@ function drawOvertakeChart(ranked){
 /* ============================================================
    5. TYRE STRATEGY
    ============================================================ */
-const COMPOUND = { SOFT:'SOFT', MEDIUM:'MEDIUM', HARD:'HARD', INTERMEDIATE:'INTERMEDIATE', INTERMEDIATES:'INTERMEDIATE', INTER:'INTERMEDIATE', WET:'WET' };
+const COMPOUND = { SOFT:'SOFT', MEDIUM:'MEDIUM', HARD:'HARD', DRY:'HARD', INTERMEDIATE:'INTERMEDIATE', INTERMEDIATES:'INTERMEDIATE', INTER:'INTERMEDIATE', WET:'WET' };
 async function renderStints(){
   const body = $('stintsBody');
   try {
@@ -724,7 +747,8 @@ async function renderStints(){
         <span><i style="background:#3FBF6F"></i>Inter</span>
         <span><i style="background:#3E82F7"></i>Wet</span>
       </div>`;
-  } catch {
+  } catch (e) {
+    logError('tyre strategy', e);
     body.innerHTML = stateBox('Unavailable', 'Tyre strategy unavailable — retrying on next refresh.', 'error');
   }
 }
@@ -755,7 +779,8 @@ async function renderWeather(){
     </div>`;
     const pts = list.map(s => ({ x: oslo(s.date), y: num(s.track_temperature) })).filter(p => p.y!=null);
     if (pts.length > 1) drawWeatherChart(pts); else destroyChart('wx');
-  } catch {
+  } catch (e) {
+    logError('weather', e);
     destroyChart('wx');
     body.innerHTML = stateBox('Unavailable', 'Weather data unavailable — retrying on next refresh.', 'error');
   }
@@ -812,7 +837,7 @@ async function loadNextRace(){
       .filter(x => Number.isFinite(x.t) && x.t > now)
       .sort((a,b)=> a.t - b.t);
     state.nextRace = upcoming.length ? upcoming[0] : null;
-  } catch { state.nextRace = null; }
+  } catch (e) { logError('next race', e); state.nextRace = null; }
 }
 function showCountdown(){
   const box = $('countdown');
@@ -848,7 +873,10 @@ function showLiveSections(show){
 /* ============================================================
    POLLING / ORCHESTRATION
    ============================================================ */
-function stopPolling(){ if (state.pollTimer){ clearInterval(state.pollTimer); state.pollTimer = null; } }
+function stopPolling(){
+  if (state.pollTimer){ clearInterval(state.pollTimer); state.pollTimer = null; }
+  if (state.standingsTimer){ clearInterval(state.standingsTimer); state.standingsTimer = null; }
+}
 
 async function pollLive(){
   // sections fail independently; one rejection must not blank the others
@@ -863,7 +891,7 @@ async function cycle(){
   let mode;
   state.detectError = false;
   try { mode = await detect(); }
-  catch { mode = 'IDLE'; state.detectError = true; }
+  catch (e) { logError('session detect', e); mode = 'IDLE'; state.detectError = true; }
   state.mode = mode;
   renderStatusBar();
 
@@ -873,7 +901,10 @@ async function cycle(){
     await loadDrivers();
     setFlag([]);                 // reset, race control will set it
     await pollLive();
-    state.pollTimer = setInterval(pollLive, POLL_MS);
+    // slow down once the session has finished and we're just riding out the grace window
+    state.pollTimer = setInterval(pollLive, state.ended ? POLL_ENDED_MS : POLL_MS);
+    // standings can shift after a race (penalties, etc.) — re-check occasionally while live
+    state.standingsTimer = setInterval(loadStandings, STANDINGS_POLL_MS);
   } else {
     setFlag([]);
     showLiveSections(false);     // hide live-only sections entirely when nothing is live
