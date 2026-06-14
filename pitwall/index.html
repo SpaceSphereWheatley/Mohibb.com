@@ -386,14 +386,17 @@ function stateBox(badge, msg, kind){
    ============================================================ */
 async function detect(){
   const arr = await of1('sessions');
-  const s = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
-  state.session = s;
-  if (!s) return 'IDLE';
-  const start = new Date(s.date_start).getTime();
-  const end = new Date(s.date_end).getTime();
+  const list = Array.isArray(arr) ? arr : [];
   const now = Date.now();
-  if (Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end + GRACE_MS) return 'LIVE';
-  return 'IDLE';
+  // session_key=latest returns every session of the latest meeting (FP1..Race),
+  // not just the current one — find whichever of them is live right now.
+  const live = list.find(s => {
+    const start = new Date(s.date_start).getTime();
+    const end = new Date(s.date_end).getTime();
+    return Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end + GRACE_MS;
+  });
+  state.session = live || (list.length ? list[list.length - 1] : null);
+  return live ? 'LIVE' : 'IDLE';
 }
 
 /* ============================================================
