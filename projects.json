@@ -28,6 +28,13 @@
           "description": "Penalty intelligence built on open football data. Placement, conversion, and a pressure index.",
           "url": "https://spotkick.mohibb.com",
           "status": "soon"
+        },
+        {
+          "name": "Betting Tracker",
+          "category": "Football",
+          "description": "A spreadsheet tracking simulated football bets, including automated bet selection, staking, and ROI.",
+          "url": "https://docs.google.com/spreadsheets/d/1_DRVnfGEwIajn_3eTKH6A7W_MgfTIGTn-wZzDJFCTVY/edit?usp=drivesdk",
+          "status": "live"
         }
       ]
     },
