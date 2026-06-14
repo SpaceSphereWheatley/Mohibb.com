@@ -394,13 +394,23 @@ async function getJSON(url, retries = 1){
 }
 function logError(context, err){ console.warn('[analyse] ' + context + ':', err); }
 
-/* sessionStorage-cached JSON — completed-session data is immutable, so cache hard */
+/* sessionStorage-cached JSON — completed-session data is immutable, so cache hard.
+   Concurrent callers for the same data share one request (the race + practice
+   views fetch overlapping endpoints in parallel; without this, OpenF1 sees a
+   duplicate burst and rate-limits one of them). */
+const inflight = new Map();
 async function cachedJSON(cacheKey, url, slimmer){
   try { const c = sessionStorage.getItem(cacheKey); if (c) return JSON.parse(c); } catch {}
-  const data = await getJSON(url);
-  const out = slimmer ? slimmer(data) : data;
-  try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch {}   // quota — fine, just skip
-  return out;
+  if (inflight.has(cacheKey)) return inflight.get(cacheKey);
+  const p = (async () => {
+    const data = await getJSON(url);
+    const out = slimmer ? slimmer(data) : data;
+    try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch {}   // quota — fine, just skip
+    return out;
+  })();
+  inflight.set(cacheKey, p);
+  try { return await p; }
+  finally { inflight.delete(cacheKey); }
 }
 // /laps rows carry big segment arrays we never use — strip before caching to stay under quota
 function slimLaps(data){
