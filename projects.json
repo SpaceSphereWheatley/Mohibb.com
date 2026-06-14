@@ -5,15 +5,15 @@
       "items": [
         {
           "name": "Pit Wall",
-          "category": "Live timing",
-          "description": "A live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.",
+          "category": "Live timing · lite",
+          "description": "A lightweight, live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.",
           "url": "/pitwall/",
           "status": "live"
         },
         {
           "name": "F1 Dashboard",
-          "category": "Analysis",
-          "description": "Qualifying analysis and race telemetry built on FastF1.",
+          "category": "Analysis · full",
+          "description": "The full F1 analysis suite — deep qualifying analysis and race telemetry built on FastF1.",
           "url": "https://f1.mohibb.com",
           "status": "soon"
         }
