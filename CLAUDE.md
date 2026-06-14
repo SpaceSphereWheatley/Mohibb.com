@@ -39,7 +39,7 @@ Must be served over HTTP, since `fetch('./projects.json')` does not work from
 npx serve .
 ```
 
-## PDF Merger (pdf.mohibb.com)
+## PDF Merger (mohibb.com/pdf)
 
 `pdf/` is a self-contained, client-side PDF merge/reorder tool built on
 `pdf-lib` (bundled as `pdf/pdf-lib.min.js`, loaded via `<script src>`). It
@@ -47,8 +47,9 @@ shares this repo's design tokens (colors, fonts) from `index.html` but has
 its own `<style>`/`<script>`. All merging happens in-browser; nothing is
 uploaded.
 
-It's deployed as a **separate Cloudflare Pages project** pointing at the same
-repo with "Root directory" set to `pdf`, and custom domain `pdf.mohibb.com`.
+It's served at `mohibb.com/pdf/` automatically as part of this same Pages
+deployment (output directory `/` includes `pdf/`) — no separate project or
+domain needed.
 
 ## Deployment
 
@@ -58,5 +59,4 @@ Deployed via Cloudflare Pages:
 - Custom domains `mohibb.com` and `www.mohibb.com` point at this Pages
   project.
 - Each other project listed in `projects.json` lives in its own repo / Pages
-  project on its own subdomain (e.g. `spotkick.mohibb.com`, `f1.mohibb.com`),
-  except PDF Merger which lives in `pdf/` of this repo (see above).
+  project on its own subdomain (e.g. `spotkick.mohibb.com`, `f1.mohibb.com`).

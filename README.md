@@ -52,14 +52,10 @@ npx serve .
 3. Pick this repo. Build command: empty. Output directory: `/`.
 4. Deploy, then Custom domains -> add `mohibb.com` and `www.mohibb.com`.
 
-## PDF Merger (pdf.mohibb.com)
+## PDF Merger (mohibb.com/pdf)
 
-Lives in `pdf/` in this same repo, deployed as a second Cloudflare Pages
-project pointing at the same GitHub repo:
-
-1. Workers & Pages -> Create -> Pages -> Connect to Git -> this repo.
-2. Set "Root directory" to `pdf`. Build command: empty. Output directory: `/`.
-3. Deploy, then Custom domains -> add `pdf.mohibb.com`.
+Lives in `pdf/` in this repo and is served at `mohibb.com/pdf/` as part of
+this same Pages deployment — no separate project or domain needed.
 
 It's a static, client-side PDF merge/reorder tool built on `pdf-lib`
 (`pdf/pdf-lib.min.js`, bundled). Nothing is uploaded — all merging happens in

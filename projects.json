@@ -40,7 +40,7 @@
           "name": "PDF Merger",
           "category": "Utility",
           "description": "Combine, reorder, and split PDF files entirely in the browser.",
-          "url": "https://pdf.mohibb.com",
+          "url": "/pdf/",
           "status": "live"
         }
       ]
