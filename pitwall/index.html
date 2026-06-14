@@ -423,7 +423,7 @@ function osloFull(iso){ try { return fmtDate.format(new Date(iso)); } catch { re
 
 /* ---------- fetch helpers ---------- */
 const FETCH_TIMEOUT_MS = 15000;
-async function getJSON(url){
+async function getJSON(url, retries = 1){
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -432,11 +432,22 @@ async function getJSON(url){
       let detail = '';
       try { detail = (await res.json())?.detail || ''; } catch {}
       const err = new Error('HTTP ' + res.status);
-      // OpenF1 locks the entire API to API-key holders while a session is live
-      if (res.status === 403 && /live f1 session in progress/i.test(detail)) err.liveLocked = true;
+      // OpenF1 locks the entire API to API-key holders while a session is live —
+      // treat any 403 as the lock, since the exact wording of `detail` isn't reliable
+      if (res.status === 403) err.liveLocked = true;
+      err.status = res.status;
       throw err;
     }
     return await res.json();
+  } catch (e) {
+    // retry once on transient failures (rate limiting, server errors, timeouts) —
+    // both OpenF1 and Jolpica are volunteer/shared infra and occasionally blip
+    const transient = e.name === 'AbortError' || e.status === 429 || (e.status >= 500 && e.status < 600);
+    if (retries > 0 && transient && !e.liveLocked){
+      await new Promise(r => setTimeout(r, 1000));
+      return getJSON(url, retries - 1);
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
@@ -589,7 +600,7 @@ async function loadStandings(){
       </tr>`;
     }).join('');
 
-    body.innerHTML = `
+    const html = `
       <div class="col">
         <div class="col-head">Drivers</div>
         <div class="tbl-scroll"><table class="tbl">
@@ -604,12 +615,22 @@ async function loadStandings(){
           <tbody>${conRows}</tbody>
         </table></div>
       </div>`;
+    body.innerHTML = html;
     state.standingsLoaded = true;
     state.standingsLoadedAt = Date.now();
     note.textContent = label + ' · loaded ' + fmtClock.format(new Date(state.standingsLoadedAt));
+    try { localStorage.setItem('pitwall.standings', JSON.stringify({ html, label, at: state.standingsLoadedAt })); } catch {}
   } catch (e){
     logError('standings', e);
-    body.innerHTML = stateBox('Unavailable', 'Standings unavailable — Jolpica API not responding. Tap refresh to retry.', 'error');
+    // fall back to the last successfully loaded standings, if any, rather than blanking the panel
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem('pitwall.standings')); } catch {}
+    if (cached?.html){
+      body.innerHTML = cached.html;
+      note.textContent = cached.label + ' · cached ' + fmtClock.format(new Date(cached.at)) + ' (Jolpica unreachable, tap refresh to retry)';
+    } else {
+      body.innerHTML = stateBox('Unavailable', 'Standings unavailable — Jolpica API not responding. Tap refresh to retry.', 'error');
+    }
   }
 }
 
