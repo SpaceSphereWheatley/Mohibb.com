@@ -1,7 +1,26 @@
 {
   "groups": [
     {
-      "label": "Projects",
+      "label": "F1",
+      "items": [
+        {
+          "name": "Pit Wall",
+          "category": "Live timing",
+          "description": "A live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.",
+          "url": "/pitwall/",
+          "status": "live"
+        },
+        {
+          "name": "F1 Dashboard",
+          "category": "Analysis",
+          "description": "Qualifying analysis and race telemetry built on FastF1.",
+          "url": "https://f1.mohibb.com",
+          "status": "soon"
+        }
+      ]
+    },
+    {
+      "label": "Football",
       "items": [
         {
           "name": "Spotkick",
@@ -9,14 +28,12 @@
           "description": "Penalty intelligence built on open football data. Placement, conversion, and a pressure index.",
           "url": "https://spotkick.mohibb.com",
           "status": "soon"
-        },
-        {
-          "name": "F1 Dashboard",
-          "category": "Motorsport",
-          "description": "Live timing, qualifying analysis, and race telemetry built on FastF1.",
-          "url": "https://f1.mohibb.com",
-          "status": "soon"
-        },
+        }
+      ]
+    },
+    {
+      "label": "Other / Misc",
+      "items": [
         {
           "name": "Panello",
           "category": "Home",
