@@ -82,6 +82,38 @@ standings, and an idle countdown to the next race when no session is live.
   strategy, and long-run race pace, all built on OpenF1's historical data.
   Linked from Pit Wall and served at `mohibb.com/pitwall/analyse/`.
 
+## Design tokens
+
+Shared `:root` CSS custom properties, defined per-page (no shared stylesheet)
+but kept consistent across `index.html`, `pdf/`, and `pitwall/`:
+
+- Core palette: `--bg` (#EDE8DD), `--card` (#F7F3EA), `--ink` (#211D17),
+  `--ink-2`/`--ink-3` (muted text), `--line`/`--line-soft` (borders),
+  `--accent`/`--accent-ink` (#B4471F rust, used for highlights/links),
+  `--live` (#2E6F4F, "Live" status green).
+- `pitwall/` and `pitwall/analyse/` extend this with `--bg-2`, `--card-2`,
+  `--ink-4`, status colors `--green`/`--yellow`/`--red`/`--blue`/`--sc`, and
+  `--mono` (IBM Plex Mono).
+- Fonts (Google Fonts, loaded per-page): **Plus Jakarta Sans** for body/UI,
+  **Newsreader** italic for "eyebrow"/lede copy, **IBM Plex Mono** for
+  timing/numeric data in Pit Wall.
+
+When adding a new page, copy the `:root` block from the closest existing page
+rather than reinventing values.
+
+## Adding a new page
+
+Each page (`index.html`, `pdf/index.html`, `pitwall/index.html`,
+`pitwall/analyse/index.html`) repeats the same `<head>` boilerplate:
+canonical `<link>`, Open Graph + Twitter meta tags, `theme-color`, favicon
+link, and an `application/ld+json` block. When adding a new top-level page:
+
+- Copy and adapt this boilerplate (title, description, canonical/OG URLs,
+  ld+json) from the closest existing page.
+- Add the new URL to `sitemap.xml` (with appropriate `changefreq`/`priority`).
+- Add the new URL to `.pa11yci.json` so it's covered by the accessibility
+  check in CI.
+
 ## Validation (CI)
 
 `.github/workflows/validate.yml` runs on every push/PR via `npx` (no
