@@ -432,8 +432,9 @@ async function getJSON(url){
       let detail = '';
       try { detail = (await res.json())?.detail || ''; } catch {}
       const err = new Error('HTTP ' + res.status);
-      // OpenF1 locks the entire API to API-key holders while a session is live
-      if (res.status === 403 && /live f1 session in progress/i.test(detail)) err.liveLocked = true;
+      // OpenF1 locks the entire API to API-key holders while a session is live —
+      // treat any 403 as the lock, since the exact wording of `detail` isn't reliable
+      if (res.status === 403) err.liveLocked = true;
       throw err;
     }
     return await res.json();
