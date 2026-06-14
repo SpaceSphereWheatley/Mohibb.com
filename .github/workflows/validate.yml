@@ -54,6 +54,14 @@ jobs:
               if (/\bsrc\s*=/.test(attrs)) continue;        // external script, nothing inline
               if (!code.trim()) continue;
               i++;
+              const typeMatch = attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i);
+              const type = typeMatch ? typeMatch[1].toLowerCase() : '';
+              if (type === 'application/ld+json' || type === 'application/json') {
+                try { JSON.parse(code); console.log(`ok   ${f} [script #${i}] (JSON)`); }
+                catch (e) { bad++; console.error(`FAIL ${f} [script #${i}] (JSON) — ${e.message}`); }
+                continue;
+              }
+              if (type && type !== 'text/javascript' && type !== 'module' && type !== 'application/javascript') continue;
               try { new Function(code); console.log(`ok   ${f} [script #${i}]`); }
               catch (e) { bad++; console.error(`FAIL ${f} [script #${i}] — ${e.message}`); }
             }
