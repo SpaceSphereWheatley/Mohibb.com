@@ -8,6 +8,7 @@ Personal landing page for mohibb.com. Static, data-driven, no build step.
 mohibb-home/
   index.html      page shell + render logic
   projects.json   the project list (edit this to update the page)
+  pdf/            PDF Merger tool (its own Pages project, see below)
   README.md
 ```
 
@@ -51,8 +52,22 @@ npx serve .
 3. Pick this repo. Build command: empty. Output directory: `/`.
 4. Deploy, then Custom domains -> add `mohibb.com` and `www.mohibb.com`.
 
+## PDF Merger (pdf.mohibb.com)
+
+Lives in `pdf/` in this same repo, deployed as a second Cloudflare Pages
+project pointing at the same GitHub repo:
+
+1. Workers & Pages -> Create -> Pages -> Connect to Git -> this repo.
+2. Set "Root directory" to `pdf`. Build command: empty. Output directory: `/`.
+3. Deploy, then Custom domains -> add `pdf.mohibb.com`.
+
+It's a static, client-side PDF merge/reorder tool built on `pdf-lib`
+(`pdf/pdf-lib.min.js`, bundled). Nothing is uploaded — all merging happens in
+the browser.
+
 ## Notes
 
-- Each project lives in its own repo / Pages project on its own subdomain.
-- Subdomains assumed in projects.json: spotkick, f1, panello, pulsar, pdf
+- Other projects in projects.json each live in their own repo / Pages project
+  on their own subdomain.
+- Subdomains assumed in projects.json: spotkick, f1, panello, pulsar
   (all under mohibb.com). Adjust the urls if you use different ones.

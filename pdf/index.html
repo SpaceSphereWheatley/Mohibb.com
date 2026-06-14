@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Combine, reorder, and split PDF files entirely in the browser.">
+<title>PDF Merger — Mohibb Malik</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<script src="pdf-lib.min.js"></script>
+<style>
+:root{
+  --bg:#EDE8DD; --ink:#211D17; --ink-2:#5C554A; --ink-3:#8C8475;
+  --line:#211D17; --line-soft:#C9C0AE; --card:#F7F3EA;
+  --accent:#B4471F; --accent-ink:#8F371A; --live:#2E6F4F;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;line-height:1.5;min-height:100dvh;-webkit-font-smoothing:antialiased;}
+.wrap{width:100%;max-width:640px;margin:0 auto;padding:0 24px 72px;}
+
+.toprule{max-width:640px;margin:0 auto;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--line);}
+.toprule .name{font-size:13px;font-weight:700;letter-spacing:0.02em;text-decoration:none;color:var(--ink);}
+.toprule .back{font-size:12px;color:var(--ink-2);font-weight:600;text-decoration:none;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
+.toprule .back:hover{color:var(--accent);border-color:var(--accent);}
+
+.intro{padding:48px 0 32px;max-width:540px;}
+.eyebrow{font-family:'Newsreader',serif;font-style:italic;font-size:17px;color:var(--accent);margin-bottom:16px;}
+h1{font-size:clamp(34px,7vw,52px);font-weight:800;letter-spacing:-0.04em;line-height:0.98;margin-bottom:16px;}
+.lede{font-family:'Newsreader',serif;font-size:clamp(16px,2.4vw,18px);line-height:1.5;color:var(--ink-2);max-width:480px;}
+
+.card{border:1.5px solid var(--line);background:var(--card);padding:28px;}
+
+.drop-zone{border:1.5px dashed var(--line-soft);background:var(--bg);padding:32px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:20px;}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:#FCEFE6;}
+.drop-zone input{display:none;}
+.drop-icon{font-size:28px;margin-bottom:10px;opacity:.5;}
+.drop-zone p{font-size:14px;color:var(--ink-2);}
+.drop-zone span{color:var(--accent-ink);font-weight:600;cursor:pointer;border-bottom:1.5px solid var(--accent-ink);}
+.drop-zone .hint{font-size:12px;color:var(--ink-3);margin-top:6px;font-family:'Newsreader',serif;font-style:italic;}
+
+.file-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
+
+.file-item{background:var(--bg);border:1.5px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:grab;transition:box-shadow .15s,opacity .15s;user-select:none;}
+.file-item:active{cursor:grabbing;}
+.file-item.dragging{opacity:.4;}
+.file-item.drag-target{box-shadow:inset 4px 0 0 var(--accent);}
+
+.drag-handle{color:var(--ink-3);font-size:18px;cursor:grab;flex-shrink:0;display:flex;flex-direction:column;gap:3px;padding:2px;}
+.drag-handle span{display:block;width:16px;height:2px;background:currentColor;border-radius:1px;}
+
+.file-icon{width:32px;height:38px;background:var(--card);border:1.5px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--accent-ink);letter-spacing:.3px;position:relative;}
+
+.file-info{flex:1;min-width:0;}
+.file-name{font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.file-size{font-size:11px;color:var(--ink-3);margin-top:2px;}
+
+.order-num{font-size:11px;font-weight:700;color:var(--ink-3);width:18px;text-align:center;flex-shrink:0;}
+
+.remove-btn{background:none;border:none;cursor:pointer;color:var(--ink-3);font-size:18px;padding:4px;line-height:1;transition:color .1s;flex-shrink:0;}
+.remove-btn:hover{color:var(--accent);}
+
+.actions{display:flex;gap:10px;align-items:center;}
+
+.btn-merge{flex:1;background:var(--accent);color:var(--bg);border:1.5px solid var(--line);padding:13px 20px;font-size:14px;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;letter-spacing:.02em;text-transform:uppercase;}
+.btn-merge:hover:not(:disabled){background:var(--accent-ink);}
+.btn-merge:active:not(:disabled){transform:scale(0.99);}
+.btn-merge:disabled{background:var(--line-soft);color:var(--ink-3);border-color:var(--line-soft);cursor:not-allowed;}
+
+.btn-clear{background:none;border:1.5px solid var(--line);padding:13px 16px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;}
+.btn-clear:hover{background:var(--bg);color:var(--accent-ink);border-color:var(--accent-ink);}
+
+.status{margin-top:16px;padding:12px 14px;border:1.5px solid var(--line);font-size:13px;display:none;}
+.status.info{background:#FCEFE6;color:var(--accent-ink);border-color:var(--accent);display:block;}
+.status.success{background:#E7F0EA;color:var(--live);border-color:var(--live);display:block;}
+.status.error{background:#FCEFE6;color:var(--accent-ink);border-color:var(--accent);display:block;}
+
+.progress-bar{height:3px;background:var(--line-soft);margin-top:10px;overflow:hidden;display:none;}
+.progress-bar.visible{display:block;}
+.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .2s;}
+
+.empty-hint{text-align:center;padding:1rem 0;color:var(--ink-3);font-size:13px;font-family:'Newsreader',serif;font-style:italic;display:none;}
+
+footer{margin-top:48px;padding-top:24px;border-top:1.5px solid var(--line);font-size:13px;color:var(--ink-3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+footer a{color:var(--ink-2);text-decoration:none;font-weight:600;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
+footer a:hover{color:var(--accent);border-color:var(--accent);}
+
+@media(max-width:480px){.intro{padding:40px 0 28px;}.card{padding:20px;}}
+</style>
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <a class="back" href="/">&larr; All projects</a>
+</div>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">Tools</div>
+    <h1>PDF Merger</h1>
+    <p class="lede">Combine, reorder, and split PDF files &mdash; entirely in your browser. Nothing is uploaded.</p>
+  </div>
+
+  <div class="card">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".pdf" multiple>
+      <div class="drop-icon">&#8593;</div>
+      <p>Drop PDF files here or <span onclick="document.getElementById('fileInput').click()">browse</span></p>
+      <p class="hint">Add as many files as you need &mdash; drag to reorder</p>
+    </div>
+
+    <div class="file-list" id="fileList"></div>
+    <p class="empty-hint" id="emptyHint">Add at least 2 PDF files to merge.</p>
+
+    <div class="actions">
+      <button class="btn-merge" id="mergeBtn" disabled onclick="mergePDFs()">Merge PDFs</button>
+      <button class="btn-clear" onclick="clearAll()">Clear all</button>
+    </div>
+
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <footer>
+    <span>&copy; <span id="year"></span> Mohibb Malik</span>
+    <span><a href="/">mohibb.com</a></span>
+  </footer>
+
+</div>
+
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+let files = [];
+let dragSrcIdx = null;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const mergeBtn = document.getElementById('mergeBtn');
+const status = document.getElementById('status');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+const emptyHint = document.getElementById('emptyHint');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  addFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+function addFiles(incoming) {
+  const pdfs = incoming.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  if (pdfs.length < incoming.length) showStatus('Some files were skipped — only PDFs accepted.', 'info');
+  files = [...files, ...pdfs];
+  renderList();
+  fileInput.value = '';
+}
+
+function renderList() {
+  fileList.innerHTML = '';
+  mergeBtn.disabled = files.length < 2;
+  emptyHint.style.display = files.length === 0 ? 'block' : 'none';
+  files.forEach((f, i) => {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.draggable = true;
+    item.dataset.idx = i;
+    item.innerHTML = `
+      <div class="drag-handle" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="order-num">${i + 1}</div>
+      <div class="file-icon">PDF</div>
+      <div class="file-info">
+        <div class="file-name" title="${f.name}">${f.name}</div>
+        <div class="file-size">${formatSize(f.size)}</div>
+      </div>
+      <button class="remove-btn" onclick="removeFile(${i})" title="Remove">&#10005;</button>
+    `;
+    item.addEventListener('dragstart', () => { dragSrcIdx = i; setTimeout(() => item.classList.add('dragging'), 0); });
+    item.addEventListener('dragend', () => { item.classList.remove('dragging'); clearDragTargets(); });
+    item.addEventListener('dragover', e => { e.preventDefault(); clearDragTargets(); item.classList.add('drag-target'); });
+    item.addEventListener('drop', e => { e.preventDefault(); if (dragSrcIdx !== null && dragSrcIdx !== i) reorder(dragSrcIdx, i); });
+    fileList.appendChild(item);
+  });
+}
+
+function clearDragTargets() {
+  document.querySelectorAll('.drag-target').forEach(el => el.classList.remove('drag-target'));
+}
+
+function reorder(from, to) {
+  const item = files.splice(from, 1)[0];
+  files.splice(to, 0, item);
+  dragSrcIdx = null;
+  renderList();
+}
+
+function removeFile(i) {
+  files.splice(i, 1);
+  renderList();
+  hideStatus();
+}
+
+function clearAll() {
+  files = [];
+  renderList();
+  hideStatus();
+  progressBar.classList.remove('visible');
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function showStatus(msg, type) { status.textContent = msg; status.className = 'status ' + type; }
+function hideStatus() { status.className = 'status'; }
+function setProgress(pct) { progressBar.classList.add('visible'); progressFill.style.width = pct + '%'; }
+
+async function mergePDFs() {
+  if (files.length < 2) return;
+  mergeBtn.disabled = true;
+  showStatus('Merging…', 'info');
+  setProgress(10);
+
+  try {
+    const { PDFDocument } = PDFLib;
+    const merged = await PDFDocument.create();
+
+    for (let i = 0; i < files.length; i++) {
+      const arrayBuffer = await files[i].arrayBuffer();
+      setProgress(10 + Math.round((i / files.length) * 70));
+      const doc = await PDFDocument.load(arrayBuffer);
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+
+    setProgress(90);
+    const bytes = await merged.save();
+    setProgress(100);
+
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'merged.pdf';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    const totalPages = (await PDFDocument.load(bytes)).getPageCount();
+    showStatus(`Done — ${totalPages} pages, saved as merged.pdf`, 'success');
+  } catch (err) {
+    showStatus('Error: ' + (err.message || 'Could not merge. Make sure the PDFs are not password-protected.'), 'error');
+  }
+
+  mergeBtn.disabled = files.length < 2;
+}
+</script>
+</body>
+</html>
