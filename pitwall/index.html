@@ -76,9 +76,16 @@ a{color:inherit;}
 /* ---------- top rule (echoes the landing page) ---------- */
 .toprule{max-width:1080px;margin:0 auto;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--line);}
 .toprule .name{font-size:13px;font-weight:700;letter-spacing:0.04em;text-decoration:none;color:var(--ink);}
-.toprule-nav{display:flex;gap:18px;align-items:center;}
+.toprule-nav{display:flex;gap:16px;align-items:center;}
 .toprule .back{font-size:12px;color:var(--ink-2);font-weight:600;text-decoration:none;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
 .toprule .back:hover{color:var(--accent);border-color:var(--accent);}
+/* the Analyse tab gets a prominent pill so it doesn't read as just another nav link */
+.toprule .analyse-cta{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:0.02em;line-height:1;color:#fff;background:var(--accent);border:1.5px solid var(--accent);border-radius:999px;padding:8px 15px;text-decoration:none;box-shadow:0 1px 0 rgba(33,29,23,0.14);transition:background .15s,box-shadow .15s,transform .15s;}
+.toprule .analyse-cta:hover{background:var(--accent-ink);transform:translateY(-1px);box-shadow:0 4px 12px rgba(180,71,31,0.32);}
+.toprule .analyse-cta .ico{width:14px;height:14px;display:block;flex-shrink:0;}
+.toprule .analyse-cta .arr{transition:transform .15s;}
+.toprule .analyse-cta:hover .arr{transform:translateX(3px);}
+@media(max-width:520px){.toprule .analyse-cta .arr{display:none;}.toprule .back{font-size:11px;}}
 
 /* ---------- status bar (sticky) ---------- */
 .statusbar{position:sticky;top:0;z-index:40;background:rgba(237,232,221,0.88);backdrop-filter:blur(10px);border-bottom:1.5px solid var(--line);}
@@ -258,7 +265,10 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
 <div class="toprule">
   <a class="name" href="/">MOHIBB MALIK</a>
   <nav class="toprule-nav">
-    <a class="back" href="/pitwall/analyse/">Analyse</a>
+    <a class="analyse-cta" href="/pitwall/analyse/" title="Analyse any completed F1 session — theoretical best laps, race history, tyre strategy and more">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 14V9M7 14V3.5M12 14V7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Analyse<span class="arr" aria-hidden="true">&rarr;</span>
+    </a>
     <a class="back" href="/">All projects &rarr;</a>
   </nav>
 </div>
