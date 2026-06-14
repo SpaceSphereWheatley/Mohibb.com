@@ -8,7 +8,8 @@ Personal landing page for mohibb.com. Static, data-driven, no build step.
 mohibb-home/
   index.html      page shell + render logic
   projects.json   the project list (edit this to update the page)
-  pdf/            PDF Merger tool (its own Pages project, see below)
+  pdf/            PDF Merger tool, served at mohibb.com/pdf/
+  pitwall/        Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
   README.md
 ```
 
@@ -30,7 +31,7 @@ Each item in `projects.json`:
 ```
 
 `status` accepts:
-- `soon` — dimmed, non-clickable, "Coming soon" tag
+- `soon` — dimmed, non-clickable, "Under development" tag
 - `wip`  — dimmed, non-clickable, "In progress" tag
 - `live` — clickable link to `url`, hover arrow, green "Live" tag
 
@@ -60,6 +61,17 @@ this same Pages deployment — no separate project or domain needed.
 It's a static, client-side PDF merge/reorder tool built on `pdf-lib`
 (`pdf/pdf-lib.min.js`, bundled). Nothing is uploaded — all merging happens in
 the browser.
+
+## Pit Wall (mohibb.com/pitwall)
+
+Lives in `pitwall/` and is served at `mohibb.com/pitwall/` as part of this
+same Pages deployment — no separate project or domain needed.
+
+A self-contained, client-side live F1 dashboard (Chart.js from CDN is the only
+external dependency). It shows the current/most recent session plus season
+standings, with an idle next-race countdown when no session is live. Data comes
+from OpenF1 (live session data) and Jolpica (standings + schedule). A companion
+"Analyse" page (`pitwall/analyse/`) digs into any completed session.
 
 ## Notes
 
