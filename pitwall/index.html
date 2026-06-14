@@ -102,7 +102,7 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 
 /* ---------- tables ---------- */
 .tbl{width:100%;border-collapse:collapse;font-size:13.5px;}
-.tbl th{text-align:left;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);padding:12px 14px;border-bottom:1.5px solid var(--line);background:var(--bg-2);position:sticky;top:0;}
+.tbl th{text-align:left;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);padding:12px 14px;border-bottom:1.5px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:1;}
 .tbl td{padding:11px 14px;border-bottom:1px solid var(--line-soft);vertical-align:middle;}
 .tbl tr:last-child td{border-bottom:none;}
 .tbl tbody tr{transition:background .12s;}
@@ -339,7 +339,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
 
 const OPENF1 = 'https://api.openf1.org/v1/';
 const JOLPI  = 'https://api.jolpi.ca/ergast/f1/';
-const POLL_MS = 5000;
+const POLL_MS = 3000;
 const GRACE_MS = 10 * 60 * 1000;            // keep "live" 10 min after session end
 const TZ = 'Europe/Oslo';
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
