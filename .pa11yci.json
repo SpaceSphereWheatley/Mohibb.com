@@ -1,0 +1,13 @@
+{
+  "defaults": {
+    "standard": "WCAG2A",
+    "chromeLaunchConfig": {
+      "args": ["--no-sandbox"]
+    }
+  },
+  "urls": [
+    "http://localhost:8123/",
+    "http://localhost:8123/pitwall/",
+    "http://localhost:8123/pdf/"
+  ]
+}

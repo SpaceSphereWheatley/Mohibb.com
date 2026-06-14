@@ -143,7 +143,7 @@ footer a:hover{color:var(--accent);border-color:var(--accent);}
 
   <div class="card">
     <div class="drop-zone" id="dropZone">
-      <input type="file" id="fileInput" accept=".pdf" multiple>
+      <input type="file" id="fileInput" accept=".pdf" multiple aria-label="Choose PDF files to merge">
       <div class="drop-icon">&#8593;</div>
       <p>Drop PDF files here or <span onclick="document.getElementById('fileInput').click()">browse</span></p>
       <p class="hint">Add as many files as you need &mdash; drag to reorder</p>
@@ -153,8 +153,8 @@ footer a:hover{color:var(--accent);border-color:var(--accent);}
     <p class="empty-hint" id="emptyHint">Add at least 2 PDF files to merge.</p>
 
     <div class="actions">
-      <button class="btn-merge" id="mergeBtn" disabled onclick="mergePDFs()">Merge PDFs</button>
-      <button class="btn-clear" onclick="clearAll()">Clear all</button>
+      <button class="btn-merge" id="mergeBtn" type="button" disabled onclick="mergePDFs()">Merge PDFs</button>
+      <button class="btn-clear" type="button" onclick="clearAll()">Clear all</button>
     </div>
 
     <div class="progress-bar" id="progressBar">
