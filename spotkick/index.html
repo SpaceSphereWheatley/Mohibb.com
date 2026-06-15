@@ -52,10 +52,13 @@
 <!-- Laget av Mohibb Malik, 2025 -->
 
 <div class="topbar">
-  <div class="wordmark">Spot<em>kick</em></div>
-  <div class="topbar-meta" id="topbarCount">Loading…</div>
+  <div class="topbar-inner">
+    <div class="wordmark">Spot<em>kick</em></div>
+    <div class="topbar-meta" id="topbarCount">Loading…</div>
+  </div>
 </div>
 
+<div class="wrap">
 <div class="chips-row">
   <button type="button" class="chip active" id="chipFilters">
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -68,7 +71,41 @@
   <button type="button" class="chip" id="chipKeeper">Any keeper</button>
 </div>
 
-<div class="section mt-16">
+<div class="filter-sheet" id="filterSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Filters</div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selComp">Competition</label>
+    <select class="sheet-select" id="selComp"></select>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selSeason">Season</label>
+    <select class="sheet-select" id="selSeason"></select>
+  </div>
+  <div class="sheet-group">
+    <div class="sheet-label">Outcome</div>
+    <div class="outcome-row">
+      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
+      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
+      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
+    </div>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selTaker">Taker</label>
+    <input class="sheet-select player-search" id="selTaker" type="text" list="takerOptions" placeholder="Any player" autocomplete="off">
+    <datalist id="takerOptions"></datalist>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selKeeper">Goalkeeper</label>
+    <input class="sheet-select player-search" id="selKeeper" type="text" list="keeperOptions" placeholder="Any goalkeeper" autocomplete="off">
+    <datalist id="keeperOptions"></datalist>
+  </div>
+  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
+  <button type="button" class="clear-btn" id="clearBtn">Clear filters</button>
+</div>
+
+<div class="grid">
+<div class="section mt-16 sec-stats">
   <div class="stats-grid">
     <div class="stat-card">
       <div class="sc-label">Conversion</div>
@@ -100,7 +137,7 @@
   </div>
 </div>
 
-<div class="section mt-20">
+<div class="section mt-20 sec-placement">
   <div class="sec-header">
     <div class="sec-title">Shot placement</div>
     <div class="sec-action">Tap zone to filter</div>
@@ -119,7 +156,7 @@
   </div>
 </div>
 
-<div class="section mt-20">
+<div class="section mt-20 sec-player">
   <div class="sec-header">
     <div class="sec-title">Player</div>
     <div class="sec-action" id="chipPlayerChange">Change</div>
@@ -144,7 +181,7 @@
   </div>
 </div>
 
-<div class="section mt-20">
+<div class="section mt-20 sec-trend">
   <div class="sec-header"><div class="sec-title">Conversion over time</div></div>
   <div class="trend-panel">
     <canvas id="trendCanvas"></canvas>
@@ -154,12 +191,53 @@
   </div>
 </div>
 
-<div class="section mt-20 section-last">
+<div class="section mt-20 sec-pressure">
+  <div class="sec-header">
+    <div class="sec-title">Pressure vs conversion</div>
+  </div>
+  <div class="trend-panel">
+    <canvas id="pressureCanvas"></canvas>
+    <div class="trend-legend">
+      <div class="tl-item"><div class="tl-line tl-line-accent"></div>Conversion % per pressure band (bars)</div>
+      <div class="tl-item"><div class="gl-dot zh-h"></div>Goal</div>
+      <div class="tl-item"><div class="gl-dot zh-l"></div>Saved/missed</div>
+    </div>
+  </div>
+</div>
+
+<div class="section mt-20 sec-pressuretakers">
+  <div class="sec-header">
+    <div class="sec-title" id="pressureTakerTitle">Avg pressure vs conversion (per player)</div>
+    <label class="sec-action sec-minsample" id="minSampleGroup">Min taken
+      <select id="selMinSample" class="minsample-select">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+      </select>
+    </label>
+  </div>
+  <div class="trend-panel">
+    <div class="canvas-wrap">
+      <canvas id="pressureTakerCanvas"></canvas>
+      <div class="canvas-tooltip" id="pressureTakerTooltip"></div>
+    </div>
+    <div class="trend-legend" id="pressureTakerLegend">
+      <div class="tl-item"><div class="gl-dot zh-h"></div>Each dot = one player · size = penalties taken</div>
+      <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed lines = overall avg conversion / pressure</div>
+    </div>
+  </div>
+</div>
+
+<div class="section mt-20 section-last sec-penalties">
   <div class="sec-header">
     <div class="sec-title">Penalties</div>
   </div>
   <div class="penalty-list" id="penaltyList"></div>
   <button type="button" class="show-more mt-12" id="showMore">Show more</button>
+</div>
+</div>
 </div>
 
 <nav class="bottom-nav">
@@ -182,35 +260,6 @@
 </nav>
 
 <div class="filter-overlay" id="filterOverlay"></div>
-<div class="filter-sheet" id="filterSheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-title">Filters</div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selComp">Competition</label>
-    <select class="sheet-select" id="selComp"></select>
-  </div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selSeason">Season</label>
-    <select class="sheet-select" id="selSeason"></select>
-  </div>
-  <div class="sheet-group">
-    <div class="sheet-label">Outcome</div>
-    <div class="outcome-row">
-      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
-      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
-      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
-    </div>
-  </div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selTaker">Taker</label>
-    <select class="sheet-select" id="selTaker"></select>
-  </div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selKeeper">Goalkeeper</label>
-    <select class="sheet-select" id="selKeeper"></select>
-  </div>
-  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
-</div>
 
 <script type="module" src="./src/js/app.js"></script>
 </body>

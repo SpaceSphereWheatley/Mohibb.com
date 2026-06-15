@@ -3,7 +3,7 @@
 
 import {
   loadData, applyFilters, summary, zoneStats, bySeason,
-  takerProfile, uniqueValues, ZONE_LABEL,
+  takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket, pressureByTaker,
 } from './data.js';
 
 const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
@@ -33,6 +33,8 @@ function render() {
   renderHeatmap(rows);
   renderPlayer(rows);
   renderTrend(rows);
+  renderPressure(rows);
+  renderPressureTakers(rows);
   renderPenalties(rows);
 }
 
@@ -179,6 +181,210 @@ function renderTrend(rows) {
   data.forEach((d, i) => ctx.fillText(d.season.replace(/^20/, '').replace('/20', '/'), tx(i), H - 4));
 }
 
+function renderPressure(rows) {
+  const buckets = byPressureBucket(rows).filter(b => b.n);
+  const canvas = document.getElementById('pressureCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 32;
+  const H = 160;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  if (!buckets.length) {
+    ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+    ctx.fillText('Not enough data for this view', W / 2, H / 2);
+    return;
+  }
+
+  const padL = 32, padR = 8, padT = 18, padB = 32;
+  const pW = W - padL - padR, pH = H - padT - padB;
+  const n = buckets.length;
+  const bw = pW / n;
+  const tx = i => padL + i * bw;
+  const ty = v => padT + pH - (v / 100) * pH;
+
+  [0, 25, 50, 75, 100].forEach(v => {
+    const y = ty(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+    ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 5, y + 3);
+  });
+
+  // Bars: conversion % per pressure band, labelled with value and sample size.
+  buckets.forEach((b, i) => {
+    const x = tx(i) + bw * 0.15, w = bw * 0.7;
+    const y = ty(b.pct);
+    ctx.fillStyle = 'rgba(180,71,31,0.18)';
+    ctx.fillRect(x, y, w, padT + pH - y);
+    ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, padT + pH - y);
+
+    ctx.fillStyle = '#211D17'; ctx.font = "700 11px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+    ctx.fillText(Math.round(b.pct) + '%', x + w / 2, Math.max(12, y - 6));
+
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+    ctx.fillText(`${b.lo}–${b.hi} (n=${b.n})`, tx(i) + bw / 2, H - 4);
+  });
+}
+
+let pressureTakerPoints = [];
+
+// Global reference stats: avg pressure index + conversion %, ignoring the
+// taker filter (but respecting any other active filters).
+function globalPressureStats() {
+  const rows = applyFilters({ ...state.filters, taker: null });
+  if (!rows.length) return null;
+  const avgPI = rows.reduce((s, p) => s + p.pressureIndex, 0) / rows.length;
+  const avgConv = summary(rows).conversion;
+  return { avgPI, avgConv };
+}
+
+function renderPressureTakers(rows) {
+  const canvas = document.getElementById('pressureTakerCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth;
+  const H = W * 3 / 4;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  pressureTakerPoints = [];
+
+  const padL = 32, padR = 8, padT = 8, padB = 28;
+  const pW = W - padL - padR, pH = H - padT - padB;
+  const tx = v => padL + (v / 100) * pW;
+  const ty = v => padT + pH - (v / 100) * pH;
+
+  const drawAxes = () => {
+    [0, 25, 50, 75, 100].forEach(v => {
+      const y = ty(v);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+      ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+      ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 5, y + 3);
+    });
+    [0, 25, 50, 75, 100].forEach(v => {
+      const x = tx(v);
+      ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + pH); ctx.strokeStyle = '#E7E1D4'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+      ctx.textAlign = 'center'; ctx.fillText(v, x, padT + pH + 12);
+    });
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+    ctx.fillText('Pressure index', padL + pW / 2, H - 4);
+  };
+
+  const drawRefLines = (avgConv, avgPI, color) => {
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    const ay = ty(avgConv);
+    ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(W - padR, ay); ctx.stroke();
+    const ax = tx(avgPI);
+    ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + pH); ctx.stroke();
+    ctx.restore();
+  };
+
+  const single = state.filters.taker;
+  const title = document.getElementById('pressureTakerTitle');
+  const legend = document.getElementById('pressureTakerLegend');
+  document.getElementById('minSampleGroup').style.display = single ? 'none' : '';
+
+  if (single) {
+    // Per-penalty view for one player: x = pressure index, y = outcome (jittered).
+    title.textContent = `${single}'s penalties by pressure`;
+    legend.innerHTML = `
+      <div class="tl-item"><div class="gl-dot zh-h"></div>Goal</div>
+      <div class="tl-item"><div class="gl-dot zh-l"></div>Saved/missed</div>
+      <div class="tl-item"><div class="tl-line tl-line-accent"></div>This player's avg conversion / pressure</div>
+      <div class="tl-item"><div class="tl-line tl-line-muted"></div>Global avg conversion / pressure</div>`;
+
+    if (!rows.length) {
+      ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+      ctx.fillText('Not enough data for this view', W / 2, H / 2);
+      return;
+    }
+
+    drawAxes();
+
+    const global = globalPressureStats();
+    if (global) drawRefLines(global.avgConv, global.avgPI, '#8C8475');
+
+    const playerAvgPI = rows.reduce((s, p) => s + p.pressureIndex, 0) / rows.length;
+    const playerAvgConv = summary(rows).conversion;
+    drawRefLines(playerAvgConv, playerAvgPI, '#B4471F');
+
+    rows.forEach((p, i) => {
+      const jitter = ((i * 37) % 100) / 100 * 16 - 8; // deterministic ±8
+      const y = ty(p.outcome === 'goal' ? 90 + jitter * 0.3 : 10 + jitter * 0.3);
+      const x = tx(p.pressureIndex);
+      const color = p.outcome === 'goal' ? '#2E6F4F' : '#C0392B';
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.globalAlpha = 0.65; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+      pressureTakerPoints.push({
+        x, y, r: 4,
+        taker: p.taker, n: 1, avgPI: p.pressureIndex, pct: p.outcome === 'goal' ? 100 : 0,
+        label: `vs ${p.keeper} · ${p.competition} · ${p.minute}' · PI ${p.pressureIndex} · ${p.outcome}`,
+      });
+    });
+    return;
+  }
+
+  // Aggregate view: one dot per player.
+  title.textContent = 'Avg pressure vs conversion (per player)';
+  legend.innerHTML = `
+    <div class="tl-item"><div class="gl-dot zh-h"></div>Each dot = one player · size = penalties taken</div>
+    <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed lines = overall avg conversion / pressure</div>`;
+
+  const minSample = Number(document.getElementById('selMinSample').value);
+  const points = pressureByTaker(rows, minSample);
+
+  if (!points.length) {
+    ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+    ctx.fillText('Not enough data for this view', W / 2, H / 2);
+    return;
+  }
+
+  drawAxes();
+
+  const avgConv = points.reduce((s, p) => s + p.pct, 0) / points.length;
+  const avgPI = points.reduce((s, p) => s + p.avgPI, 0) / points.length;
+  drawRefLines(avgConv, avgPI, '#B4471F');
+
+  const maxN = Math.max(...points.map(p => p.n));
+  points.forEach(p => {
+    const r = 3 + Math.sqrt(p.n / maxN) * 9;
+    const x = tx(p.avgPI), y = ty(p.pct);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(180,71,31,0.18)';
+    ctx.fill();
+    ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5; ctx.stroke();
+    pressureTakerPoints.push({ x, y, r, ...p });
+  });
+}
+
+function handlePressureTakerHover(evt) {
+  const canvas = document.getElementById('pressureTakerCanvas');
+  const tooltip = document.getElementById('pressureTakerTooltip');
+  const rect = canvas.getBoundingClientRect();
+  const mx = evt.clientX - rect.left, my = evt.clientY - rect.top;
+  const hit = pressureTakerPoints.find(p => Math.hypot(p.x - mx, p.y - my) <= p.r + 1.5);
+  if (!hit) { tooltip.classList.remove('visible'); return; }
+  tooltip.textContent = hit.label || `${hit.taker} — ${Math.round(hit.pct)}% (${hit.n} taken, avg PI ${Math.round(hit.avgPI)})`;
+  tooltip.style.left = hit.x + 'px';
+  tooltip.style.top = (hit.y - hit.r - 6) + 'px';
+  tooltip.classList.add('visible');
+}
+
 function renderPenalties(rows) {
   const list = document.getElementById('penaltyList');
   const slice = rows.slice(0, state.visibleRows);
@@ -206,18 +412,28 @@ function renderPenalties(rows) {
 function populateFilterOptions() {
   fillSelect('selComp', ['All competitions', ...uniqueValues('competition')]);
   fillSelect('selSeason', ['All seasons', ...uniqueValues('season')]);
-  fillSelect('selTaker', ['Any player', ...uniqueValues('taker')]);
-  fillSelect('selKeeper', ['Any goalkeeper', ...uniqueValues('keeper')]);
+  fillDatalist('takerOptions', uniqueValues('taker'));
+  fillDatalist('keeperOptions', uniqueValues('keeper'));
 }
 function fillSelect(id, options) {
   document.getElementById(id).innerHTML = options.map(o => `<option>${o}</option>`).join('');
+}
+function fillDatalist(id, options) {
+  document.getElementById(id).innerHTML = options.map(o => `<option value="${o}"></option>`).join('');
 }
 
 // -- EVENTS --
 function wireEvents() {
   document.getElementById('chipFilters').addEventListener('click', openFilter);
+  document.getElementById('chipPlayerChange').addEventListener('click', () => {
+    openFilter();
+    const input = document.getElementById('selTaker');
+    input.focus();
+    input.select();
+  });
   document.getElementById('filterOverlay').addEventListener('click', closeFilter);
   document.getElementById('applyBtn').addEventListener('click', applyFromSheet);
+  document.getElementById('clearBtn').addEventListener('click', clearFilters);
   document.getElementById('showMore').addEventListener('click', () => {
     state.visibleRows += 10;
     renderPenalties(applyFilters(state.filters));
@@ -228,19 +444,48 @@ function wireEvents() {
       btn.classList.toggle(cls);
     });
   });
-  window.addEventListener('resize', () => renderTrend(applyFilters(state.filters)));
+  document.getElementById('selMinSample').addEventListener('change', () => {
+    renderPressureTakers(applyFilters(state.filters));
+  });
+
+  const pressureTakerCanvas = document.getElementById('pressureTakerCanvas');
+  pressureTakerCanvas.addEventListener('mousemove', handlePressureTakerHover);
+  pressureTakerCanvas.addEventListener('mouseleave', () => {
+    document.getElementById('pressureTakerTooltip').classList.remove('visible');
+  });
+
+  window.addEventListener('resize', () => {
+    const rows = applyFilters(state.filters);
+    renderTrend(rows);
+    renderPressure(rows);
+    renderPressureTakers(rows);
+  });
+}
+
+function clearFilters() {
+  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null };
+  state.visibleRows = 8;
+
+  document.getElementById('selComp').value = 'All competitions';
+  document.getElementById('selSeason').value = 'All seasons';
+  document.getElementById('selTaker').value = '';
+  document.getElementById('selKeeper').value = '';
+  document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
+
+  closeFilter();
+  render();
 }
 
 function applyFromSheet() {
   const comp = document.getElementById('selComp').value;
   const season = document.getElementById('selSeason').value;
-  const taker = document.getElementById('selTaker').value;
-  const keeper = document.getElementById('selKeeper').value;
+  const taker = document.getElementById('selTaker').value.trim();
+  const keeper = document.getElementById('selKeeper').value.trim();
 
   state.filters.competition = comp.startsWith('All') ? 'all' : comp;
   state.filters.season = season.startsWith('All') ? 'all' : season;
-  state.filters.taker = taker.startsWith('Any') ? null : taker;
-  state.filters.keeper = keeper.startsWith('Any') ? null : keeper;
+  state.filters.taker = taker && uniqueValues('taker').includes(taker) ? taker : null;
+  state.filters.keeper = keeper && uniqueValues('keeper').includes(keeper) ? keeper : null;
 
   const outcomes = new Set();
   document.querySelectorAll('.outcome-btn').forEach(btn => {

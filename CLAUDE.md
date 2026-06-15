@@ -7,6 +7,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Personal landing page for mohibb.com. Static, data-driven, no build step, no
 dependencies, no framework.
 
+## Working on PRs
+
+Whenever a PR is opened or updated in this repo, fetch the latest Cloudflare
+Pages bot comment on it and surface the **Preview URL** and **Branch Preview
+URL** to the user — they always need these to check the deploy. If the work
+is on a subproject (e.g. `spotkick/`, `pitwall/`, `pdf/`), append that
+subproject's path (e.g. `/spotkick/`) to both URLs.
+
 ## Structure
 
 ```

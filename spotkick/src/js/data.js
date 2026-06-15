@@ -107,6 +107,37 @@ export function bySeason(rows) {
     .sort((a, b) => (a.season < b.season ? -1 : 1));
 }
 
+// Conversion grouped into Pressure Index buckets of width `step` (0-100).
+export function byPressureBucket(rows, step = 10) {
+  const buckets = [];
+  for (let lo = 0; lo < 100; lo += step) {
+    buckets.push({ lo, hi: lo + step, n: 0, goals: 0, pct: 0 });
+  }
+  for (const p of rows) {
+    const idx = Math.min(buckets.length - 1, Math.floor(p.pressureIndex / step));
+    buckets[idx].n++;
+    if (p.outcome === 'goal') buckets[idx].goals++;
+  }
+  for (const b of buckets) b.pct = b.n ? (b.goals / b.n) * 100 : 0;
+  return buckets;
+}
+
+// Per-taker avg pressure index vs conversion rate, minimum sample size.
+export function pressureByTaker(rows, minSample = 3) {
+  const map = new Map();
+  for (const p of rows) {
+    const key = p.taker;
+    if (!map.has(key)) map.set(key, { taker: key, n: 0, goals: 0, piSum: 0 });
+    const t = map.get(key);
+    t.n++;
+    t.piSum += p.pressureIndex;
+    if (p.outcome === 'goal') t.goals++;
+  }
+  return [...map.values()]
+    .filter(t => t.n >= minSample)
+    .map(t => ({ taker: t.taker, n: t.n, avgPI: t.piSum / t.n, pct: (t.goals / t.n) * 100 }));
+}
+
 // One taker's full profile incl. per-keeper head-to-head.
 export function takerProfile(taker) {
   const rows = ALL.filter(p => p.taker === taker);
