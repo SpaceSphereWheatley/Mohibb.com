@@ -11,6 +11,7 @@ mohibb-home/
   pdf/            PDF Merger tool, served at mohibb.com/pdf/
   pitwall/        Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
   pitwall/analyse/  Completed-session analysis, at mohibb.com/pitwall/analyse/
+  spotkick/       Spotkick penalty analytics, served at mohibb.com/spotkick/
   README.md
 ```
 
@@ -54,7 +55,9 @@ npx serve .
 3. Pick this repo. Build command: empty. Output directory: `/`.
 4. Deploy, then Custom domains -> add `mohibb.com` and `www.mohibb.com`.
 
-## PDF Merger (mohibb.com/pdf)
+## Projects
+
+### PDF Merger (mohibb.com/pdf)
 
 Lives in `pdf/` in this repo and is served at `mohibb.com/pdf/` as part of
 this same Pages deployment — no separate project or domain needed.
@@ -63,7 +66,7 @@ It's a static, client-side PDF merge/reorder tool built on `pdf-lib`
 (`pdf/pdf-lib.min.js`, bundled). Nothing is uploaded — all merging happens in
 the browser.
 
-## Pit Wall (mohibb.com/pitwall)
+### Pit Wall (mohibb.com/pitwall)
 
 Lives in `pitwall/` and is served at `mohibb.com/pitwall/` as part of this
 same Pages deployment — no separate project or domain needed.
@@ -73,6 +76,17 @@ external dependency). It shows the current/most recent session plus season
 standings, with an idle next-race countdown when no session is live. Data comes
 from OpenF1 (live session data) and Jolpica (standings + schedule). A companion
 "Analyse" page (`pitwall/analyse/`) digs into any completed session.
+
+### Spotkick (mohibb.com/spotkick)
+
+Lives in `spotkick/` and is served at `mohibb.com/spotkick/` as part of this
+same Pages deployment — no separate project or domain needed.
+
+A self-contained, client-side penalty analytics dashboard built on StatsBomb
+open data. A local build script downloads StatsBomb's open data and writes a
+flat `spotkick/data/penalties.json` with a computed "Pressure Index" per
+penalty. The page loads that file and does all filtering and aggregation in
+the browser — nothing is uploaded, no backend.
 
 ## Notes
 
