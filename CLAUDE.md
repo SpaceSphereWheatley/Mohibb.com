@@ -26,7 +26,7 @@ README.md
 - `index.html` contains all CSS (inline `<style>`) and JS (inline `<script>`)
   for the page shell, plus a `#groups` mount point.
 - On load, the script fetches `projects.json` and renders project "groups"
-  (e.g. "Projects", "Tools") into cards via `groupHtml`/`cardHtml`.
+  (e.g. "F1", "Tools") into cards via `groupHtml`/`cardHtml`.
 - Each project item has a `status` of `soon`, `wip`, or `live`:
   - `live` renders as a clickable link to `url` with a green "Live" tag and
     hover arrow.
@@ -61,12 +61,19 @@ domain needed.
 `pitwall/` is a self-contained, client-side live F1 dashboard. A single
 `index.html` (Chart.js is the only external dependency, loaded from CDN). It
 shows what's happening in the current/most recent F1 session plus current-season
-standings, and an idle countdown to the next race when no session is live.
+standings, and an idle countdown to the next race when no session is live. When
+IDLE, it can show the results of the *previous* session behind a spoiler gate
+(hidden by default, with a reveal button; resets automatically when the session
+changes).
 
-- Data: **OpenF1** (`api.openf1.org`) for live session data — polled every 5s
-  only while a session is LIVE, never while IDLE. **Jolpica** (`api.jolpi.ca`,
-  Ergast successor) for championship standings + schedule — fetched once on
-  load / manual refresh only, never polled (volunteer-run, rate-limited).
+- Data: **OpenF1** (`api.openf1.org`) for live session data — polled every 3s
+  (`POLL_MS`) only while a session is LIVE, dropping to 15s (`POLL_ENDED_MS`)
+  once the session has ended but is still in its grace window, never while
+  IDLE. **Jolpica** (`api.jolpi.ca`, Ergast successor) for championship
+  standings + schedule: the schedule is fetched once on load / manual refresh,
+  while standings are re-polled every 5 min (`STANDINGS_POLL_MS`) while a
+  session is live. Jolpica is volunteer-run and rate-limited, so it's polled
+  at this slow cadence (not the live 3s cadence) and never faster.
 - Liveness: `sessions?session_key=latest` decides LIVE (now between
   `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case and
   is a designed screen (next-race countdown in Europe/Oslo time), not an error.
@@ -78,9 +85,10 @@ standings, and an idle countdown to the next race when no session is live.
   (output directory `/` includes `pitwall/`) — no separate project needed.
 - `pitwall/analyse/` is a companion page (own `index.html`, shares the same
   design tokens and fonts) for digging into any *completed* session:
-  theoretical best laps, qualifying potential, race lap charts, tyre
-  strategy, and long-run race pace, all built on OpenF1's historical data.
-  Linked from Pit Wall and served at `mohibb.com/pitwall/analyse/`.
+  theoretical best laps, qualifying potential, race lap charts (with an
+  optional toggle to mark pit stops), tyre strategy, and long-run race pace,
+  all built on OpenF1's historical data. Linked from Pit Wall and served at
+  `mohibb.com/pitwall/analyse/`.
 
 ## Design tokens
 
