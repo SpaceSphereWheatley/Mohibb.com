@@ -469,6 +469,8 @@ function applyDatePreset() {
   const preset = document.getElementById('selDatePreset').value;
   const dateFrom = document.getElementById('dateFrom');
   const dateTo = document.getElementById('dateTo');
+  document.getElementById('dateRangeGroup').hidden = preset !== 'custom';
+
   if (preset === 'all') {
     dateFrom.value = '';
     dateTo.value = '';
@@ -547,6 +549,7 @@ function clearFilters() {
   document.getElementById('selDatePreset').value = 'all';
   document.getElementById('dateFrom').value = '';
   document.getElementById('dateTo').value = '';
+  document.getElementById('dateRangeGroup').hidden = true;
   document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
 
   closeFilter();
