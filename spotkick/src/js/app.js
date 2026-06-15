@@ -279,13 +279,16 @@ function renderPressureTakers(rows) {
   ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
   ctx.fillText('Avg pressure index', padL + pW / 2, H - 4);
 
-  // Reference line: overall average conversion rate across these players.
+  // Reference lines: overall average conversion rate and average pressure across these players.
   const avgConv = points.reduce((s, p) => s + p.pct, 0) / points.length;
-  const ay = ty(avgConv);
+  const avgPI = points.reduce((s, p) => s + p.avgPI, 0) / points.length;
   ctx.save();
   ctx.setLineDash([4, 4]);
-  ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(W - padR, ay);
-  ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5;
+  const ay = ty(avgConv);
+  ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(W - padR, ay); ctx.stroke();
+  const ax = tx(avgPI);
+  ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + pH); ctx.stroke();
   ctx.restore();
 
   const maxN = Math.max(...points.map(p => p.n));
