@@ -52,10 +52,13 @@
 <!-- Laget av Mohibb Malik, 2025 -->
 
 <div class="topbar">
-  <div class="wordmark">Spot<em>kick</em></div>
-  <div class="topbar-meta" id="topbarCount">Loading…</div>
+  <div class="topbar-inner">
+    <div class="wordmark">Spot<em>kick</em></div>
+    <div class="topbar-meta" id="topbarCount">Loading…</div>
+  </div>
 </div>
 
+<div class="wrap">
 <div class="chips-row">
   <button type="button" class="chip active" id="chipFilters">
     <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -68,7 +71,38 @@
   <button type="button" class="chip" id="chipKeeper">Any keeper</button>
 </div>
 
-<div class="section mt-16">
+<div class="filter-sheet" id="filterSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Filters</div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selComp">Competition</label>
+    <select class="sheet-select" id="selComp"></select>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selSeason">Season</label>
+    <select class="sheet-select" id="selSeason"></select>
+  </div>
+  <div class="sheet-group">
+    <div class="sheet-label">Outcome</div>
+    <div class="outcome-row">
+      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
+      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
+      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
+    </div>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selTaker">Taker</label>
+    <select class="sheet-select" id="selTaker"></select>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selKeeper">Goalkeeper</label>
+    <select class="sheet-select" id="selKeeper"></select>
+  </div>
+  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
+</div>
+
+<div class="grid">
+<div class="section mt-16 sec-stats">
   <div class="stats-grid">
     <div class="stat-card">
       <div class="sc-label">Conversion</div>
@@ -100,7 +134,7 @@
   </div>
 </div>
 
-<div class="section mt-20">
+<div class="section mt-20 sec-placement">
   <div class="sec-header">
     <div class="sec-title">Shot placement</div>
     <div class="sec-action">Tap zone to filter</div>
@@ -119,7 +153,7 @@
   </div>
 </div>
 
-<div class="section mt-20">
+<div class="section mt-20 sec-player">
   <div class="sec-header">
     <div class="sec-title">Player</div>
     <div class="sec-action" id="chipPlayerChange">Change</div>
@@ -144,7 +178,7 @@
   </div>
 </div>
 
-<div class="section mt-20">
+<div class="section mt-20 sec-trend">
   <div class="sec-header"><div class="sec-title">Conversion over time</div></div>
   <div class="trend-panel">
     <canvas id="trendCanvas"></canvas>
@@ -154,12 +188,14 @@
   </div>
 </div>
 
-<div class="section mt-20 section-last">
+<div class="section mt-20 section-last sec-penalties">
   <div class="sec-header">
     <div class="sec-title">Penalties</div>
   </div>
   <div class="penalty-list" id="penaltyList"></div>
   <button type="button" class="show-more mt-12" id="showMore">Show more</button>
+</div>
+</div>
 </div>
 
 <nav class="bottom-nav">
@@ -182,35 +218,6 @@
 </nav>
 
 <div class="filter-overlay" id="filterOverlay"></div>
-<div class="filter-sheet" id="filterSheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-title">Filters</div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selComp">Competition</label>
-    <select class="sheet-select" id="selComp"></select>
-  </div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selSeason">Season</label>
-    <select class="sheet-select" id="selSeason"></select>
-  </div>
-  <div class="sheet-group">
-    <div class="sheet-label">Outcome</div>
-    <div class="outcome-row">
-      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
-      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
-      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
-    </div>
-  </div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selTaker">Taker</label>
-    <select class="sheet-select" id="selTaker"></select>
-  </div>
-  <div class="sheet-group">
-    <label class="sheet-label" for="selKeeper">Goalkeeper</label>
-    <select class="sheet-select" id="selKeeper"></select>
-  </div>
-  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
-</div>
 
 <script type="module" src="./src/js/app.js"></script>
 </body>
