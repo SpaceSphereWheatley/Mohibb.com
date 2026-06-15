@@ -122,6 +122,22 @@ export function byPressureBucket(rows, step = 10) {
   return buckets;
 }
 
+// Per-taker avg pressure index vs conversion rate, minimum sample size.
+export function pressureByTaker(rows, minSample = 3) {
+  const map = new Map();
+  for (const p of rows) {
+    const key = p.taker;
+    if (!map.has(key)) map.set(key, { taker: key, n: 0, goals: 0, piSum: 0 });
+    const t = map.get(key);
+    t.n++;
+    t.piSum += p.pressureIndex;
+    if (p.outcome === 'goal') t.goals++;
+  }
+  return [...map.values()]
+    .filter(t => t.n >= minSample)
+    .map(t => ({ taker: t.taker, n: t.n, avgPI: t.piSum / t.n, pct: (t.goals / t.n) * 100 }));
+}
+
 // One taker's full profile incl. per-keeper head-to-head.
 export function takerProfile(taker) {
   const rows = ALL.filter(p => p.taker === taker);

@@ -3,7 +3,7 @@
 
 import {
   loadData, applyFilters, summary, zoneStats, bySeason,
-  takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket,
+  takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket, pressureByTaker,
 } from './data.js';
 
 const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
@@ -34,6 +34,7 @@ function render() {
   renderPlayer(rows);
   renderTrend(rows);
   renderPressure(rows);
+  renderPressureTakers(rows);
   renderPenalties(rows);
 }
 
@@ -241,6 +242,53 @@ function renderPressure(rows) {
   buckets.forEach((b, i) => ctx.fillText(b.lo + '–' + b.hi, tx(i) + bw / 2, H - 4));
 }
 
+function renderPressureTakers(rows) {
+  const points = pressureByTaker(rows);
+  const canvas = document.getElementById('pressureTakerCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 32;
+  const H = 110;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  if (!points.length) {
+    ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+    ctx.fillText('Not enough data for this view', W / 2, H / 2);
+    return;
+  }
+
+  const padL = 28, padR = 8, padT = 8, padB = 22;
+  const pW = W - padL - padR, pH = H - padT - padB;
+  const minPI = 0, maxPI = 100;
+  const tx = v => padL + ((v - minPI) / (maxPI - minPI)) * pW;
+  const ty = v => padT + pH - (v / 100) * pH;
+
+  [0, 25, 50, 75, 100].forEach(v => {
+    const y = ty(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+    ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 3, y + 3);
+  });
+
+  const maxN = Math.max(...points.map(p => p.n));
+  points.forEach(p => {
+    const r = 3 + (p.n / maxN) * 6;
+    ctx.beginPath();
+    ctx.arc(tx(p.avgPI), ty(p.pct), r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(180,71,31,0.18)';
+    ctx.fill();
+    ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5; ctx.stroke();
+  });
+
+  ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+  ctx.fillText('Avg pressure index →', padL + pW / 2, H - 4);
+}
+
 function renderPenalties(rows) {
   const list = document.getElementById('penaltyList');
   const slice = rows.slice(0, state.visibleRows);
@@ -303,6 +351,7 @@ function wireEvents() {
     const rows = applyFilters(state.filters);
     renderTrend(rows);
     renderPressure(rows);
+    renderPressureTakers(rows);
   });
 }
 
