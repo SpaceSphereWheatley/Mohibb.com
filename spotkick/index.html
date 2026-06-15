@@ -69,6 +69,7 @@
   <button type="button" class="chip" id="chipOutcome">All outcomes</button>
   <button type="button" class="chip" id="chipTaker">Any taker</button>
   <button type="button" class="chip" id="chipKeeper">Any keeper</button>
+  <button type="button" class="chip" id="chipDate">All time</button>
 </div>
 
 <div class="filter-sheet" id="filterSheet">
@@ -83,16 +84,33 @@
     <select class="sheet-select" id="selSeason"></select>
   </div>
   <div class="sheet-group">
-    <div class="sheet-label">Outcome</div>
-    <div class="outcome-row">
-      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
-      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
-      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
+    <label class="sheet-label" for="selDatePreset">Date range</label>
+    <select class="sheet-select" id="selDatePreset">
+      <option value="all">All time</option>
+      <option value="3">Last 3 months</option>
+      <option value="6">Last 6 months</option>
+      <option value="12">Last 12 months</option>
+      <option value="custom">Custom range</option>
+    </select>
+  </div>
+  <div class="sheet-group date-range-group" id="dateRangeGroup" hidden>
+    <span class="sheet-label">Custom dates</span>
+    <div class="date-range-row">
+      <input class="sheet-select" id="dateFrom" type="date" aria-label="From date">
+      <input class="sheet-select" id="dateTo" type="date" aria-label="To date">
     </div>
   </div>
   <div class="sheet-group">
+    <div class="sheet-label">Outcome</div>
+    <div class="outcome-row">
+      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal"><span class="outcome-icon">⚽</span>Goal</button>
+      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved"><span class="outcome-icon">🧤</span>Saved</button>
+      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed"><span class="outcome-icon">✗</span>Missed</button>
+    </div>
+  </div>
+  <div class="sheet-group sheet-group-taker">
     <label class="sheet-label" for="selTaker">Taker</label>
-    <input class="sheet-select player-search" id="selTaker" type="text" list="takerOptions" placeholder="Any player" autocomplete="off">
+    <input class="sheet-select player-search player-search-lg" id="selTaker" type="text" list="takerOptions" placeholder="Any player" autocomplete="off">
     <datalist id="takerOptions"></datalist>
   </div>
   <div class="sheet-group">
@@ -100,7 +118,6 @@
     <input class="sheet-select player-search" id="selKeeper" type="text" list="keeperOptions" placeholder="Any goalkeeper" autocomplete="off">
     <datalist id="keeperOptions"></datalist>
   </div>
-  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
   <button type="button" class="clear-btn" id="clearBtn">Clear filters</button>
 </div>
 
@@ -140,7 +157,7 @@
 <div class="section mt-20 sec-placement">
   <div class="sec-header">
     <div class="sec-title">Shot placement</div>
-    <div class="sec-action">Tap zone to filter</div>
+    <div class="sec-hint">Tap zone to filter</div>
   </div>
   <div class="goal-panel">
     <div class="goal-hint">Conversion rate per zone — keeper's perspective</div>
@@ -228,6 +245,22 @@
       <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed lines = overall avg conversion / pressure</div>
     </div>
   </div>
+</div>
+
+<div class="section mt-20 sec-leaderboard">
+  <div class="sec-header">
+    <div class="sec-title">Top takers</div>
+    <label class="sec-action sec-minsample">Min taken
+      <select id="selLbMinSample" class="minsample-select">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+      </select>
+    </label>
+  </div>
+  <div class="lb-list" id="leaderboardList"></div>
 </div>
 
 <div class="section mt-20 section-last sec-penalties">

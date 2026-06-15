@@ -45,6 +45,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .minsample-select{font-family:inherit;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--card);border:1.5px solid var(--line);padding:3px 6px;}
 .sec-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
 .sec-action{font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;}
+.sec-hint{font-size:13px;font-weight:600;color:var(--ink-3);}
 
 .goal-panel,.trend-panel,.player-card{background:var(--card);border:1.5px solid var(--line);padding:16px;}
 .goal-hint{font-size:12px;color:var(--ink-3);text-align:center;margin-bottom:12px;font-family:'Newsreader',serif;font-style:italic;}
@@ -125,7 +126,9 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .sheet-select{width:100%;padding:12px 14px;background:var(--bg);border:1.5px solid var(--line);font-size:15px;font-family:inherit;color:var(--ink);appearance:none;-webkit-appearance:none;}
 .sheet-select:focus{outline:none;border-color:var(--accent);}
 .outcome-row{display:flex;gap:8px;}
-.outcome-btn{flex:1;padding:10px 0;border:1.5px solid var(--line);background:var(--bg);font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit;color:var(--ink-2);text-align:center;}
+.outcome-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 0;border:1.5px solid var(--line);background:var(--bg);font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit;color:var(--ink-2);text-align:center;}
+.outcome-icon{font-size:18px;line-height:1;}
+.player-search-lg{font-size:17px;font-weight:600;padding:14px 14px;}
 .outcome-btn.active-goal{background:var(--green-soft);border-color:var(--green);color:var(--green);}
 .outcome-btn.active-saved{background:var(--blue-soft);border-color:var(--blue);color:var(--blue);}
 .outcome-btn.active-missed{background:var(--red-soft);border-color:var(--red);color:var(--red);}
@@ -134,6 +137,21 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .clear-btn{width:100%;padding:14px;background:var(--card);color:var(--ink-2);border:1.5px solid var(--line);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;margin-top:10px;letter-spacing:-0.01em;}
 .clear-btn:active{background:var(--card-2);}
 .show-more{width:100%;padding:12px;background:var(--card);border:1.5px solid var(--line);font-size:14px;font-weight:600;color:var(--accent-ink);cursor:pointer;font-family:inherit;}
+
+.date-range-row{display:flex;gap:8px;}
+.date-range-row .sheet-select{flex:1;min-width:0;}
+
+.lb-list{display:flex;flex-direction:column;gap:8px;}
+.lb-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line);background:var(--bg);cursor:pointer;transition:.15s;}
+.lb-row:hover{border-color:var(--accent);}
+.lb-rank{flex-shrink:0;width:22px;text-align:center;font-size:12px;font-weight:800;color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.lb-main{flex:1;min-width:0;}
+.lb-taker{font-size:14px;font-weight:600;}
+.lb-meta{font-size:12px;color:var(--ink-3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lb-right{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;width:90px;}
+.lb-bar-wrap{width:100%;height:5px;background:var(--line-soft);}
+.lb-bar-fill{height:100%;}
+.lb-pct{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;}
 
 .empty{text-align:center;padding:32px 16px;color:var(--ink-3);font-size:14px;font-family:'Newsreader',serif;font-style:italic;}
 
@@ -160,6 +178,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
       "placement player"
       "trend pressure"
       "pressuretakers pressuretakers"
+      "leaderboard leaderboard"
       "penalties penalties";}
   .grid>.section{padding:0;}
   .sec-stats{grid-area:stats;}
@@ -168,13 +187,17 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
   .sec-trend{grid-area:trend;}
   .sec-pressure{grid-area:pressure;}
   .sec-pressuretakers{grid-area:pressuretakers;}
+  .sec-leaderboard{grid-area:leaderboard;}
   .sec-penalties{grid-area:penalties;}
 
   .filter-sheet{position:static;transform:none;width:100%;max-width:none;max-height:none;overflow-y:visible;background:var(--card);border:1.5px solid var(--line);border-top:1.5px solid var(--line);padding:16px;margin-top:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;}
   .filter-sheet.open{transform:none;}
   .sheet-handle,.sheet-title{display:none;}
   .sheet-group{margin-bottom:0;min-width:160px;flex:1;}
-  .sheet-select,.outcome-row,.outcome-btn,.apply-btn,.clear-btn{height:44px;box-sizing:border-box;}
+  .sheet-select,.clear-btn{height:44px;box-sizing:border-box;}
   .sheet-select{padding:0 14px;}
-  .apply-btn,.clear-btn{width:auto;margin-top:0;padding:0 24px;}
+  .player-search-lg{padding:0 14px;}
+  .clear-btn{width:auto;margin-top:0;padding:0 24px;}
+  .date-range-group{flex-basis:100%;}
+  .sheet-group-taker{flex:2;}
 }

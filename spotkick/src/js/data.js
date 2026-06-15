@@ -28,7 +28,7 @@ export async function loadData() {
 
 export function getAll() { return ALL; }
 
-// filters: { competition, season, taker, keeper, team, outcomes:Set, zone, minPI, maxPI }
+// filters: { competition, season, taker, keeper, team, outcomes:Set, zone, minPI, maxPI, dateFrom, dateTo }
 export function applyFilters(filters = {}) {
   return ALL.filter(p => {
     if (filters.competition && filters.competition !== 'all' && p.competition !== filters.competition) return false;
@@ -40,8 +40,21 @@ export function applyFilters(filters = {}) {
     if (filters.zone && p.placement !== filters.zone) return false;
     if (filters.minPI != null && p.pressureIndex < filters.minPI) return false;
     if (filters.maxPI != null && p.pressureIndex > filters.maxPI) return false;
+    if (filters.dateFrom && p.date < filters.dateFrom) return false;
+    if (filters.dateTo && p.date > filters.dateTo) return false;
     return true;
   });
+}
+
+// Earliest/latest penalty date in the whole dataset (YYYY-MM-DD strings).
+export function dateBounds() {
+  if (!ALL.length) return null;
+  let min = ALL[0].date, max = ALL[0].date;
+  for (const p of ALL) {
+    if (p.date < min) min = p.date;
+    if (p.date > max) max = p.date;
+  }
+  return { min, max };
 }
 
 export function summary(rows) {
@@ -81,15 +94,16 @@ export function topTakers(rows, minSample = 3, limit = 8) {
   const map = new Map();
   for (const p of rows) {
     const key = p.taker;
-    if (!map.has(key)) map.set(key, { taker: key, n: 0, goals: 0 });
+    if (!map.has(key)) map.set(key, { taker: key, team: p.team, n: 0, goals: 0, piSum: 0 });
     const t = map.get(key);
     t.n++;
+    t.piSum += p.pressureIndex;
     if (p.outcome === 'goal') t.goals++;
   }
   return [...map.values()]
     .filter(t => t.n >= minSample)
-    .map(t => ({ ...t, pct: (t.goals / t.n) * 100 }))
-    .sort((a, b) => b.pct - a.pct)
+    .map(t => ({ ...t, pct: (t.goals / t.n) * 100, avgPI: t.piSum / t.n }))
+    .sort((a, b) => b.pct - a.pct || b.n - a.n)
     .slice(0, limit);
 }
 
