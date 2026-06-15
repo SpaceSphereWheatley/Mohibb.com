@@ -433,6 +433,7 @@ function wireEvents() {
   });
   document.getElementById('filterOverlay').addEventListener('click', closeFilter);
   document.getElementById('applyBtn').addEventListener('click', applyFromSheet);
+  document.getElementById('clearBtn').addEventListener('click', clearFilters);
   document.getElementById('showMore').addEventListener('click', () => {
     state.visibleRows += 10;
     renderPenalties(applyFilters(state.filters));
@@ -459,6 +460,20 @@ function wireEvents() {
     renderPressure(rows);
     renderPressureTakers(rows);
   });
+}
+
+function clearFilters() {
+  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null };
+  state.visibleRows = 8;
+
+  document.getElementById('selComp').value = 'All competitions';
+  document.getElementById('selSeason').value = 'All seasons';
+  document.getElementById('selTaker').value = '';
+  document.getElementById('selKeeper').value = '';
+  document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
+
+  closeFilter();
+  render();
 }
 
 function applyFromSheet() {
