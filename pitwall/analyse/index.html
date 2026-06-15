@@ -384,6 +384,8 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num = (x) => { const n = Number(x); return Number.isFinite(n) ? n : null; };
+// lap / stint numbers are 1-based, but num(null)===0 (Number(null)===0), so treat <=0 as missing
+const posInt = (x) => { const n = num(x); return (n != null && n > 0) ? n : null; };
 
 /* ---------- time / number formatting ---------- */
 const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour:'2-digit', minute:'2-digit', hour12:false });
@@ -564,11 +566,10 @@ function normCompound(c){ return COMPOUND[(c||'').toUpperCase()] || 'UNKNOWN'; }
    lap data) closes the final stint and bounds the total. Returns ordered
    [{start, end, laps, cmp}]. */
 function reconstructStints(rows, lastLap){
-  const posNum = (x) => { const n = num(x); return (n != null && n > 0) ? n : null; };   // num(null)===0, but lap/stint numbers are 1-based
   // merge rows that share a stint_number (OpenF1 can emit several per stint)
   const byNum = new Map(), loose = [];
   (Array.isArray(rows)?rows:[]).forEach(r => {
-    const seg = { sn:posNum(r.stint_number), ls:posNum(r.lap_start), le:posNum(r.lap_end), cmp:normCompound(r.compound) };
+    const seg = { sn:posInt(r.stint_number), ls:posInt(r.lap_start), le:posInt(r.lap_end), cmp:normCompound(r.compound) };
     if (seg.sn == null){ loose.push(seg); return; }
     const e = byNum.get(seg.sn);
     if (!e){ byNum.set(seg.sn, seg); return; }
@@ -589,6 +590,33 @@ function reconstructStints(rows, lastLap){
     if (end >= start) out.push({ start, end, laps: end - start + 1, cmp: s.cmp });
   }
   return out;
+}
+
+/* Is the raw stints feed actually complete? OpenF1 sometimes returns only a
+   subset of stints (missing opening stints, mid-race gaps), which would make
+   the strategy bars misleading. A driver's stints are "complete" when they
+   open on lap 1, have no lap gaps between them, and reach the driver's last
+   lap. We trust the dataset only if most drivers pass. */
+function stintsLookComplete(byDrv, lastLapOf){
+  const dn = Object.keys(byDrv).map(Number);
+  if (!dn.length) return false;
+  let complete = 0;
+  for (const n of dn){
+    const segs = (byDrv[n]||[]).map(r => ({ ls:posInt(r.lap_start), le:posInt(r.lap_end) }))
+      .filter(s => s.ls!=null && s.le!=null && s.le>=s.ls).sort((a,b)=> a.ls-b.ls);
+    if (!segs.length) continue;
+    if (segs[0].ls > 1) continue;                               // missing the opening stint
+    let cursor = segs[0].le, ok = true;
+    for (let i=1; i<segs.length; i++){
+      if (segs[i].ls > cursor + 1){ ok = false; break; }        // gap between stints
+      cursor = Math.max(cursor, segs[i].le);
+    }
+    if (!ok) continue;
+    const last = lastLapOf(n);
+    if (last != null && cursor < last - 1) continue;            // missing the final stint(s)
+    complete++;
+  }
+  return complete / dn.length >= 0.6;
 }
 
 // long-run pace per driver: each stint of >=5 clean laps -> median of laps within 107% of the stint's quickest.
@@ -1357,7 +1385,10 @@ async function renderStrategy(session_key, attempt=0){
     const lapGroups = groupByDriver(laps);
     const lastLapOf = (n) => { const ls = lapGroups[n]; if (!ls || !ls.length) return null; let m = 0; for (const l of ls){ const v = num(l.lap_number); if (v!=null && v>m) m = v; } return m || null; };
     const drivers = Object.keys(byDrv).map(Number).sort((a,b)=> a-b);
-    const stintRows = drivers.map(n => {
+    // OpenF1's stint feed is sometimes incomplete (missing opening/mid stints);
+    // reconstructed bars would then be misleading, so show a warning instead.
+    const complete = stintsLookComplete(byDrv, lastLapOf);
+    const stintRows = !complete ? '' : drivers.map(n => {
       const segs = reconstructStints(byDrv[n], lastLapOf(n));
       const total = segs.reduce((a,s)=> a+s.laps, 0);
       const bars = segs.map(s => `<span class="bar cmp-${s.cmp}" style="width:${total?(s.laps/total*100).toFixed(2):0}%" title="${s.cmp} · laps ${s.start}–${s.end} (${s.laps})">${s.laps>=3?s.laps:''}</span>`).join('');
@@ -1377,24 +1408,28 @@ async function renderStrategy(session_key, attempt=0){
         <td class="num tar"><b>${p.dur.toFixed(1)}</b></td>
       </tr>`).join('')}</tbody></table>` : stateBox('No pit data', 'No pit stops recorded for this session.');
 
-    body.innerHTML = `<div class="two-col">
-      <div class="pane">
-        <div class="pane-head">Stints by compound</div>
-        <div class="stints">${stintRows}</div>
+    const stintsPane = complete
+      ? `<div class="stints">${stintRows}</div>
         <div class="legend">
           <span><i style="background:#E8443B"></i>Soft</span>
           <span><i style="background:#F2C14E"></i>Medium</span>
           <span><i style="background:#E6E1D4"></i>Hard</span>
           <span><i style="background:#3FBF6F"></i>Inter</span>
           <span><i style="background:#3E82F7"></i>Wet</span>
-        </div>
+        </div>`
+      : stateBox('Incomplete data', 'OpenF1’s tyre-stint feed for this session is missing stints (gaps and absent opening stints), so the strategy bars would be misleading. They’ll appear here once the feed is complete.');
+
+    body.innerHTML = `<div class="two-col">
+      <div class="pane">
+        <div class="pane-head">Stints by compound</div>
+        ${stintsPane}
       </div>
       <div class="pane">
         <div class="pane-head">Pit stops · by pit time</div>
         <div class="tbl-scroll">${pitHtml}</div>
       </div>
     </div>
-    <div class="panel-note">Bar width is lap count per stint; the figure at the right is the driver's total race laps (hover a bar for its compound and lap range). Stints are rebuilt from OpenF1's data — deduped, with gaps and the final stint closed off — so the totals line up with the race distance. Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
+    <div class="panel-note">${complete ? `Bar width is lap count per stint; the figure at the right is the driver's total race laps (hover a bar for its compound and lap range). ` : ''}Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
   } catch (e){ panelRetry('strategy', e, body, attempt, () => renderStrategy(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load strategy data. Tap Reload to retry.', 'error')); }
 }
 
