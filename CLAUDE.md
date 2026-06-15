@@ -15,6 +15,7 @@ projects.json           the project list (edit this to update the page)
 pdf/                     PDF Merger tool, served at mohibb.com/pdf/
 pitwall/                 Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
 pitwall/analyse/         Pit Wall companion: completed-session analysis, at mohibb.com/pitwall/analyse/
+spotkick/                Spotkick penalty analytics, served at mohibb.com/spotkick/
 favicon.svg, robots.txt, sitemap.xml   shared static assets
 .github/workflows/validate.yml         CI checks (see Validation below)
 .stylelintrc.json, .pa11yci.json       config for the CI checks
@@ -89,6 +90,24 @@ changes).
   optional toggle to mark pit stops), tyre strategy, and long-run race pace,
   all built on OpenF1's historical data. Linked from Pit Wall and served at
   `mohibb.com/pitwall/analyse/`.
+
+## Spotkick (mohibb.com/spotkick)
+
+`spotkick/` is a self-contained, client-side penalty analytics dashboard
+built on StatsBomb open data. A local build script
+(`spotkick/scripts/build-data.mjs`, run with plain `node`, requires `unzip`)
+downloads StatsBomb's open data once into `.statsbomb-cache/` (gitignored at
+the repo root) and writes a flat `spotkick/data/penalties.json` with a
+computed "Pressure Index" per penalty (`spotkick/src/js/pressureIndex.js`).
+The page (`spotkick/src/js/app.js` + `data.js`) loads that file (falling back
+to `spotkick/data/penalties.sample.json` if absent) and does all filtering and
+aggregation in the browser — nothing is uploaded, no backend.
+
+It shares this repo's design tokens (warm palette, sharp 1.5px borders, Plus
+Jakarta Sans + Newsreader) via its own `spotkick/src/css/style.css`, but keeps
+its own mobile-card (max 430px) dashboard layout. Served at
+`mohibb.com/spotkick/` as part of this same Pages deployment — no separate
+project needed.
 
 ## Design tokens
 

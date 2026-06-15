@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Spotkick — penalty intelligence built on open football data. Placement, conversion, and a pressure index.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/spotkick/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Spotkick — Penalty Intelligence | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Spotkick — Penalty Intelligence">
+<meta property="og:description" content="Penalty intelligence built on open football data. Placement, conversion, and a pressure index.">
+<meta property="og:url" content="https://mohibb.com/spotkick/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Spotkick — Penalty Intelligence">
+<meta name="twitter:description" content="Penalty intelligence built on open football data. Placement, conversion, and a pressure index.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Spotkick",
+  "url": "https://mohibb.com/spotkick/",
+  "description": "Penalty intelligence built on open football data. Placement, conversion, and a pressure index.",
+  "applicationCategory": "SportsApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/css/style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2025 -->
+
+<div class="topbar">
+  <div class="wordmark">Spot<em>kick</em></div>
+  <div class="topbar-meta" id="topbarCount">Loading…</div>
+</div>
+
+<div class="chips-row">
+  <button type="button" class="chip active" id="chipFilters">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    Filters
+  </button>
+  <button type="button" class="chip" id="chipComp">All competitions</button>
+  <button type="button" class="chip" id="chipSeason">All seasons</button>
+  <button type="button" class="chip" id="chipOutcome">All outcomes</button>
+  <button type="button" class="chip" id="chipTaker">Any taker</button>
+  <button type="button" class="chip" id="chipKeeper">Any keeper</button>
+</div>
+
+<div class="section mt-16">
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="sc-label">Conversion</div>
+      <div class="sc-value green" id="statConversion">–</div>
+      <div class="sc-sub" id="statConversionSub"></div>
+    </div>
+    <div class="stat-card">
+      <div class="sc-label">Penalties</div>
+      <div class="sc-value blue" id="statTotal">–</div>
+      <div class="sc-sub" id="statTotalSub"></div>
+    </div>
+  </div>
+  <div class="stats-grid-3 mt-12">
+    <div class="stat-card">
+      <div class="sc-label">Saved</div>
+      <div class="sc-value sc-value-sm" id="statSaved">–</div>
+      <div class="sc-sub" id="statSavedSub"></div>
+    </div>
+    <div class="stat-card">
+      <div class="sc-label">Missed</div>
+      <div class="sc-value red sc-value-sm" id="statMissed">–</div>
+      <div class="sc-sub" id="statMissedSub"></div>
+    </div>
+    <div class="stat-card">
+      <div class="sc-label">Avg pressure</div>
+      <div class="sc-value amber sc-value-sm" id="statPI">–</div>
+      <div class="sc-sub" id="statPISub"></div>
+    </div>
+  </div>
+</div>
+
+<div class="section mt-20">
+  <div class="sec-header">
+    <div class="sec-title">Shot placement</div>
+    <div class="sec-action">Tap zone to filter</div>
+  </div>
+  <div class="goal-panel">
+    <div class="goal-hint">Conversion rate per zone — keeper's perspective</div>
+    <div class="goal-frame">
+      <div class="zone-grid" id="zoneGrid"></div>
+    </div>
+    <div class="goal-post-line"></div>
+    <div class="goal-legend">
+      <div class="gl-item"><div class="gl-dot zh-h"></div>High (85%+)</div>
+      <div class="gl-item"><div class="gl-dot zh-m"></div>Mid</div>
+      <div class="gl-item"><div class="gl-dot zh-l"></div>Low</div>
+    </div>
+  </div>
+</div>
+
+<div class="section mt-20">
+  <div class="sec-header">
+    <div class="sec-title">Player</div>
+    <div class="sec-action" id="chipPlayerChange">Change</div>
+  </div>
+  <div class="player-card" id="playerCard">
+    <div class="player-top">
+      <div class="player-avatar" id="playerInitials">–</div>
+      <div>
+        <div class="player-name" id="playerName">–</div>
+        <div class="player-sub" id="playerSub"></div>
+      </div>
+    </div>
+    <div class="player-row">
+      <div class="pr-item"><div class="pr-val" id="playerTaken">–</div><div class="pr-lbl">Taken</div></div>
+      <div class="pr-item"><div class="pr-val pr-val-green" id="playerGoals">–</div><div class="pr-lbl">Goals</div></div>
+      <div class="pr-item"><div class="pr-val pr-val-blue" id="playerRate">–</div><div class="pr-lbl">Rate</div></div>
+      <div class="pr-item"><div class="pr-val pr-val-amber" id="playerFavoured">–</div><div class="pr-lbl">Favoured</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="sheet-label sheet-label-tight">vs specific keepers</div>
+    <div class="h2h-list" id="h2hList"></div>
+  </div>
+</div>
+
+<div class="section mt-20">
+  <div class="sec-header"><div class="sec-title">Conversion over time</div></div>
+  <div class="trend-panel">
+    <canvas id="trendCanvas"></canvas>
+    <div class="trend-legend">
+      <div class="tl-item"><div class="tl-line tl-line-accent"></div>All penalties in view</div>
+    </div>
+  </div>
+</div>
+
+<div class="section mt-20 section-last">
+  <div class="sec-header">
+    <div class="sec-title">Penalties</div>
+  </div>
+  <div class="penalty-list" id="penaltyList"></div>
+  <button type="button" class="show-more mt-12" id="showMore">Show more</button>
+</div>
+
+<nav class="bottom-nav">
+  <div class="nav-item active">
+    <div class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg></div>
+    <div class="nav-label">Overview</div>
+  </div>
+  <div class="nav-item">
+    <div class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    <div class="nav-label">Players</div>
+  </div>
+  <div class="nav-item">
+    <div class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M3 10h18" stroke="currentColor" stroke-width="1.8"/><path d="M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    <div class="nav-label">Timeline</div>
+  </div>
+  <div class="nav-item">
+    <div class="nav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/></svg></div>
+    <div class="nav-label">Keepers</div>
+  </div>
+</nav>
+
+<div class="filter-overlay" id="filterOverlay"></div>
+<div class="filter-sheet" id="filterSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Filters</div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selComp">Competition</label>
+    <select class="sheet-select" id="selComp"></select>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selSeason">Season</label>
+    <select class="sheet-select" id="selSeason"></select>
+  </div>
+  <div class="sheet-group">
+    <div class="sheet-label">Outcome</div>
+    <div class="outcome-row">
+      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
+      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
+      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
+    </div>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selTaker">Taker</label>
+    <select class="sheet-select" id="selTaker"></select>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selKeeper">Goalkeeper</label>
+    <select class="sheet-select" id="selKeeper"></select>
+  </div>
+  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
+</div>
+
+<script type="module" src="./src/js/app.js"></script>
+</body>
+</html>
