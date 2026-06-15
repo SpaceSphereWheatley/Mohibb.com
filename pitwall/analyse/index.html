@@ -328,6 +328,12 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
       <div class="panel"><div id="positionBody"></div></div>
     </section>
 
+    <!-- QUALIFYING / RACE: car performance ratings -->
+    <section class="section view-qualifying view-race" id="sec-carperf" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Car Performance</span><span class="note">acceleration, top speed, cornering &amp; strength</span><span class="rule"></span></div>
+      <div class="panel"><div id="carperfBody"></div></div>
+    </section>
+
     <!-- RACE: lap chart (detail view, kept last) -->
     <section class="section view-race" id="sec-lapchart" style="display:none">
       <div class="sec-head"><span class="idx"></span><span class="label">Lap Times</span><span class="note">per lap · pit laps ringed</span><span class="rule"></span></div>
@@ -364,13 +370,20 @@ const FIRST_YEAR = 2023;                 // OpenF1 history starts in 2023
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PACE_WINDOW = 1.07;                // long-run "clean lap" filter: within 107% of the stint's quickest lap
 
+// car-performance ratings: corner-speed buckets, acceleration window, Top-N choices
+const CORNER_SLOW_MAX = 120;             // km/h — below this, a corner counts as "slow"
+const CORNER_FAST_MIN = 200;             // km/h — above this, a corner counts as "fast"
+const CORNER_DROP_KMH = 10;              // minimum speed drop from the preceding peak to count as a corner
+const ACCEL_WINDOW_S = 2;                // seconds after a corner-exit minimum used for the acceleration rating
+const CARPERF_TOPN = [5, 10, 0];         // 0 = all
+
 const state = {
   year: null,
   meetings: [],          // for the selected year
   sessions: [],          // for the selected meeting
   session: null,         // the selected session object
   drivers: {},           // number -> {acr, name, team, colour}
-  charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null },
+  charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null, carperf: null, carstrength: null },
   history: null,         // cached cumulative-time data for the race-history chart
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
   raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
@@ -378,6 +391,8 @@ const state = {
   renderGen: 0,          // bumped per session load; a scheduled panel retry aborts if it changed
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
   pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
+  carPerf: { mode: 'driver', topN: 5, trim: 'race' },  // car-performance panel controls
+  carPerfCtx: null,      // computed traits/strengths for the current session, redrawn on toggle
 };
 
 /* ---------- tiny DOM helpers ---------- */
@@ -430,6 +445,20 @@ async function getJSON(url, retries = 1){
   } finally { clearTimeout(timer); }
 }
 function logError(context, err){ console.warn('[analyse] ' + context + ':', err); }
+// run async tasks with limited concurrency — OpenF1 rate-limits bursts (e.g. 20 simultaneous
+// car_data requests), so most fail even with one retry; a small pool keeps them all succeeding.
+async function mapLimit(items, limit, fn){
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker(){
+    while (next < items.length){
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 /* sessionStorage-cached JSON — completed-session data is immutable, so cache hard.
    Concurrent callers for the same data share one request (the race + practice
@@ -469,10 +498,19 @@ const fetchPit      = (sk) => cachedJSON(`pwa.${sk}.pit`,      `${OPENF1}pit?ses
 const fetchPosition = (sk) => cachedJSON(`pwa.${sk}.position`, `${OPENF1}position?session_key=${sk}`);
 const fetchDrivers  = (sk) => cachedJSON(`pwa.${sk}.drivers`,  `${OPENF1}drivers?session_key=${sk}`);
 const fetchRC       = (sk) => cachedJSON(`pwa.${sk}.rc`,       `${OPENF1}race_control?session_key=${sk}`, slimRC);
+// one driver's telemetry for a single lap (date-range bounded, so each request stays small)
+const fetchCarData  = (sk, n, dateStart, dateEnd) => cachedJSON(`pwa.${sk}.car.${n}.${dateStart}`,
+  `${OPENF1}car_data?session_key=${sk}&driver_number=${n}&date>=${encodeURIComponent(dateStart)}&date<${encodeURIComponent(dateEnd)}`);
 
 /* clear every cache entry for a session (used by Reload) */
 function clearSessionCache(sk){
   ['laps','stints','pit','position','drivers','rc'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--){
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(`pwa.${sk}.car.`)) sessionStorage.removeItem(k);
+    }
+  } catch {}
 }
 
 /* ---------- rendering helpers ---------- */
@@ -648,6 +686,90 @@ function longRunPace(laps, stints){
   return byDriver;
 }
 
+/* ---------- car performance: telemetry analysis ---------- */
+// a driver's fastest clean lap, with date_start (needed to bound the car_data fetch)
+function fastestCleanLapRow(laps){
+  let best = null;
+  for (const l of (laps||[])){
+    if (l.is_pit_out_lap || !l.date_start) continue;
+    const d = num(l.lap_duration); if (d==null || d<=0) continue;
+    if (!best || d < num(best.lap_duration)) best = l;
+  }
+  return best;
+}
+function avg(arr){ return arr.reduce((a,b)=>a+b,0) / arr.length; }
+// centred moving average over the speed trace, to smooth out telemetry noise
+function smoothSpeeds(samples, win){
+  return samples.map((s,i) => {
+    let sum=0, cnt=0;
+    for (let j=Math.max(0,i-win); j<=Math.min(samples.length-1,i+win); j++){ sum += samples[j].speed; cnt++; }
+    return sum/cnt;
+  });
+}
+// walk peak->valley pairs; a valley counts as a "corner" if it dropped enough from the preceding peak
+function findCorners(sm, dropKmh){
+  const out = []; let i = 0;
+  while (i < sm.length - 1){
+    let peak = i;
+    while (peak < sm.length-1 && sm[peak+1] >= sm[peak]) peak++;
+    let valley = peak;
+    while (valley < sm.length-1 && sm[valley+1] <= sm[valley]) valley++;
+    if (sm[peak] - sm[valley] >= dropKmh) out.push({ idx: valley, speed: sm[valley] });
+    i = (valley > i) ? valley : i+1;
+  }
+  return out;
+}
+// speed gained per second over the window following a corner-exit minimum
+function accelAfter(samples, sm, idx, windowS){
+  const t0 = new Date(samples[idx].date).getTime();
+  for (let k=idx+1; k<samples.length; k++){
+    const dt = (new Date(samples[k].date).getTime() - t0) / 1000;
+    if (dt >= windowS) return (sm[k] - sm[idx]) / dt;
+  }
+  return null;
+}
+// from one lap's car_data samples: top speed, corner-exit acceleration, slow/medium/fast cornering speeds
+function analyseLapTelemetry(samples){
+  const clean = (Array.isArray(samples)?samples:[])
+    .filter(s => s.date && num(s.speed)!=null)
+    .map(s => ({ date: s.date, speed: num(s.speed) }));
+  if (clean.length < 8) return null;
+  clean.sort((a,b)=> new Date(a.date)-new Date(b.date));
+  const sm = smoothSpeeds(clean, 2);
+  const topSpeed = Math.max(...sm);
+  const corners = findCorners(sm, CORNER_DROP_KMH);
+  const buckets = { slow: [], medium: [], fast: [] };
+  const accels = [];
+  corners.forEach(c => {
+    const bucket = c.speed < CORNER_SLOW_MAX ? 'slow' : (c.speed > CORNER_FAST_MIN ? 'fast' : 'medium');
+    buckets[bucket].push(c.speed);
+    const a = accelAfter(clean, sm, c.idx, ACCEL_WINDOW_S);
+    if (a != null) accels.push(a);
+  });
+  return {
+    topSpeed,
+    accel: accels.length ? avg(accels) : null,
+    cornerSlow: buckets.slow.length ? avg(buckets.slow) : null,
+    cornerMedium: buckets.medium.length ? avg(buckets.medium) : null,
+    cornerFast: buckets.fast.length ? avg(buckets.fast) : null,
+  };
+}
+// rank a {n,v} list and spread scores evenly 0-100 by percentile (so close raw values still separate visually);
+// invert=true for "lower is better" metrics (lap/pace times)
+function percentileScore(entries, invert){
+  const out = {};
+  const valid = entries.filter(e=>e.v!=null);
+  entries.forEach(e => { if (e.v == null) out[e.n] = null; });
+  if (!valid.length) return out;
+  const sorted = [...valid].sort((a,b)=>a.v-b.v);
+  const n = sorted.length;
+  sorted.forEach((e,i) => {
+    const score = n>1 ? i/(n-1)*100 : 100;
+    out[e.n] = invert ? 100-score : score;
+  });
+  return out;
+}
+
 /* compound swatch tag */
 function compoundTag(cmp){
   const fill = { SOFT:'#E8443B', MEDIUM:'#F2C14E', HARD:'#E6E1D4', INTERMEDIATE:'#3FBF6F', WET:'#3E82F7' }[cmp] || '#B8AE9C';
@@ -669,11 +791,11 @@ function sessionKind(s){
   if (n.includes('qualifying') || n.includes('shootout')) return 'qualifying';
   return 'race';
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-history','sec-strategy','sec-position','sec-lapchart','sec-pitloss'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
-  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-pitloss'],
-  race:       ['sec-history','sec-strategy','sec-position','sec-lapchart'],
+  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-carperf','sec-pitloss'],
+  race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
 function showView(kind){
   destroyAllCharts();
@@ -793,12 +915,14 @@ async function loadSession(session_key){
     renderQualiPace(session_key);
     renderQualiTheo(s);
     renderRPI(s);
+    renderCarPerformance(session_key, 'qualifying', s);
     renderPitLoss();
   } else {
     renderLapChart(session_key);
     renderHistory(session_key);
     renderStrategy(session_key);
     renderPosition(session_key);
+    renderCarPerformance(session_key, 'race', s);
   }
 }
 
@@ -1033,6 +1157,232 @@ async function renderRPI(qSession, attempt=0){
 function rankMap(entries){
   const sorted = entries.filter(e => e.v!=null).sort((a,b)=> a.v-b.v);
   const m = {}; sorted.forEach((e,i)=> m[e.n] = i+1); return m;
+}
+
+/* ---------- QUALIFYING / RACE: car performance (acceleration, top speed, cornering, strength) ---------- */
+const CARPERF_AXES = [
+  { key:'accel',        label:'Acceleration' },
+  { key:'topSpeed',     label:'Top Speed' },
+  { key:'cornerSlow',   label:'Slow Corners' },
+  { key:'cornerMedium', label:'Medium Corners' },
+  { key:'cornerFast',   label:'Fast Corners' },
+];
+
+async function renderCarPerformance(session_key, kind, session, attempt=0){
+  const body = $('carperfBody'); if (!body) return;
+  body.innerHTML = loadingBox('Pulling car telemetry…');
+  try {
+    const laps = await fetchLaps(session_key);
+    const groups = groupByDriver(laps);
+    const drivers = Object.keys(groups).map(Number);
+    if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
+
+    // representative lap per driver: fastest clean lap of this session
+    const repLaps = {};
+    drivers.forEach(n => { const r = fastestCleanLapRow(groups[n]); if (r) repLaps[n] = r; });
+
+    // pull one lap's telemetry per driver — small, date-bounded car_data requests, throttled
+    // so OpenF1 doesn't rate-limit a 20-way burst
+    const traits = {};
+    await mapLimit(drivers, 4, async n => {
+      const lap = repLaps[n]; if (!lap) return;
+      const start = new Date(lap.date_start);
+      const end = new Date(start.getTime() + Math.round(num(lap.lap_duration)*1000) + 1000);
+      try {
+        const samples = await fetchCarData(session_key, n, start.toISOString(), end.toISOString());
+        const t = analyseLapTelemetry(samples);
+        if (t) traits[n] = t;
+      } catch (e){ logError('car_data '+n, e); }
+    });
+
+    if (!Object.keys(traits).length){
+      body.innerHTML = stateBox('No telemetry', 'OpenF1 doesn’t have car telemetry for this session, so car-performance traits can’t be computed.');
+      return;
+    }
+
+    // strength: qualifying = best lap vs pole; race = best race-sim stint (long-run median)
+    let strengthLabel, strengthRaw;
+    if (kind === 'race'){
+      strengthLabel = 'Race Strength';
+      const stints = await fetchStints(session_key).catch(()=>[]);
+      const pace = longRunPace(laps, stints);
+      strengthRaw = drivers.map(n => ({ n, v: pace[n]?.best?.median ?? null }));
+    } else {
+      strengthLabel = 'Qualifying Strength';
+      strengthRaw = drivers.map(n => ({ n, v: bestLap(groups[n]) }));
+    }
+
+    // cache this weekend's quali-trim traits so the race view can offer them too
+    const mk = session?.meeting_key;
+    if (kind === 'qualifying' && mk != null){
+      try { sessionStorage.setItem(`pwa.meeting.${mk}.qualiCarPerf`, JSON.stringify({ traits, strengthRaw })); } catch {}
+    }
+    let qualiTrim = null;
+    if (kind === 'race' && mk != null){
+      try { const c = sessionStorage.getItem(`pwa.meeting.${mk}.qualiCarPerf`); if (c) qualiTrim = JSON.parse(c); } catch {}
+    }
+
+    paintCarPerf(body, { kind, drivers, traits, strengthRaw, strengthLabel, qualiTrim });
+  } catch (e){ panelRetry('car performance', e, body, attempt, () => renderCarPerformance(session_key, kind, session, attempt+1), stateBox('Unavailable', 'Couldn’t load car telemetry. Tap Reload to retry.', 'error')); }
+}
+
+// build one entity (driver or team) per row, with raw axis values + raw strength
+function buildCarPerfEntities(drivers, traits, strengthRaw, mode){
+  if (mode === 'team'){
+    const groups = {};
+    drivers.forEach(n => { const t = drv(n).team || 'Unknown'; (groups[t]=groups[t]||[]).push(n); });
+    return Object.keys(groups).map(team => {
+      const ns = groups[team];
+      const axesRaw = {};
+      CARPERF_AXES.forEach(ax => {
+        const vals = ns.map(n => traits[n]?.[ax.key]).filter(v=>v!=null);
+        axesRaw[ax.key] = vals.length ? avg(vals) : null;
+      });
+      const sVals = ns.map(n => strengthRaw.find(r=>r.n===n)?.v).filter(v=>v!=null);
+      return { key: team, label: team || 'Unknown', colour: teamColour(team) || drvColour(ns[0]), axesRaw, rawStrength: sVals.length ? avg(sVals) : null };
+    });
+  }
+  return drivers.map(n => ({
+    key: String(n), label: drv(n).acr, colour: drvColour(n),
+    axesRaw: CARPERF_AXES.reduce((o,ax)=> (o[ax.key]=traits[n]?.[ax.key] ?? null, o), {}),
+    rawStrength: strengthRaw.find(r=>r.n===n)?.v ?? null,
+  }));
+}
+// scale each axis + strength to 0-100 across the entities (field-relative)
+function normalizeCarPerfEntities(entities){
+  CARPERF_AXES.forEach(ax => {
+    const scores = percentileScore(entities.map(e=>({ n:e.key, v:e.axesRaw[ax.key] })), false);
+    entities.forEach(e => { e.axisScore = e.axisScore || {}; e.axisScore[ax.key] = scores[e.key]; });
+  });
+  const sScores = percentileScore(entities.map(e=>({ n:e.key, v:e.rawStrength })), true);
+  entities.forEach(e => e.strengthScore = sScores[e.key]);
+  return entities;
+}
+
+function paintCarPerf(body, ctx){
+  state.carPerfCtx = ctx;
+  const trimAvailable = ctx.kind === 'race' && !!ctx.qualiTrim;
+  body.innerHTML = `
+    <div class="panel-toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div class="seg" id="carperf-mode">
+        <button type="button" data-mode="driver" class="${state.carPerf.mode==='driver'?'active':''}">Driver</button>
+        <button type="button" data-mode="team" class="${state.carPerf.mode==='team'?'active':''}">Team</button>
+      </div>
+      ${trimAvailable ? `<div class="seg" id="carperf-trim">
+        <button type="button" data-trim="race" class="${state.carPerf.trim!=='quali'?'active':''}">Race trim</button>
+        <button type="button" data-trim="quali" class="${state.carPerf.trim==='quali'?'active':''}">Quali trim</button>
+      </div>` : ''}
+      <div class="seg" id="carperf-topn">
+        ${CARPERF_TOPN.map(n => `<button type="button" data-topn="${n}" class="${state.carPerf.topN===n?'active':''}">${n===0?'All':'Top '+n}</button>`).join('')}
+      </div>
+    </div>
+    <div class="chart-box" id="carperfRadarHost"><canvas id="carperfRadarCanvas"></canvas></div>
+    <div id="carperfStrengthView"></div>
+    <div class="panel-note">Acceleration, top speed and cornering speeds come from each car's fastest clean lap telemetry, with corners bucketed by exit speed (under ${CORNER_SLOW_MAX} km/h = slow, ${CORNER_SLOW_MAX}–${CORNER_FAST_MIN} = medium, over ${CORNER_FAST_MIN} = fast) and scaled 0–100 against this field — a relative read for this weekend, not an absolute or cross-circuit number. ${ctx.kind==='race' ? 'Race Strength ranks each car’s best race-sim stint (median green-flag lap).' : 'Qualifying Strength ranks each car’s best lap against pole.'}</div>
+  `;
+  const seg1 = $('carperf-mode');
+  seg1.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]'); if (!b) return;
+    const m = b.dataset.mode; if (state.carPerf.mode===m) return;
+    state.carPerf.mode = m;
+    seg1.querySelectorAll('button').forEach(x=>x.classList.toggle('active', x.dataset.mode===m));
+    drawCarPerf();
+  });
+  const seg2 = $('carperf-trim');
+  if (seg2) seg2.addEventListener('click', e => {
+    const b = e.target.closest('button[data-trim]'); if (!b) return;
+    const t = b.dataset.trim; if ((state.carPerf.trim||'race')===t) return;
+    state.carPerf.trim = t;
+    seg2.querySelectorAll('button').forEach(x=>x.classList.toggle('active', x.dataset.trim===t));
+    drawCarPerf();
+  });
+  const seg3 = $('carperf-topn');
+  seg3.addEventListener('click', e => {
+    const b = e.target.closest('button[data-topn]'); if (!b) return;
+    const n = Number(b.dataset.topn); if (state.carPerf.topN===n) return;
+    state.carPerf.topN = n;
+    seg3.querySelectorAll('button').forEach(x=>x.classList.toggle('active', Number(x.dataset.topn)===n));
+    drawCarPerf();
+  });
+  drawCarPerf();
+}
+
+function drawCarPerf(){
+  const ctx = state.carPerfCtx; if (!ctx) return;
+  const { kind, drivers, traits, strengthRaw, strengthLabel, qualiTrim } = ctx;
+  const useQualiTrim = kind === 'race' && state.carPerf.trim === 'quali' && qualiTrim;
+  const traitsSrc = useQualiTrim ? qualiTrim.traits : traits;
+
+  let entities = buildCarPerfEntities(drivers, traitsSrc, strengthRaw, state.carPerf.mode);
+  entities = entities.filter(e => CARPERF_AXES.some(ax => e.axesRaw[ax.key]!=null));
+  normalizeCarPerfEntities(entities);
+  entities.sort((a,b)=> (b.strengthScore ?? -1) - (a.strengthScore ?? -1));
+
+  const topN = state.carPerf.topN;
+  const shown = topN>0 ? entities.slice(0, topN) : entities;
+
+  drawCarRadar(shown);
+  drawCarStrength(shown, strengthLabel);
+}
+
+function drawCarRadar(entities){
+  const host = $('carperfRadarHost'); if (!host) return;
+  if (!entities.length){ destroyChart('carperf'); host.innerHTML = stateBox('No data', 'Not enough telemetry to plot car traits for these drivers.'); return; }
+  host.innerHTML = '<canvas id="carperfRadarCanvas"></canvas>';
+  destroyChart('carperf');
+  if (!window.Chart) return;
+  const ctx = $('carperfRadarCanvas'); if (!ctx) return;
+  state.charts.carperf = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: CARPERF_AXES.map(ax => ax.label),
+      datasets: entities.map(e => ({
+        label: e.label,
+        data: CARPERF_AXES.map(ax => e.axisScore[ax.key]),
+        borderColor: e.colour, backgroundColor: e.colour + '33', borderWidth: 1.5,
+        pointBackgroundColor: e.colour, pointRadius: 2, spanGaps: true,
+      })),
+    },
+    options: Object.assign(chartBase({}), {
+      plugins: {
+        legend: { display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
+        tooltip: { backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
+          callbacks:{ label:(it)=> `${it.dataset.label} — ${it.label}: ${Math.round(it.formattedValue)}` } },
+      },
+      scales: {
+        r: { min:0, max:100, ticks:{ display:false, stepSize:25 }, grid:{ color:'#C9C0AE' }, angleLines:{ color:'#C9C0AE' },
+          pointLabels:{ color:'#5C554A', font:{family:"'Plus Jakarta Sans',sans-serif",size:11,weight:600} } },
+      }
+    })
+  });
+}
+
+function drawCarStrength(entities, label){
+  const view = $('carperfStrengthView'); if (!view) return;
+  const ranked = entities.filter(e=>e.strengthScore!=null);
+  if (!ranked.length){ destroyChart('carstrength'); view.innerHTML = stateBox('No data', `Not enough data to rank ${label.toLowerCase()}.`); return; }
+  const h = Math.max(220, ranked.length * 24 + 56);
+  view.innerHTML = `<div class="chart-box" style="height:${h}px"><canvas id="carstrengthCanvas"></canvas></div>`;
+  destroyChart('carstrength');
+  if (!window.Chart) return;
+  const c = $('carstrengthCanvas'); if (!c) return;
+  state.charts.carstrength = new Chart(c, {
+    type: 'bar',
+    data:{ labels: ranked.map(e=>e.label),
+      datasets:[{ data: ranked.map(e=>e.strengthScore), backgroundColor: ranked.map(e=>e.colour), borderColor: ranked.map(e=>e.colour), borderWidth:1, borderRadius:2, barPercentage:0.84, categoryPercentage:0.84 }] },
+    options: Object.assign(chartBase({}), {
+      indexAxis:'y',
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
+          callbacks:{ label:(it)=> `${label}: ${Math.round(it.parsed.x)}` } },
+      },
+      scales:{
+        x:{ min:0, max:100, grid:{ color:'#C9C0AE' }, ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10} }, title:{ display:true, text:label+' (0–100, field-relative)', color:'#8C8475', font:{size:10} } },
+        y:{ grid:{ color:'transparent' }, ticks:{ color:'#5C554A', font:{family:"'IBM Plex Mono',monospace",size:11} } },
+      }
+    })
+  });
 }
 
 /* ---------- PRACTICE-DERIVED: weekend pit-loss estimate ---------- */
