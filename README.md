@@ -10,6 +10,7 @@ mohibb-home/
   projects.json   the project list (edit this to update the page)
   pdf/            PDF Merger tool, served at mohibb.com/pdf/
   pitwall/        Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
+  pitwall/analyse/  Completed-session analysis, at mohibb.com/pitwall/analyse/
   README.md
 ```
 
