@@ -157,5 +157,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
   .filter-sheet.open{transform:none;}
   .sheet-handle,.sheet-title{display:none;}
   .sheet-group{margin-bottom:0;min-width:160px;flex:1;}
-  .apply-btn{width:auto;margin-top:0;padding:12px 24px;}
+  .sheet-select,.outcome-row,.outcome-btn,.apply-btn{height:44px;box-sizing:border-box;}
+  .sheet-select{padding:0 14px;}
+  .apply-btn{width:auto;margin-top:0;padding:0 24px;}
 }

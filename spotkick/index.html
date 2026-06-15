@@ -92,11 +92,13 @@
   </div>
   <div class="sheet-group">
     <label class="sheet-label" for="selTaker">Taker</label>
-    <select class="sheet-select" id="selTaker"></select>
+    <input class="sheet-select player-search" id="selTaker" type="text" list="takerOptions" placeholder="Any player" autocomplete="off">
+    <datalist id="takerOptions"></datalist>
   </div>
   <div class="sheet-group">
     <label class="sheet-label" for="selKeeper">Goalkeeper</label>
-    <select class="sheet-select" id="selKeeper"></select>
+    <input class="sheet-select player-search" id="selKeeper" type="text" list="keeperOptions" placeholder="Any goalkeeper" autocomplete="off">
+    <datalist id="keeperOptions"></datalist>
   </div>
   <button type="button" class="apply-btn" id="applyBtn">Show results</button>
 </div>

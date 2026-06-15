@@ -206,16 +206,25 @@ function renderPenalties(rows) {
 function populateFilterOptions() {
   fillSelect('selComp', ['All competitions', ...uniqueValues('competition')]);
   fillSelect('selSeason', ['All seasons', ...uniqueValues('season')]);
-  fillSelect('selTaker', ['Any player', ...uniqueValues('taker')]);
-  fillSelect('selKeeper', ['Any goalkeeper', ...uniqueValues('keeper')]);
+  fillDatalist('takerOptions', uniqueValues('taker'));
+  fillDatalist('keeperOptions', uniqueValues('keeper'));
 }
 function fillSelect(id, options) {
   document.getElementById(id).innerHTML = options.map(o => `<option>${o}</option>`).join('');
+}
+function fillDatalist(id, options) {
+  document.getElementById(id).innerHTML = options.map(o => `<option value="${o}"></option>`).join('');
 }
 
 // -- EVENTS --
 function wireEvents() {
   document.getElementById('chipFilters').addEventListener('click', openFilter);
+  document.getElementById('chipPlayerChange').addEventListener('click', () => {
+    openFilter();
+    const input = document.getElementById('selTaker');
+    input.focus();
+    input.select();
+  });
   document.getElementById('filterOverlay').addEventListener('click', closeFilter);
   document.getElementById('applyBtn').addEventListener('click', applyFromSheet);
   document.getElementById('showMore').addEventListener('click', () => {
@@ -234,13 +243,13 @@ function wireEvents() {
 function applyFromSheet() {
   const comp = document.getElementById('selComp').value;
   const season = document.getElementById('selSeason').value;
-  const taker = document.getElementById('selTaker').value;
-  const keeper = document.getElementById('selKeeper').value;
+  const taker = document.getElementById('selTaker').value.trim();
+  const keeper = document.getElementById('selKeeper').value.trim();
 
   state.filters.competition = comp.startsWith('All') ? 'all' : comp;
   state.filters.season = season.startsWith('All') ? 'all' : season;
-  state.filters.taker = taker.startsWith('Any') ? null : taker;
-  state.filters.keeper = keeper.startsWith('Any') ? null : keeper;
+  state.filters.taker = taker && uniqueValues('taker').includes(taker) ? taker : null;
+  state.filters.keeper = keeper && uniqueValues('keeper').includes(keeper) ? keeper : null;
 
   const outcomes = new Set();
   document.querySelectorAll('.outcome-btn').forEach(btn => {
