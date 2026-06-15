@@ -18,7 +18,8 @@ subproject's path (e.g. `/spotkick/`) to both URLs.
 ## Structure
 
 ```
-index.html              page shell, styles, and render logic
+index.html              page shell markup, plus a #groups mount point
+style.css, script.js    page shell styles and render logic
 projects.json           the project list (edit this to update the page)
 pdf/                     PDF Merger tool, served at mohibb.com/pdf/
 pitwall/                 Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
@@ -32,8 +33,10 @@ README.md
 
 ## Architecture
 
-- `index.html` contains all CSS (inline `<style>`) and JS (inline `<script>`)
-  for the page shell, plus a `#groups` mount point.
+- `index.html` is markup only, plus a `#groups` mount point. Styles live in
+  the sibling `style.css`, render logic in the sibling `script.js`, linked
+  via `<link rel="stylesheet">` / `<script src>`. The `application/ld+json`
+  block stays inline in the HTML.
 - On load, the script fetches `projects.json` and renders project "groups"
   (e.g. "F1", "Tools") into cards via `groupHtml`/`cardHtml`.
 - Each project item has a `status` of `soon`, `wip`, or `live`:
@@ -58,8 +61,8 @@ npx serve .
 `pdf/` is a self-contained, client-side PDF merge/reorder tool built on
 `pdf-lib` (bundled as `pdf/pdf-lib.min.js`, loaded via `<script src>`). It
 shares this repo's design tokens (colors, fonts) from `index.html` but has
-its own `<style>`/`<script>`. All merging happens in-browser; nothing is
-uploaded.
+its own `pdf/style.css`/`pdf/script.js`. All merging happens in-browser;
+nothing is uploaded.
 
 It's served at `mohibb.com/pdf/` automatically as part of this same Pages
 deployment (output directory `/` includes `pdf/`) — no separate project or
@@ -67,9 +70,10 @@ domain needed.
 
 ## Pit Wall (mohibb.com/pitwall)
 
-`pitwall/` is a self-contained, client-side live F1 dashboard. A single
-`index.html` (Chart.js is the only external dependency, loaded from CDN). It
-shows what's happening in the current/most recent F1 session plus current-season
+`pitwall/` is a self-contained, client-side live F1 dashboard: `index.html`
+(markup) plus sibling `style.css`/`script.js` (Chart.js is the only external
+dependency, loaded from CDN). It shows what's happening in the current/most
+recent F1 session plus current-season
 standings, and an idle countdown to the next race when no session is live. When
 IDLE, it can show the results of the *previous* session behind a spoiler gate
 (hidden by default, with a reveal button; resets automatically when the session
@@ -92,8 +96,9 @@ changes).
   numerals. All times shown in Europe/Oslo.
 - Served at `mohibb.com/pitwall/` as part of this same Pages deployment
   (output directory `/` includes `pitwall/`) — no separate project needed.
-- `pitwall/analyse/` is a companion page (own `index.html`, shares the same
-  design tokens and fonts) for digging into any *completed* session:
+- `pitwall/analyse/` is a companion page (own `index.html` +
+  `style.css`/`script.js`, shares the same design tokens and fonts) for
+  digging into any *completed* session:
   theoretical best laps, qualifying potential, race lap charts (with an
   optional toggle to mark pit stops), tyre strategy, and long-run race pace,
   all built on OpenF1's historical data. Linked from Pit Wall and served at
@@ -154,12 +159,13 @@ link, and an `application/ld+json` block. When adding a new top-level page:
 `.github/workflows/validate.yml` runs on every push/PR via `npx` (no
 package.json/lockfile needed — the site itself stays dependency-free):
 
-- **syntax**: every `*.json` file parses, and every inline `<script>` in
-  `*.html` (non-`src`, JS or `application/ld+json`) is syntactically valid.
+- **syntax**: every `*.json` file parses, every inline `<script>` in
+  `*.html` (non-`src`, JS or `application/ld+json`) is syntactically valid,
+  and every `*.js` file (excluding `*.min.js`) is syntactically valid.
 - **html**: `html-validate` against all `*.html`.
 - **css**: `stylelint` (config in `.stylelintrc.json`, extends
-  `stylelint-config-recommended`) against inline `<style>` blocks in all
-  `*.html`.
+  `stylelint-config-recommended`) against inline `<style>` blocks in
+  `*.html` and all `*.css` files.
 - **accessibility**: `pa11y-ci` (WCAG2A, config in `.pa11yci.json`) against
   the served site — currently `/`, `/pitwall/`, `/pitwall/analyse/`, `/pdf/`.
 
