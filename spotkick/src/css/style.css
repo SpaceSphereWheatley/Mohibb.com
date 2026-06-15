@@ -89,6 +89,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .tl-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3);font-weight:500;}
 .tl-line{width:16px;height:2px;}
 .tl-line-accent{background:var(--accent);}
+.tl-line-muted{background:var(--ink-3);}
 
 .penalty-list{display:flex;flex-direction:column;gap:8px;}
 .penalty-item{background:var(--card);border:1.5px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .12s,background .12s;}

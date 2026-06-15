@@ -206,8 +206,8 @@
 
 <div class="section mt-20 sec-pressuretakers">
   <div class="sec-header">
-    <div class="sec-title">Avg pressure vs conversion (per player)</div>
-    <label class="sec-action sec-minsample">Min taken
+    <div class="sec-title" id="pressureTakerTitle">Avg pressure vs conversion (per player)</div>
+    <label class="sec-action sec-minsample" id="minSampleGroup">Min taken
       <select id="selMinSample" class="minsample-select">
         <option value="1">1</option>
         <option value="3" selected>3</option>
@@ -222,7 +222,7 @@
       <canvas id="pressureTakerCanvas"></canvas>
       <div class="canvas-tooltip" id="pressureTakerTooltip"></div>
     </div>
-    <div class="trend-legend">
+    <div class="trend-legend" id="pressureTakerLegend">
       <div class="tl-item"><div class="gl-dot zh-h"></div>Each dot = one player · size = penalties taken</div>
       <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed lines = overall avg conversion / pressure</div>
     </div>

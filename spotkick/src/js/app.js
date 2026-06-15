@@ -234,10 +234,17 @@ function renderPressure(rows) {
 
 let pressureTakerPoints = [];
 
+// Global reference stats: avg pressure index + conversion %, ignoring the
+// taker filter (but respecting any other active filters).
+function globalPressureStats() {
+  const rows = applyFilters({ ...state.filters, taker: null });
+  if (!rows.length) return null;
+  const avgPI = rows.reduce((s, p) => s + p.pressureIndex, 0) / rows.length;
+  const avgConv = summary(rows).conversion;
+  return { avgPI, avgConv };
+}
+
 function renderPressureTakers(rows) {
-  const minSample = Number(document.getElementById('selMinSample').value);
-  const points = pressureByTaker(rows, minSample);
-  pressureTakerPoints = [];
   const canvas = document.getElementById('pressureTakerCanvas');
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
@@ -248,6 +255,97 @@ function renderPressureTakers(rows) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  pressureTakerPoints = [];
+
+  const padL = 32, padR = 8, padT = 8, padB = 28;
+  const pW = W - padL - padR, pH = H - padT - padB;
+  const tx = v => padL + (v / 100) * pW;
+  const ty = v => padT + pH - (v / 100) * pH;
+
+  const drawAxes = () => {
+    [0, 25, 50, 75, 100].forEach(v => {
+      const y = ty(v);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+      ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+      ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 5, y + 3);
+    });
+    [0, 25, 50, 75, 100].forEach(v => {
+      const x = tx(v);
+      ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + pH); ctx.strokeStyle = '#E7E1D4'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+      ctx.textAlign = 'center'; ctx.fillText(v, x, padT + pH + 12);
+    });
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+    ctx.fillText('Pressure index', padL + pW / 2, H - 4);
+  };
+
+  const drawRefLines = (avgConv, avgPI, color) => {
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    const ay = ty(avgConv);
+    ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(W - padR, ay); ctx.stroke();
+    const ax = tx(avgPI);
+    ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + pH); ctx.stroke();
+    ctx.restore();
+  };
+
+  const single = state.filters.taker;
+  const title = document.getElementById('pressureTakerTitle');
+  const legend = document.getElementById('pressureTakerLegend');
+  document.getElementById('minSampleGroup').style.display = single ? 'none' : '';
+
+  if (single) {
+    // Per-penalty view for one player: x = pressure index, y = outcome (jittered).
+    title.textContent = `${single}'s penalties by pressure`;
+    legend.innerHTML = `
+      <div class="tl-item"><div class="gl-dot zh-h"></div>Goal</div>
+      <div class="tl-item"><div class="gl-dot zh-l"></div>Saved/missed</div>
+      <div class="tl-item"><div class="tl-line tl-line-accent"></div>This player's avg conversion / pressure</div>
+      <div class="tl-item"><div class="tl-line tl-line-muted"></div>Global avg conversion / pressure</div>`;
+
+    if (!rows.length) {
+      ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+      ctx.fillText('Not enough data for this view', W / 2, H / 2);
+      return;
+    }
+
+    drawAxes();
+
+    const global = globalPressureStats();
+    if (global) drawRefLines(global.avgConv, global.avgPI, '#8C8475');
+
+    const playerAvgPI = rows.reduce((s, p) => s + p.pressureIndex, 0) / rows.length;
+    const playerAvgConv = summary(rows).conversion;
+    drawRefLines(playerAvgConv, playerAvgPI, '#B4471F');
+
+    rows.forEach((p, i) => {
+      const jitter = ((i * 37) % 100) / 100 * 16 - 8; // deterministic ±8
+      const y = ty(p.outcome === 'goal' ? 90 + jitter * 0.3 : 10 + jitter * 0.3);
+      const x = tx(p.pressureIndex);
+      const color = p.outcome === 'goal' ? '#2E6F4F' : '#C0392B';
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.globalAlpha = 0.65; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+      pressureTakerPoints.push({
+        x, y, r: 4,
+        taker: p.taker, n: 1, avgPI: p.pressureIndex, pct: p.outcome === 'goal' ? 100 : 0,
+        label: `vs ${p.keeper} · ${p.competition} · ${p.minute}' · PI ${p.pressureIndex} · ${p.outcome}`,
+      });
+    });
+    return;
+  }
+
+  // Aggregate view: one dot per player.
+  title.textContent = 'Avg pressure vs conversion (per player)';
+  legend.innerHTML = `
+    <div class="tl-item"><div class="gl-dot zh-h"></div>Each dot = one player · size = penalties taken</div>
+    <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed lines = overall avg conversion / pressure</div>`;
+
+  const minSample = Number(document.getElementById('selMinSample').value);
+  const points = pressureByTaker(rows, minSample);
 
   if (!points.length) {
     ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
@@ -255,42 +353,11 @@ function renderPressureTakers(rows) {
     return;
   }
 
-  const padL = 32, padR = 8, padT = 8, padB = 28;
-  const pW = W - padL - padR, pH = H - padT - padB;
-  const minPI = 0, maxPI = 100;
-  const tx = v => padL + ((v - minPI) / (maxPI - minPI)) * pW;
-  const ty = v => padT + pH - (v / 100) * pH;
+  drawAxes();
 
-  // Y gridlines (conversion %)
-  [0, 25, 50, 75, 100].forEach(v => {
-    const y = ty(v);
-    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
-    ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
-    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 5, y + 3);
-  });
-
-  // X axis (avg pressure index)
-  [0, 25, 50, 75, 100].forEach(v => {
-    const x = tx(v);
-    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + pH); ctx.strokeStyle = '#E7E1D4'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
-    ctx.textAlign = 'center'; ctx.fillText(v, x, padT + pH + 12);
-  });
-  ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
-  ctx.fillText('Avg pressure index', padL + pW / 2, H - 4);
-
-  // Reference lines: overall average conversion rate and average pressure across these players.
   const avgConv = points.reduce((s, p) => s + p.pct, 0) / points.length;
   const avgPI = points.reduce((s, p) => s + p.avgPI, 0) / points.length;
-  ctx.save();
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5;
-  const ay = ty(avgConv);
-  ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(W - padR, ay); ctx.stroke();
-  const ax = tx(avgPI);
-  ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + pH); ctx.stroke();
-  ctx.restore();
+  drawRefLines(avgConv, avgPI, '#B4471F');
 
   const maxN = Math.max(...points.map(p => p.n));
   points.forEach(p => {
@@ -312,7 +379,7 @@ function handlePressureTakerHover(evt) {
   const mx = evt.clientX - rect.left, my = evt.clientY - rect.top;
   const hit = pressureTakerPoints.find(p => Math.hypot(p.x - mx, p.y - my) <= p.r + 1.5);
   if (!hit) { tooltip.classList.remove('visible'); return; }
-  tooltip.textContent = `${hit.taker} — ${Math.round(hit.pct)}% (${hit.n} taken, avg PI ${Math.round(hit.avgPI)})`;
+  tooltip.textContent = hit.label || `${hit.taker} — ${Math.round(hit.pct)}% (${hit.n} taken, avg PI ${Math.round(hit.avgPI)})`;
   tooltip.style.left = hit.x + 'px';
   tooltip.style.top = (hit.y - hit.r - 6) + 'px';
   tooltip.classList.add('visible');
