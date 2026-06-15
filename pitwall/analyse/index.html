@@ -171,6 +171,7 @@ tr.best .code{color:var(--accent-ink);}
 /* shared Top-N bar (one filter for every race chart) */
 .race-topbar{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:30px;}
 .race-topbar .topbar-label{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);}
+.race-topbar .topbar-gap{margin-left:6px;}
 
 /* weekend pit-loss estimate */
 .pitloss{padding:18px 16px;display:flex;flex-direction:column;gap:12px;}
@@ -372,6 +373,7 @@ const state = {
   history: null,         // cached cumulative-time data for the race-history chart
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
   raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
+  showPits: true,        // race charts: mark each driver's pit stops with a dot
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
   pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
 };
@@ -599,8 +601,10 @@ function showView(kind){
   const bar = $('raceTopBar');
   if (bar){
     if (kind === 'race'){
-      bar.innerHTML = `<span class="topbar-label">Drivers shown</span>${topToolbar()}`;
+      bar.innerHTML = `<span class="topbar-label">Pit stops</span>${pitToggle()}`
+        + `<span class="topbar-label topbar-gap">Drivers shown</span>${topToolbar()}`;
       bar.style.display = '';
+      wirePits(bar.querySelector('.seg.pits'));
       wireTopN(bar.querySelector('.seg.topn'));
     } else { bar.style.display = 'none'; bar.innerHTML = ''; }
   }
@@ -1092,10 +1096,30 @@ function wireTopN(seg){
     const n = Number(b.dataset.n); if (state.raceTopN === n) return;
     state.raceTopN = n;
     document.querySelectorAll('.seg.topn button').forEach(x => x.classList.toggle('active', Number(x.dataset.n) === n));
-    Object.values(state.raceRedraw).forEach(fn => { try { fn && fn(); } catch (err){ logError('top-n redraw', err); } });
+    redrawRaceCharts();
   });
 }
 const topNSet = (order, n) => n > 0 ? new Set(order.slice(0, n)) : null;   // null = show all
+
+// Pit-stop marker toggle, shared across the three race charts.
+function pitToggle(){
+  return `<div class="seg pits">${[['1','On'],['0','Off']].map(([v,l]) => `<button type="button" data-pits="${v}" class="${(state.showPits?'1':'0')===v?'active':''}">${l}</button>`).join('')}</div>`;
+}
+function wirePits(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-pits]'); if (!b) return;
+    const on = b.dataset.pits === '1'; if (state.showPits === on) return;
+    state.showPits = on;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', (x.dataset.pits==='1')===on));
+    redrawRaceCharts();
+  });
+}
+// pit dot styling, shared so every race chart marks stops the same way
+const PIT_DOT = { fill: '#F7F3EA', ring: '#211D17' };
+function redrawRaceCharts(){
+  Object.values(state.raceRedraw).forEach(fn => { try { fn && fn(); } catch (err){ logError('race redraw', err); } });
+}
 // finishing order from laps: most laps completed, then least cumulative time
 function orderByLaps(groups){
   return Object.keys(groups).map(Number).map(n => {
@@ -1123,22 +1147,24 @@ async function renderLapChart(session_key){
     const yMax = med * 1.25;            // shows green-flag pace + most pit laps, clips SC/red-flag spikes
 
     body.innerHTML = `<div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps. <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
 
     const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
     const redraw = () => {
       const host = $('lapHost'); if (!host) return;
       host.innerHTML = '<canvas id="lapCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
+      const showP = state.showPits;
       const datasets = drivers.filter(n => !set || set.has(n)).sort((a,b)=> a-b).map(n => {
         const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
         const colour = drvColour(n);
+        const mark = (l) => showP && isPit(n,l);
         return {
           label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) })),
           borderColor: colour, backgroundColor: colour, borderWidth: 1.5, tension: 0.25, spanGaps: true,
-          pointRadius: ls.map(l => isPit(n,l)?4:0), pointHoverRadius: 5,
-          pointBorderColor: ls.map(l => isPit(n,l)?'#211D17':colour), pointBorderWidth: 1.5,
-          pointBackgroundColor: ls.map(l => isPit(n,l)?'#F7F3EA':colour),
+          pointRadius: ls.map(l => mark(l)?4:0), pointHoverRadius: 5,
+          pointBorderColor: ls.map(l => mark(l)?PIT_DOT.ring:colour), pointBorderWidth: 1.5,
+          pointBackgroundColor: ls.map(l => mark(l)?PIT_DOT.fill:colour),
         };
       });
       drawLapChart(datasets, yMin, yMax, bands);
@@ -1152,7 +1178,7 @@ async function renderLapChart(session_key){
 async function renderHistory(session_key){
   const body = $('historyBody'); body.innerHTML = loadingBox('Building the race-history trace…');
   try {
-    const [laps, rc] = await Promise.all([ fetchLaps(session_key), fetchRC(session_key).catch(()=>[]) ]);
+    const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const groups = groupByDriver(laps);
     const drivers = Object.keys(groups).map(Number);
     if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
@@ -1175,12 +1201,15 @@ async function renderHistory(session_key){
       return (cum[a].get(lastLap[a]) ?? Infinity) - (cum[b].get(lastLap[b]) ?? Infinity);
     });
     if (!ranked.length){ body.innerHTML = stateBox('No data', 'Not enough lap timing to build the trace.'); return; }
-    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0] };
+    // pit in-laps per driver, to dot the trace where each car stopped
+    const pitLaps = {};
+    (Array.isArray(pit)?pit:[]).forEach(p => { const n = num(p.driver_number), l = num(p.lap_number); if (n==null || l==null) return; (pitLaps[n] = pitLaps[n] || new Set()).add(l); });
+    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0], pitLaps };
 
     const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
     body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
       <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
-      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
     $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
     state.raceRedraw.hist = drawHistory;
     drawHistory();
@@ -1200,8 +1229,12 @@ function drawHistory(){
       pts.push({ x: lap, y: rc - dc });           // ahead of the reference => positive => above the line
     }
     const colour = drvColour(n);
+    const pits = (state.showPits && H.pitLaps && H.pitLaps[n]) || null;   // dot the pit in-laps
     return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour,
-      borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true, pointRadius: 0, pointHoverRadius: 5 };
+      borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true,
+      pointRadius: pts.map(p => pits && pits.has(p.x) ? 4 : 0), pointHoverRadius: 5,
+      pointBackgroundColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.fill : colour),
+      pointBorderColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.ring : colour), pointBorderWidth: 1.5 };
   });
   drawHistoryChart(datasets, H.bands);
 }
@@ -1316,7 +1349,7 @@ async function renderStrategy(session_key){
 async function renderPosition(session_key){
   const body = $('positionBody'); body.innerHTML = loadingBox('Tracing the order…');
   try {
-    const [pos, rc] = await Promise.all([ fetchPosition(session_key), fetchRC(session_key).catch(()=>[]) ]);
+    const [pos, pit, rc] = await Promise.all([ fetchPosition(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const list = (Array.isArray(pos)?pos:[]).filter(p => num(p.driver_number)!=null && num(p.position)!=null && p.date);
     if (!list.length){ destroyChart('pos'); body.innerHTML = stateBox('No data', 'No position data recorded for this session.'); return; }
     const t0 = Math.min(...list.map(p => new Date(p.date).getTime()));
@@ -1332,16 +1365,31 @@ async function renderPosition(session_key){
     const order = finals.sort((a,b)=> a.lastY - b.lastY).map(o => o.n);
     const bands = safetyByTime(parseSafety(rc), t0);
 
+    // pit-stop markers: place a dot at the position the car held when it entered the pits
+    const posAt = (pts, x) => { let y = null; for (const p of pts){ if (p.x <= x) y = p.y; else break; } return y; };
+    const pitMarks = {};
+    (Array.isArray(pit)?pit:[]).forEach(p => {
+      const n = num(p.driver_number); if (n==null || !p.date || !series[n]) return;
+      const x = (new Date(p.date).getTime() - t0) / 60000; const y = posAt(series[n], x);
+      if (y!=null) (pitMarks[n] = pitMarks[n] || []).push({ x, y });
+    });
+
     body.innerHTML = `<div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
     const redraw = () => {
       const host = $('posHost'); if (!host) return;
       host.innerHTML = '<canvas id="posCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
-      const datasets = order.filter(n => !set || set.has(n)).map(n => {
+      const shown = order.filter(n => !set || set.has(n));
+      const datasets = shown.map(n => {
         const colour = drvColour(n);
         return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
       });
+      if (state.showPits){
+        const marks = shown.flatMap(n => pitMarks[n] || []);
+        if (marks.length) datasets.push({ label:'Pit stops', data: marks, showLine:false, pointStyle:'circle',
+          pointRadius:4, pointHoverRadius:5, backgroundColor:PIT_DOT.fill, borderColor:PIT_DOT.ring, borderWidth:1.5 });
+      }
       drawPositionChart(datasets, maxPos || 20, bands);
     };
     state.raceRedraw.pos = redraw;
