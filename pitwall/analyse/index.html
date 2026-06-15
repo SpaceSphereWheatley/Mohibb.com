@@ -374,6 +374,7 @@ const state = {
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
   raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
   showPits: true,        // race charts: mark each driver's pit stops with a dot
+  renderGen: 0,          // bumped per session load; a scheduled panel retry aborts if it changed
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
   pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
 };
@@ -476,6 +477,25 @@ function stateBox(badge, msg, kind){
   return `<div class="state ${kind||''}"><span class="badge">${esc(badge)}</span><span class="msg">${esc(msg)}</span></div>`;
 }
 function loadingBox(msg){ return stateBox('Loading', msg || 'Fetching session data…'); }
+
+/* ---------- panel auto-retry ----------
+   A panel that fails (usually OpenF1 rate-limiting a burst of concurrent
+   requests) waits a randomised 5–10s — to desync it from its siblings — and
+   re-runs itself, up to PANEL_RETRIES times, before falling back to its error
+   state. Each render function takes an `attempt` arg (0 on the first try) and
+   calls panelRetry() from its catch. */
+const PANEL_RETRIES = 2;
+const retryWait = () => 5000 + Math.random() * 5000;   // 5–10s, jittered per panel
+function panelRetry(label, err, body, attempt, again, failHtml){
+  logError(`${label} (attempt ${attempt + 1})`, err);
+  if (attempt < PANEL_RETRIES){
+    const gen = state.renderGen;   // don't let a queued retry clobber a newly-loaded session
+    if (body) body.innerHTML = stateBox('Retrying', `That didn’t load — trying again in a few seconds (attempt ${attempt + 2} of ${PANEL_RETRIES + 1})…`);
+    setTimeout(() => { if (state.renderGen === gen) again(); }, retryWait());
+  } else if (body){
+    body.innerHTML = failHtml;
+  }
+}
 
 /* team colour fallbacks (so cross-session tables still get an accent) */
 const TEAM_COLOURS = {
@@ -681,6 +701,7 @@ async function loadSessions(meeting_key){
 async function loadSession(session_key){
   const s = state.sessions.find(x => String(x.session_key) === String(session_key));
   if (!s){ return; }
+  state.renderGen++;   // invalidate any panel retries still pending from a previous session
   state.session = s;
   setSessionBanner(s);
   writeHash();   // reflect the selection in the URL so it can be shared/bookmarked
@@ -720,7 +741,7 @@ async function loadSession(session_key){
 }
 
 /* ---------- PRACTICE: theoretical best lap ---------- */
-async function renderTheoretical(session_key){
+async function renderTheoretical(session_key, attempt=0){
   const body = $('theoreticalBody'); body.innerHTML = loadingBox('Computing theoretical best laps…');
   try {
     const laps = await fetchLaps(session_key);
@@ -741,11 +762,11 @@ async function renderTheoretical(session_key){
         <td class="num tar ${r.left!=null && r.left>0.001?'loss':'muted'}">${r.left!=null?('−'+r.left.toFixed(3)):'—'}</td>
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note">Theoretical best sums each driver’s quickest sector 1, 2 and 3 from this session — the lap they could have strung together. “Left on table” is how much their real fastest lap missed it by. Deleted laps aren’t flagged in the public data, so treat outliers with a pinch of salt.</div>`;
-  } catch (e){ logError('theoretical', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data for this session. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('theoretical', e, body, attempt, () => renderTheoretical(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data for this session. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- PRACTICE: long-run pace ---------- */
-async function renderLongRun(session_key){
+async function renderLongRun(session_key, attempt=0){
   const body = $('longrunBody'); body.innerHTML = loadingBox('Finding race-sim stints…');
   try {
     const [laps, stints] = await Promise.all([ fetchLaps(session_key), fetchStints(session_key) ]);
@@ -765,11 +786,11 @@ async function renderLongRun(session_key){
         <td class="num tar ${i===0?'muted':''}">${i===0?'—':fmtGap(r.median-leader)}</td>
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note">Each driver’s best race-sim stint: 5+ laps on one compound, median of the laps within ${Math.round((PACE_WINDOW-1)*100)}% of that stint’s quickest (filtering out traffic and cool-down laps). Fuel loads differ between cars, so read this as a directional pace guide rather than a stopwatch.</div>`;
-  } catch (e){ logError('long-run', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load stint/lap data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('long-run', e, body, attempt, () => renderLongRun(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load stint/lap data. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- QUALIFYING: pace ranking ---------- */
-async function renderQualiPace(session_key){
+async function renderQualiPace(session_key, attempt=0){
   const body = $('qpaceBody'); body.innerHTML = loadingBox('Ranking qualifying laps…');
   try {
     const laps = await fetchLaps(session_key);
@@ -783,7 +804,7 @@ async function renderQualiPace(session_key){
     const paint = (m) => { if (m === 'graph') drawQpaceChart(rows); else { destroyChart('qpace'); $('qpaceView').innerHTML = qpaceTable(rows); } };
     wireSeg('qpace', paint);
     paint(mode);
-  } catch (e){ logError('quali pace', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('quali pace', e, body, attempt, () => renderQualiPace(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error')); }
 }
 function qpaceTable(rows){
   const pole = rows[0].best;
@@ -827,7 +848,7 @@ function drawQpaceChart(rows){
 }
 
 /* ---------- QUALIFYING: actual vs practice theoretical ---------- */
-async function renderQualiTheo(qSession){
+async function renderQualiTheo(qSession, attempt=0){
   const body = $('qtheoBody'); body.innerHTML = loadingBox('Comparing quali laps to practice potential…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
@@ -852,7 +873,7 @@ async function renderQualiTheo(qSession){
     const paint = (m) => { if (m === 'graph') drawQtheoChart(rows); else { destroyChart('qtheo'); $('qtheoView').innerHTML = qtheoTable(rows); } };
     wireSeg('qtheo', paint);
     paint(mode);
-  } catch (e){ logError('quali-theo', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load practice/qualifying data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('quali-theo', e, body, attempt, () => renderQualiTheo(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t load practice/qualifying data. Tap Reload to retry.', 'error')); }
 }
 function qtheoTable(rows){
   return `<div class="tbl-scroll"><table class="tbl">
@@ -900,7 +921,7 @@ function drawQtheoChart(rows){
 }
 
 /* ---------- QUALIFYING: race pace indicator ---------- */
-async function renderRPI(qSession){
+async function renderRPI(qSession, attempt=0){
   const body = $('rpiBody'); body.innerHTML = loadingBox('Building the race-pace picture…');
   try {
     // long-run source: prefer FP2, then FP3, then FP1 (teams run race sims mainly in FP2)
@@ -944,7 +965,7 @@ async function renderRPI(qSession){
         <td class="num tar"><b>${r.combined===Infinity?'—':r.combined.toFixed(1)}</b></td>
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note"><b>Informational, not a prediction.</b> This blends one-lap qualifying rank with long-run pace rank (from ${lrLabel}) into a single directional signal of who looks strong heading into the race. It can’t see fuel loads, reliability, weather, strategy or Sunday track evolution — so it’s a rough guide, not a forecast.</div>`;
-  } catch (e){ logError('rpi', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t assemble the race-pace indicator. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('rpi', e, body, attempt, () => renderRPI(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t assemble the race-pace indicator. Tap Reload to retry.', 'error')); }
 }
 // {n,v} (lower v = better) -> {n: rank}
 function rankMap(entries){
@@ -993,7 +1014,7 @@ async function weekendPitLoss(){
   return state.pitLoss;
 }
 
-async function renderPitLoss(){
+async function renderPitLoss(attempt=0){
   const body = $('pitlossBody'); if (!body) return;
   body.innerHTML = loadingBox('Estimating the weekend pit loss…');
   try {
@@ -1006,7 +1027,7 @@ async function renderPitLoss(){
       <div class="pl-figure"><span class="pl-value">${r.seconds.toFixed(1)}<span class="pl-unit">s</span></span><span class="pl-label">estimated pit loss</span></div>
       <div class="panel-note" style="border-top:none;padding:0">The full time a stop costs — pit-lane transit plus the stationary tyre change — taken as the median of ${r.samples} clean practice in/out-lap pair${r.samples===1?'':'s'} measured against each driver's green-lap pace. A single weekend-level figure for gauging where a car rejoins after a race stop, not a per-team number; practice stops are noisy, so treat it as a guide.</div>
     </div>`;
-  } catch (e){ logError('pitloss', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t estimate pit loss. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('pitloss', e, body, attempt, () => renderPitLoss(attempt+1), stateBox('Unavailable', 'Couldn’t estimate pit loss. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- RACE: lap chart ---------- */
@@ -1129,7 +1150,7 @@ function orderByLaps(groups){
   }).sort((a,b)=> (b.last - a.last) || (a.total - b.total)).map(o => o.n);
 }
 
-async function renderLapChart(session_key){
+async function renderLapChart(session_key, attempt=0){
   const body = $('lapchartBody'); body.innerHTML = loadingBox('Plotting lap times…');
   try {
     const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
@@ -1171,11 +1192,11 @@ async function renderLapChart(session_key){
     };
     state.raceRedraw.lap = redraw;
     redraw();
-  } catch (e){ logError('lap chart', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('lap chart', e, body, attempt, () => renderLapChart(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- RACE: race-history trace (gap to a reference car) ---------- */
-async function renderHistory(session_key){
+async function renderHistory(session_key, attempt=0){
   const body = $('historyBody'); body.innerHTML = loadingBox('Building the race-history trace…');
   try {
     const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
@@ -1213,7 +1234,7 @@ async function renderHistory(session_key){
     $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
     state.raceRedraw.hist = drawHistory;
     drawHistory();
-  } catch (e){ logError('history', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data for the race-history trace. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('history', e, body, attempt, () => renderHistory(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data for the race-history trace. Tap Reload to retry.', 'error')); }
 }
 function drawHistory(){
   const H = state.history; if (!H) return;
@@ -1292,7 +1313,7 @@ function drawLapChart(datasets, yMin, yMax, bands){
 }
 
 /* ---------- RACE: tyre strategy + pit stops ---------- */
-async function renderStrategy(session_key){
+async function renderStrategy(session_key, attempt=0){
   const body = $('strategyBody'); body.innerHTML = loadingBox('Reconstructing strategies…');
   try {
     const [stints, pit] = await Promise.all([ fetchStints(session_key), fetchPit(session_key).catch(()=>[]) ]);
@@ -1342,14 +1363,14 @@ async function renderStrategy(session_key){
       </div>
     </div>
     <div class="panel-note">Bar width is lap count per stint. Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
-  } catch (e){ logError('strategy', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load strategy data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('strategy', e, body, attempt, () => renderStrategy(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load strategy data. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- RACE: position over time ---------- */
-async function renderPosition(session_key){
+async function renderPosition(session_key, attempt=0){
   const body = $('positionBody'); body.innerHTML = loadingBox('Tracing the order…');
   try {
-    const [pos, pit, rc] = await Promise.all([ fetchPosition(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
+    const [pos, pit, laps, rc] = await Promise.all([ fetchPosition(session_key), fetchPit(session_key).catch(()=>[]), fetchLaps(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const list = (Array.isArray(pos)?pos:[]).filter(p => num(p.driver_number)!=null && num(p.position)!=null && p.date);
     if (!list.length){ destroyChart('pos'); body.innerHTML = stateBox('No data', 'No position data recorded for this session.'); return; }
     const t0 = Math.min(...list.map(p => new Date(p.date).getTime()));
@@ -1361,6 +1382,18 @@ async function renderPosition(session_key){
         .map(p => { const y = num(p.position); maxPos = Math.max(maxPos, y); return { x:(new Date(p.date).getTime()-t0)/60000, y }; });
       series[n] = pts;
       finals.push({ n, lastY: pts.length ? pts[pts.length-1].y : 99 });
+    });
+    // the position feed only emits on a change, so a car that holds station (or
+    // leads flag-to-flag) stops early. Extend each trace to the end of its own
+    // last completed lap: finishers run to the flag, retirements stop where they ended.
+    const lapGroups = groupByDriver(laps);
+    Object.keys(series).map(Number).forEach(n => {
+      const pts = series[n], ls = lapGroups[n]; if (!pts.length || !ls || !ls.length) return;
+      let endMs = -Infinity;
+      for (const l of ls){ if (!l.date_start) continue; const d = num(l.lap_duration); const t = new Date(l.date_start).getTime() + (d>0 ? d*1000 : 0); if (t > endMs) endMs = t; }
+      if (endMs === -Infinity) return;
+      const endX = (endMs - t0) / 60000, last = pts[pts.length-1];
+      if (endX > last.x) pts.push({ x: endX, y: last.y });   // hold final position to the flag (stepped line)
     });
     const order = finals.sort((a,b)=> a.lastY - b.lastY).map(o => o.n);
     const bands = safetyByTime(parseSafety(rc), t0);
@@ -1375,7 +1408,7 @@ async function renderPosition(session_key){
     });
 
     body.innerHTML = `<div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Each line runs to that car's final lap, so finishers reach the flag and retirements stop where they ended. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
     const redraw = () => {
       const host = $('posHost'); if (!host) return;
       host.innerHTML = '<canvas id="posCanvas"></canvas>';
@@ -1394,7 +1427,7 @@ async function renderPosition(session_key){
     };
     state.raceRedraw.pos = redraw;
     redraw();
-  } catch (e){ logError('position', e); destroyChart('pos'); body.innerHTML = stateBox('Unavailable', 'Couldn’t load position data. Tap Reload to retry.', 'error'); }
+  } catch (e){ destroyChart('pos'); panelRetry('position', e, body, attempt, () => renderPosition(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load position data. Tap Reload to retry.', 'error')); }
 }
 function drawPositionChart(datasets, maxPos, bands){
   if (!window.Chart) return;
