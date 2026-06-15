@@ -70,6 +70,27 @@ jobs:
           if (!files.length) console.log('(no HTML files)');
           EOF
 
+      - name: Syntax-check JS files
+        run: |
+          node --experimental-vm-modules - <<'EOF'
+          const fs = require('fs');
+          const vm = require('vm');
+          const { execSync } = require('child_process');
+          const files = execSync('git ls-files "*.js" ":!:**/*.min.js"', { encoding: 'utf8' })
+            .split('\n').filter(Boolean);
+          let bad = 0;
+          for (const f of files) {
+            const code = fs.readFileSync(f, 'utf8');
+            try {
+              if (/^\s*(import|export)\b/m.test(code)) new vm.SourceTextModule(code);
+              else new Function(code);
+              console.log('ok   ' + f);
+            } catch (e) { bad++; console.error('FAIL ' + f + ' — ' + e.message); }
+          }
+          if (bad) process.exit(1);
+          if (!files.length) console.log('(no JS files)');
+          EOF
+
   html:
     runs-on: ubuntu-latest
     steps:
@@ -89,8 +110,8 @@ jobs:
           node-version: 20
       - name: Install stylelint (config extends need local node_modules)
         run: npm install --no-save stylelint postcss-html stylelint-config-recommended
-      - name: stylelint (inline <style> blocks)
-        run: npx stylelint --customSyntax postcss-html "**/*.html"
+      - name: stylelint (inline <style> blocks and .css files)
+        run: npx stylelint --customSyntax postcss-html "**/*.{html,css}"
 
   accessibility:
     runs-on: ubuntu-latest
