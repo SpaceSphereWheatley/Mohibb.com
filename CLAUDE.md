@@ -11,7 +11,9 @@ dependencies, no framework.
 
 Whenever a PR is opened or updated in this repo, fetch the latest Cloudflare
 Pages bot comment on it and surface the **Preview URL** and **Branch Preview
-URL** to the user — they always need these to check the deploy.
+URL** to the user — they always need these to check the deploy. If the work
+is on a subproject (e.g. `spotkick/`, `pitwall/`, `pdf/`), append that
+subproject's path (e.g. `/spotkick/`) to both URLs.
 
 ## Structure
 
