@@ -78,7 +78,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .h2h-score{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;width:30px;text-align:right;}
 
 #trendCanvas{display:block;width:100%;height:110px;}
-#pressureCanvas,#pressureTakerCanvas{display:block;width:100%;height:160px;}
+#pressureCanvas{display:block;width:100%;height:160px;}
+.canvas-wrap{position:relative;}
+#pressureTakerCanvas{display:block;width:100%;aspect-ratio:4/3;}
+.canvas-tooltip{position:absolute;pointer-events:none;background:var(--ink);color:var(--card);font-size:11px;font-weight:600;padding:4px 8px;border-radius:3px;white-space:nowrap;opacity:0;transform:translate(-50%,-100%);transition:opacity .1s;z-index:5;}
+.canvas-tooltip.visible{opacity:1;}
 .trend-legend{display:flex;gap:16px;margin-top:10px;}
 .tl-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3);font-weight:500;}
 .tl-line{width:16px;height:2px;}

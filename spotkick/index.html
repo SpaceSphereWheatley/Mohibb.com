@@ -209,9 +209,13 @@
     <div class="sec-title">Avg pressure vs conversion (per player)</div>
   </div>
   <div class="trend-panel">
-    <canvas id="pressureTakerCanvas"></canvas>
+    <div class="canvas-wrap">
+      <canvas id="pressureTakerCanvas"></canvas>
+      <div class="canvas-tooltip" id="pressureTakerTooltip"></div>
+    </div>
     <div class="trend-legend">
       <div class="tl-item"><div class="gl-dot zh-h"></div>Each dot = one player · size = penalties taken</div>
+      <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed line = overall avg conversion</div>
     </div>
   </div>
 </div>

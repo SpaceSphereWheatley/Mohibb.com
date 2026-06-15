@@ -232,13 +232,16 @@ function renderPressure(rows) {
   });
 }
 
+let pressureTakerPoints = [];
+
 function renderPressureTakers(rows) {
   const points = pressureByTaker(rows);
+  pressureTakerPoints = [];
   const canvas = document.getElementById('pressureTakerCanvas');
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.parentElement.clientWidth - 32;
-  const H = 160;
+  const W = canvas.parentElement.clientWidth;
+  const H = W * 3 / 4;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   canvas.width = W * dpr; canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
@@ -276,15 +279,39 @@ function renderPressureTakers(rows) {
   ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
   ctx.fillText('Avg pressure index', padL + pW / 2, H - 4);
 
+  // Reference line: overall average conversion rate across these players.
+  const avgConv = points.reduce((s, p) => s + p.pct, 0) / points.length;
+  const ay = ty(avgConv);
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(W - padR, ay);
+  ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.restore();
+
   const maxN = Math.max(...points.map(p => p.n));
   points.forEach(p => {
     const r = 3 + Math.sqrt(p.n / maxN) * 9;
+    const x = tx(p.avgPI), y = ty(p.pct);
     ctx.beginPath();
-    ctx.arc(tx(p.avgPI), ty(p.pct), r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(180,71,31,0.18)';
     ctx.fill();
     ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5; ctx.stroke();
+    pressureTakerPoints.push({ x, y, r, ...p });
   });
+}
+
+function handlePressureTakerHover(evt) {
+  const canvas = document.getElementById('pressureTakerCanvas');
+  const tooltip = document.getElementById('pressureTakerTooltip');
+  const rect = canvas.getBoundingClientRect();
+  const mx = evt.clientX - rect.left, my = evt.clientY - rect.top;
+  const hit = pressureTakerPoints.find(p => Math.hypot(p.x - mx, p.y - my) <= p.r + 1.5);
+  if (!hit) { tooltip.classList.remove('visible'); return; }
+  tooltip.textContent = `${hit.taker} — ${Math.round(hit.pct)}% (${hit.n} taken, avg PI ${Math.round(hit.avgPI)})`;
+  tooltip.style.left = hit.x + 'px';
+  tooltip.style.top = (hit.y - hit.r - 6) + 'px';
+  tooltip.classList.add('visible');
 }
 
 function renderPenalties(rows) {
@@ -345,6 +372,12 @@ function wireEvents() {
       btn.classList.toggle(cls);
     });
   });
+  const pressureTakerCanvas = document.getElementById('pressureTakerCanvas');
+  pressureTakerCanvas.addEventListener('mousemove', handlePressureTakerHover);
+  pressureTakerCanvas.addEventListener('mouseleave', () => {
+    document.getElementById('pressureTakerTooltip').classList.remove('visible');
+  });
+
   window.addEventListener('resize', () => {
     const rows = applyFilters(state.filters);
     renderTrend(rows);
