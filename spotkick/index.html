@@ -69,6 +69,7 @@
   <button type="button" class="chip" id="chipOutcome">All outcomes</button>
   <button type="button" class="chip" id="chipTaker">Any taker</button>
   <button type="button" class="chip" id="chipKeeper">Any keeper</button>
+  <button type="button" class="chip" id="chipDate">All time</button>
 </div>
 
 <div class="filter-sheet" id="filterSheet">
@@ -81,6 +82,20 @@
   <div class="sheet-group">
     <label class="sheet-label" for="selSeason">Season</label>
     <select class="sheet-select" id="selSeason"></select>
+  </div>
+  <div class="sheet-group">
+    <label class="sheet-label" for="selDatePreset">Date range</label>
+    <select class="sheet-select" id="selDatePreset">
+      <option value="all">All time</option>
+      <option value="3">Last 3 months</option>
+      <option value="6">Last 6 months</option>
+      <option value="12">Last 12 months</option>
+      <option value="custom">Custom range</option>
+    </select>
+    <div class="date-range-row">
+      <input class="sheet-select" id="dateFrom" type="date">
+      <input class="sheet-select" id="dateTo" type="date">
+    </div>
   </div>
   <div class="sheet-group">
     <div class="sheet-label">Outcome</div>
@@ -228,6 +243,22 @@
       <div class="tl-item"><div class="tl-line tl-line-accent"></div>Dashed lines = overall avg conversion / pressure</div>
     </div>
   </div>
+</div>
+
+<div class="section mt-20 sec-leaderboard">
+  <div class="sec-header">
+    <div class="sec-title">Top takers</div>
+    <label class="sec-action sec-minsample" for="selLbMinSample">Min taken
+      <select id="selLbMinSample" class="minsample-select">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+      </select>
+    </label>
+  </div>
+  <div class="lb-list" id="leaderboardList"></div>
 </div>
 
 <div class="section mt-20 section-last sec-penalties">

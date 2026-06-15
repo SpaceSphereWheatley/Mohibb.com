@@ -4,13 +4,14 @@
 import {
   loadData, applyFilters, summary, zoneStats, bySeason,
   takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket, pressureByTaker,
+  topTakers, dateBounds,
 } from './data.js';
 
 const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
 const ZONE_ORDER = ['TL','TC','TR','ML','MC','MR','BL','BC','BR'];
 
 const state = {
-  filters: { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null },
+  filters: { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null },
   visibleRows: 8,
 };
 
@@ -35,6 +36,7 @@ function render() {
   renderTrend(rows);
   renderPressure(rows);
   renderPressureTakers(rows);
+  renderLeaderboard(rows);
   renderPenalties(rows);
 }
 
@@ -55,6 +57,14 @@ function renderChips() {
   set('chipOutcome', f.outcomes.size ? [...f.outcomes].join(', ') : 'All outcomes', f.outcomes.size > 0);
   set('chipTaker', f.taker || 'Any taker', !!f.taker);
   set('chipKeeper', f.keeper || 'Any keeper', !!f.keeper);
+  set('chipDate', dateRangeLabel(f), !!(f.dateFrom || f.dateTo));
+}
+
+function dateRangeLabel(f) {
+  if (!f.dateFrom && !f.dateTo) return 'All time';
+  if (f.dateFrom && f.dateTo) return `${f.dateFrom} – ${f.dateTo}`;
+  if (f.dateFrom) return `From ${f.dateFrom}`;
+  return `Until ${f.dateTo}`;
 }
 
 function renderStats(rows) {
@@ -385,6 +395,37 @@ function handlePressureTakerHover(evt) {
   tooltip.classList.add('visible');
 }
 
+function renderLeaderboard(rows) {
+  const list = document.getElementById('leaderboardList');
+  const minSample = Number(document.getElementById('selLbMinSample').value);
+  const takers = topTakers(rows, minSample, 50);
+  if (!takers.length) {
+    list.innerHTML = '<div class="empty">Not enough data for these filters.</div>';
+    return;
+  }
+  const maxN = Math.max(...takers.map(t => t.n));
+  list.innerHTML = takers.map((t, i) => {
+    const color = t.pct >= 85 ? 'var(--green)' : t.pct >= 68 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="lb-row" data-taker="${t.taker}">
+      <div class="lb-rank">${i + 1}</div>
+      <div class="lb-main">
+        <div class="lb-taker">${t.taker}</div>
+        <div class="lb-meta">${t.team} · ${t.n} taken · avg PI ${Math.round(t.avgPI)}</div>
+      </div>
+      <div class="lb-right">
+        <div class="lb-bar-wrap"><div class="lb-bar-fill" style="width:${(t.n / maxN) * 100}%;background:${color};"></div></div>
+        <div class="lb-pct" style="color:${color};">${t.pct.toFixed(0)}%</div>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.lb-row').forEach(el => {
+    el.addEventListener('click', () => {
+      state.filters.taker = el.dataset.taker;
+      render();
+    });
+  });
+}
+
 function renderPenalties(rows) {
   const list = document.getElementById('penaltyList');
   const slice = rows.slice(0, state.visibleRows);
@@ -414,6 +455,35 @@ function populateFilterOptions() {
   fillSelect('selSeason', ['All seasons', ...uniqueValues('season')]);
   fillDatalist('takerOptions', uniqueValues('taker'));
   fillDatalist('keeperOptions', uniqueValues('keeper'));
+  const bounds = dateBounds();
+  if (bounds) {
+    document.getElementById('dateFrom').min = bounds.min;
+    document.getElementById('dateFrom').max = bounds.max;
+    document.getElementById('dateTo').min = bounds.min;
+    document.getElementById('dateTo').max = bounds.max;
+  }
+}
+
+// Fill the from/to date inputs based on the preset dropdown.
+function applyDatePreset() {
+  const preset = document.getElementById('selDatePreset').value;
+  const dateFrom = document.getElementById('dateFrom');
+  const dateTo = document.getElementById('dateTo');
+  if (preset === 'all') {
+    dateFrom.value = '';
+    dateTo.value = '';
+    return;
+  }
+  if (preset === 'custom') return;
+  const bounds = dateBounds();
+  if (!bounds) return;
+  const months = Number(preset);
+  const end = new Date(bounds.max);
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - months);
+  const toISO = d => d.toISOString().slice(0, 10);
+  dateFrom.value = toISO(start) > bounds.min ? toISO(start) : bounds.min;
+  dateTo.value = bounds.max;
 }
 function fillSelect(id, options) {
   document.getElementById(id).innerHTML = options.map(o => `<option>${o}</option>`).join('');
@@ -447,6 +517,10 @@ function wireEvents() {
   document.getElementById('selMinSample').addEventListener('change', () => {
     renderPressureTakers(applyFilters(state.filters));
   });
+  document.getElementById('selLbMinSample').addEventListener('change', () => {
+    renderLeaderboard(applyFilters(state.filters));
+  });
+  document.getElementById('selDatePreset').addEventListener('change', applyDatePreset);
 
   const pressureTakerCanvas = document.getElementById('pressureTakerCanvas');
   pressureTakerCanvas.addEventListener('mousemove', handlePressureTakerHover);
@@ -463,13 +537,16 @@ function wireEvents() {
 }
 
 function clearFilters() {
-  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null };
+  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null };
   state.visibleRows = 8;
 
   document.getElementById('selComp').value = 'All competitions';
   document.getElementById('selSeason').value = 'All seasons';
   document.getElementById('selTaker').value = '';
   document.getElementById('selKeeper').value = '';
+  document.getElementById('selDatePreset').value = 'all';
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
   document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
 
   closeFilter();
@@ -493,6 +570,8 @@ function applyFromSheet() {
     if (btn.classList.contains(cls)) outcomes.add(btn.dataset.outcome);
   });
   state.filters.outcomes = outcomes;
+  state.filters.dateFrom = document.getElementById('dateFrom').value || null;
+  state.filters.dateTo = document.getElementById('dateTo').value || null;
   state.visibleRows = 8;
 
   closeFilter();
