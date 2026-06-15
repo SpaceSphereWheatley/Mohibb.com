@@ -504,7 +504,6 @@ function wireEvents() {
     input.select();
   });
   document.getElementById('filterOverlay').addEventListener('click', closeFilter);
-  document.getElementById('applyBtn').addEventListener('click', applyFromSheet);
   document.getElementById('clearBtn').addEventListener('click', clearFilters);
   document.getElementById('showMore').addEventListener('click', () => {
     state.visibleRows += 10;
@@ -514,6 +513,7 @@ function wireEvents() {
     btn.addEventListener('click', () => {
       const cls = btn.dataset.active;
       btn.classList.toggle(cls);
+      applyFromSheet();
     });
   });
   document.getElementById('selMinSample').addEventListener('change', () => {
@@ -522,7 +522,16 @@ function wireEvents() {
   document.getElementById('selLbMinSample').addEventListener('change', () => {
     renderLeaderboard(applyFilters(state.filters));
   });
-  document.getElementById('selDatePreset').addEventListener('change', applyDatePreset);
+  document.getElementById('selComp').addEventListener('change', applyFromSheet);
+  document.getElementById('selSeason').addEventListener('change', applyFromSheet);
+  document.getElementById('selTaker').addEventListener('change', applyFromSheet);
+  document.getElementById('selKeeper').addEventListener('change', applyFromSheet);
+  document.getElementById('dateFrom').addEventListener('change', applyFromSheet);
+  document.getElementById('dateTo').addEventListener('change', applyFromSheet);
+  document.getElementById('selDatePreset').addEventListener('change', () => {
+    applyDatePreset();
+    applyFromSheet();
+  });
 
   const pressureTakerCanvas = document.getElementById('pressureTakerCanvas');
   pressureTakerCanvas.addEventListener('mousemove', handlePressureTakerHover);
@@ -577,7 +586,6 @@ function applyFromSheet() {
   state.filters.dateTo = document.getElementById('dateTo').value || null;
   state.visibleRows = 8;
 
-  closeFilter();
   render();
 }
 

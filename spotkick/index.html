@@ -103,14 +103,14 @@
   <div class="sheet-group">
     <div class="sheet-label">Outcome</div>
     <div class="outcome-row">
-      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal">⚽ Goal</button>
-      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved">🧤 Saved</button>
-      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed">✗ Missed</button>
+      <button type="button" class="outcome-btn" data-outcome="goal" data-active="active-goal"><span class="outcome-icon">⚽</span>Goal</button>
+      <button type="button" class="outcome-btn" data-outcome="saved" data-active="active-saved"><span class="outcome-icon">🧤</span>Saved</button>
+      <button type="button" class="outcome-btn" data-outcome="missed" data-active="active-missed"><span class="outcome-icon">✗</span>Missed</button>
     </div>
   </div>
-  <div class="sheet-group">
+  <div class="sheet-group sheet-group-taker">
     <label class="sheet-label" for="selTaker">Taker</label>
-    <input class="sheet-select player-search" id="selTaker" type="text" list="takerOptions" placeholder="Any player" autocomplete="off">
+    <input class="sheet-select player-search player-search-lg" id="selTaker" type="text" list="takerOptions" placeholder="Any player" autocomplete="off">
     <datalist id="takerOptions"></datalist>
   </div>
   <div class="sheet-group">
@@ -118,7 +118,6 @@
     <input class="sheet-select player-search" id="selKeeper" type="text" list="keeperOptions" placeholder="Any goalkeeper" autocomplete="off">
     <datalist id="keeperOptions"></datalist>
   </div>
-  <button type="button" class="apply-btn" id="applyBtn">Show results</button>
   <button type="button" class="clear-btn" id="clearBtn">Clear filters</button>
 </div>
 
@@ -158,7 +157,7 @@
 <div class="section mt-20 sec-placement">
   <div class="sec-header">
     <div class="sec-title">Shot placement</div>
-    <div class="sec-action">Tap zone to filter</div>
+    <div class="sec-hint">Tap zone to filter</div>
   </div>
   <div class="goal-panel">
     <div class="goal-hint">Conversion rate per zone — keeper's perspective</div>
