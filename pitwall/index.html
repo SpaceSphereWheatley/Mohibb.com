@@ -238,6 +238,10 @@ tr.fastest .code{color:var(--accent-ink);}
 .wx-canvas{height:clamp(160px,38vw,200px);position:relative;}
 .rain-on{color:var(--blue) !important;}
 
+/* ---------- previous session (spoiler) ---------- */
+.prev-toggle-wrap{padding:0 24px 22px;}
+.prev-summary{padding:18px 24px;font-size:14px;}
+
 /* ---------- footer ---------- */
 footer{margin-top:56px;padding-top:22px;border-top:1.5px solid var(--line);font-size:12.5px;color:var(--ink-3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
 footer a{color:var(--ink-2);text-decoration:none;font-weight:600;border-bottom:1.5px solid transparent;transition:border-color .15s,color .15s;}
@@ -324,6 +328,23 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
     <div class="cd-circuit">OpenF1 restricts real-time access to API key holders while a session is in progress.</div>
     <p class="cd-note">Race control, pit stops, overtakes, tyre strategy and weather can't be shown here until the session ends and OpenF1's live lock lifts — usually within a few minutes of the chequered flag.</p>
   </div>
+
+  <!-- PREVIOUS SESSION (spoiler-gated) -->
+  <section class="section" id="sec-prev" style="display:none">
+    <div class="sec-head">
+      <span class="idx">&mdash;</span><span class="label">Previous Session</span>
+      <span class="note" id="prevNote"></span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel">
+      <div id="prevToggleBox" class="state">
+        <span class="badge">Spoiler</span>
+        <span class="msg" id="prevMsg">Results from the previous session are hidden.</span>
+      </div>
+      <div class="prev-toggle-wrap"><button class="refresh" id="prevToggleBtn" type="button">Reveal results</button></div>
+      <div id="prevBody" style="display:none"></div>
+    </div>
+  </section>
 
   <!-- 1. STANDINGS -->
   <section class="section" id="sec-standings">
@@ -927,6 +948,103 @@ function chartBase(opts){
 function destroyChart(key){ if (state.charts[key]){ try{ state.charts[key].destroy(); }catch{} state.charts[key]=null; } }
 
 /* ============================================================
+   PREVIOUS SESSION (spoiler-gated final classification + summary)
+   ============================================================ */
+const prevState = { loaded:false, revealed:false, sessionKey:null };
+function showPrevSection(session){
+  const sec = $('sec-prev');
+  if (!session){ sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  if (prevState.sessionKey !== session.session_key){
+    // a different session than last time — reset the spoiler gate
+    prevState.sessionKey = session.session_key;
+    prevState.loaded = false;
+    prevState.revealed = false;
+    $('prevBody').style.display = 'none';
+    $('prevBody').innerHTML = '';
+    $('prevToggleBox').style.display = '';
+    $('prevToggleBtn').style.display = '';
+    $('prevToggleBtn').textContent = 'Reveal results';
+  }
+  const where = [session.circuit_short_name || session.location, session.session_name].filter(Boolean).join(' · ');
+  $('prevNote').textContent = where;
+  $('prevMsg').textContent = `Results from the previous session (${where}) are hidden.`;
+}
+async function loadPrevious(session){
+  const body = $('prevBody');
+  body.innerHTML = stateBox('Loading', 'Fetching previous session results…');
+  try {
+    const key = session.session_key;
+    const [pos, drivers, rc] = await Promise.all([
+      getJSON(OPENF1 + 'position?session_key=' + key),
+      getJSON(OPENF1 + 'drivers?session_key=' + key),
+      getJSON(OPENF1 + 'race_control?session_key=' + key),
+    ]);
+    const dmap = {};
+    (Array.isArray(drivers)?drivers:[]).forEach(d => {
+      const n = num(d.driver_number); if (n==null) return;
+      dmap[n] = {
+        acr: d.name_acronym || ('#'+n),
+        name: d.full_name || d.broadcast_name || ('#'+n),
+        team: d.team_name || '',
+        colour: d.team_colour ? ('#'+String(d.team_colour).replace('#','')) : null,
+      };
+    });
+    const latest = {};
+    (Array.isArray(pos)?pos:[]).forEach(p => {
+      const n = num(p.driver_number); if (n==null) return;
+      const cur = latest[n];
+      if (!cur || new Date(p.date) > new Date(cur.date)) latest[n] = p;
+    });
+    const rows = Object.values(latest).filter(p => p.position != null)
+      .sort((a,b) => a.position - b.position);
+    if (!rows.length){ body.innerHTML = stateBox('No data', 'Final classification unavailable for this session.'); return; }
+
+    let summary = '';
+    if (/race/i.test(session.session_name||'')){
+      const w = dmap[rows[0]?.driver_number] || {};
+      const p2 = dmap[rows[1]?.driver_number] || {};
+      const p3 = dmap[rows[2]?.driver_number] || {};
+      const rcArr = Array.isArray(rc) ? rc : [];
+      const red = rcArr.some(m => /red flag/i.test(m.message||''));
+      const sc = rcArr.some(m => /safety car/i.test(m.message||'') && !/virtual/i.test(m.message||''));
+      const vsc = rcArr.some(m => /virtual safety/i.test(m.message||''));
+      let extra = '';
+      if (red) extra = ' The race was interrupted by a red flag.';
+      else if (sc) extra = ' A safety car was deployed during the race.';
+      else if (vsc) extra = ' A virtual safety car was deployed during the race.';
+      summary = `<p class="lede prev-summary">${esc(w.name||'—')} won the ${esc(session.session_name||'race')} at ${esc(session.circuit_short_name || session.location || '')}, ahead of ${esc(p2.name||'—')} in second and ${esc(p3.name||'—')} in third.${extra}</p>`;
+    }
+
+    const tbl = `<table class="tbl">
+      <thead><tr><th scope="col">Pos</th><th scope="col">Driver</th><th scope="col">Team</th></tr></thead>
+      <tbody>${rows.map(p => {
+        const d = dmap[p.driver_number] || drv(p.driver_number);
+        return `<tr style="--team:${d.colour||'var(--ink-4)'}">
+          <td class="pos">${esc(p.position)}</td>
+          <td class="accent-cell"><span class="code">${esc(d.acr)}</span> <span class="muted">${esc(d.name)}</span></td>
+          <td class="muted">${esc(d.team)}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+
+    body.innerHTML = summary + tbl;
+  } catch (e) {
+    logError('previous session', e);
+    body.innerHTML = stateBox('Unavailable', 'Could not load previous session results — tap reveal to retry.', 'error');
+    prevState.loaded = false;
+  }
+}
+$('prevToggleBtn').addEventListener('click', async () => {
+  $('prevToggleBox').style.display = 'none';
+  $('prevToggleBtn').style.display = 'none';
+  $('prevBody').style.display = '';
+  if (!prevState.loaded){
+    prevState.loaded = true;
+    await loadPrevious(state.session);
+  }
+});
+
+/* ============================================================
    IDLE — next race countdown
    ============================================================ */
 async function loadNextRace(){
@@ -1025,10 +1143,13 @@ async function cycle(){
     setFlag([]);
     showLiveSections(false);     // hide live-only sections entirely when nothing is live
     hideLocked();
+    showPrevSection(state.session);
     await loadNextRace();
     showCountdown();
     setUpdated();
   }
+
+  if (mode !== 'IDLE') $('sec-prev').style.display = 'none';
 }
 
 async function refresh(btn){
