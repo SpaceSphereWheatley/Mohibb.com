@@ -182,8 +182,9 @@ tr.best .code{color:var(--accent-ink);}
 
 /* ---------- tyre strategy (generalised from the live dashboard) ---------- */
 .stints{padding:10px 16px 14px;}
-.stint-row{display:grid;grid-template-columns:54px 1fr;gap:12px;align-items:center;padding:7px 0;}
+.stint-row{display:grid;grid-template-columns:54px 1fr auto;gap:12px;align-items:center;padding:7px 0;}
 .stint-row .drv{font-family:var(--mono);font-weight:700;font-size:12px;display:flex;align-items:center;gap:7px;}
+.stint-total{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink-3);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}
 .stint-row .drv .chip{width:4px;height:14px;border-radius:2px;background:var(--team,var(--ink-4));}
 .bars{display:flex;width:100%;height:22px;border-radius:3px;overflow:hidden;background:var(--bg);border:1px solid var(--line-soft);}
 .bar{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:600;color:rgba(0,0,0,0.6);min-width:14px;overflow:hidden;white-space:nowrap;}
@@ -556,6 +557,39 @@ function bestLap(laps){
 
 const COMPOUND = { SOFT:'SOFT', MEDIUM:'MEDIUM', HARD:'HARD', DRY:'HARD', INTERMEDIATE:'INTERMEDIATE', INTERMEDIATES:'INTERMEDIATE', INTER:'INTERMEDIATE', WET:'WET' };
 function normCompound(c){ return COMPOUND[(c||'').toUpperCase()] || 'UNKNOWN'; }
+
+/* Rebuild a clean, contiguous stint timeline from OpenF1's stints rows, which
+   in practice carry duplicates, missing lap_start/lap_end, overlaps, and a null
+   lap_end on the final stint. `lastLap` (the driver's last completed lap, from
+   lap data) closes the final stint and bounds the total. Returns ordered
+   [{start, end, laps, cmp}]. */
+function reconstructStints(rows, lastLap){
+  const posNum = (x) => { const n = num(x); return (n != null && n > 0) ? n : null; };   // num(null)===0, but lap/stint numbers are 1-based
+  // merge rows that share a stint_number (OpenF1 can emit several per stint)
+  const byNum = new Map(), loose = [];
+  (Array.isArray(rows)?rows:[]).forEach(r => {
+    const seg = { sn:posNum(r.stint_number), ls:posNum(r.lap_start), le:posNum(r.lap_end), cmp:normCompound(r.compound) };
+    if (seg.sn == null){ loose.push(seg); return; }
+    const e = byNum.get(seg.sn);
+    if (!e){ byNum.set(seg.sn, seg); return; }
+    e.ls = e.ls==null ? seg.ls : (seg.ls==null ? e.ls : Math.min(e.ls, seg.ls));
+    e.le = e.le==null ? seg.le : (seg.le==null ? e.le : Math.max(e.le, seg.le));
+    if (e.cmp==='UNKNOWN' && seg.cmp!=='UNKNOWN') e.cmp = seg.cmp;
+  });
+  const segs = [...byNum.values(), ...loose].sort((a,b)=> (a.ls ?? a.sn ?? 0) - (b.ls ?? b.sn ?? 0));
+  const out = [];
+  for (let i=0; i<segs.length; i++){
+    const s = segs[i], next = segs[i+1];
+    let start = s.ls != null ? s.ls : (out.length ? out[out.length-1].end + 1 : 1);
+    const nextStart = next ? next.ls : null;
+    let end = s.le;
+    if (end == null) end = (nextStart != null) ? nextStart - 1 : (lastLap != null ? lastLap : start);
+    if (nextStart != null && end >= nextStart) end = nextStart - 1;        // trim overlaps with the next stint
+    if (next == null && lastLap != null) end = Math.max(start, lastLap);   // final stint runs to the driver's last lap
+    if (end >= start) out.push({ start, end, laps: end - start + 1, cmp: s.cmp });
+  }
+  return out;
+}
 
 // long-run pace per driver: each stint of >=5 clean laps -> median of laps within 107% of the stint's quickest.
 // returns { byDriver: {n: {best:{compound,laps,median}, runs:[...]}}}
@@ -1316,20 +1350,18 @@ function drawLapChart(datasets, yMin, yMax, bands){
 async function renderStrategy(session_key, attempt=0){
   const body = $('strategyBody'); body.innerHTML = loadingBox('Reconstructing strategies…');
   try {
-    const [stints, pit] = await Promise.all([ fetchStints(session_key), fetchPit(session_key).catch(()=>[]) ]);
+    const [stints, pit, laps] = await Promise.all([ fetchStints(session_key), fetchPit(session_key).catch(()=>[]), fetchLaps(session_key).catch(()=>[]) ]);
     const list = Array.isArray(stints) ? stints : [];
     if (!list.length){ body.innerHTML = stateBox('No data', 'No tyre stint data recorded for this session.'); return; }
     const byDrv = groupByDriver(list);
+    const lapGroups = groupByDriver(laps);
+    const lastLapOf = (n) => { const ls = lapGroups[n]; if (!ls || !ls.length) return null; let m = 0; for (const l of ls){ const v = num(l.lap_number); if (v!=null && v>m) m = v; } return m || null; };
     const drivers = Object.keys(byDrv).map(Number).sort((a,b)=> a-b);
     const stintRows = drivers.map(n => {
-      const sts = byDrv[n].slice().sort((a,b)=> (num(a.stint_number)||0)-(num(b.stint_number)||0));
-      const segs = sts.map(s => {
-        const start = num(s.lap_start) ?? 0, end = num(s.lap_end) ?? start;
-        return { laps: Math.max(1, end - start + 1), cmp: normCompound(s.compound) };
-      });
-      const total = segs.reduce((a,s)=> a+s.laps, 0) || 1;
-      const bars = segs.map(s => `<span class="bar cmp-${s.cmp}" style="width:${(s.laps/total*100).toFixed(2)}%" title="${s.cmp} · ${s.laps} laps">${s.laps>=3?s.laps:''}</span>`).join('');
-      return `<div class="stint-row" style="--team:${drvColour(n)}"><span class="drv"><span class="chip"></span>${esc(drv(n).acr)}</span><span class="bars">${bars}</span></div>`;
+      const segs = reconstructStints(byDrv[n], lastLapOf(n));
+      const total = segs.reduce((a,s)=> a+s.laps, 0);
+      const bars = segs.map(s => `<span class="bar cmp-${s.cmp}" style="width:${total?(s.laps/total*100).toFixed(2):0}%" title="${s.cmp} · laps ${s.start}–${s.end} (${s.laps})">${s.laps>=3?s.laps:''}</span>`).join('');
+      return `<div class="stint-row" style="--team:${drvColour(n)}"><span class="drv"><span class="chip"></span>${esc(drv(n).acr)}</span><span class="bars">${bars}</span><span class="stint-total">${total||'—'}</span></div>`;
     }).join('');
 
     // pit stops ranked by stationary/pit time
@@ -1362,7 +1394,7 @@ async function renderStrategy(session_key, attempt=0){
         <div class="tbl-scroll">${pitHtml}</div>
       </div>
     </div>
-    <div class="panel-note">Bar width is lap count per stint. Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
+    <div class="panel-note">Bar width is lap count per stint; the figure at the right is the driver's total race laps (hover a bar for its compound and lap range). Stints are rebuilt from OpenF1's data — deduped, with gaps and the final stint closed off — so the totals line up with the race distance. Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
   } catch (e){ panelRetry('strategy', e, body, attempt, () => renderStrategy(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load strategy data. Tap Reload to retry.', 'error')); }
 }
 
