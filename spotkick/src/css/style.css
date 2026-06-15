@@ -40,7 +40,9 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .sc-value-sm{font-size:20px;}
 .sc-sub{font-size:12px;color:var(--ink-3);margin-top:3px;}
 
-.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;}
+.sec-minsample{display:flex;align-items:center;gap:6px;cursor:default;white-space:nowrap;}
+.minsample-select{font-family:inherit;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--card);border:1.5px solid var(--line);padding:3px 6px;}
 .sec-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
 .sec-action{font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;}
 

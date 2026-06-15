@@ -235,7 +235,8 @@ function renderPressure(rows) {
 let pressureTakerPoints = [];
 
 function renderPressureTakers(rows) {
-  const points = pressureByTaker(rows);
+  const minSample = Number(document.getElementById('selMinSample').value);
+  const points = pressureByTaker(rows, minSample);
   pressureTakerPoints = [];
   const canvas = document.getElementById('pressureTakerCanvas');
   if (!canvas) return;
@@ -375,6 +376,10 @@ function wireEvents() {
       btn.classList.toggle(cls);
     });
   });
+  document.getElementById('selMinSample').addEventListener('change', () => {
+    renderPressureTakers(applyFilters(state.filters));
+  });
+
   const pressureTakerCanvas = document.getElementById('pressureTakerCanvas');
   pressureTakerCanvas.addEventListener('mousemove', handlePressureTakerHover);
   pressureTakerCanvas.addEventListener('mouseleave', () => {
