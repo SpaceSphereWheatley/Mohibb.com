@@ -740,15 +740,17 @@ function analyseLapTelemetry(samples){
     cornerFast: buckets.fast.length ? avg(buckets.fast) : null,
   };
 }
-// min-max scale a {n,v} list to 0-100; invert=true for "lower is better" metrics (lap/pace times)
-function normalizeField(entries, invert){
-  const vals = entries.map(e=>e.v).filter(v=>v!=null);
+// rank a {n,v} list and spread scores evenly 0-100 by percentile (so close raw values still separate visually);
+// invert=true for "lower is better" metrics (lap/pace times)
+function percentileScore(entries, invert){
   const out = {};
-  if (!vals.length) return out;
-  const min = Math.min(...vals), max = Math.max(...vals);
-  entries.forEach(e => {
-    if (e.v == null){ out[e.n] = null; return; }
-    let score = (max===min) ? 100 : (e.v-min)/(max-min)*100;
+  const valid = entries.filter(e=>e.v!=null);
+  entries.forEach(e => { if (e.v == null) out[e.n] = null; });
+  if (!valid.length) return out;
+  const sorted = [...valid].sort((a,b)=>a.v-b.v);
+  const n = sorted.length;
+  sorted.forEach((e,i) => {
+    const score = n>1 ? i/(n-1)*100 : 100;
     out[e.n] = invert ? 100-score : score;
   });
   return out;
@@ -1234,10 +1236,10 @@ function buildCarPerfEntities(drivers, traits, strengthRaw, mode){
 // scale each axis + strength to 0-100 across the entities (field-relative)
 function normalizeCarPerfEntities(entities){
   CARPERF_AXES.forEach(ax => {
-    const scores = normalizeField(entities.map(e=>({ n:e.key, v:e.axesRaw[ax.key] })), false);
+    const scores = percentileScore(entities.map(e=>({ n:e.key, v:e.axesRaw[ax.key] })), false);
     entities.forEach(e => { e.axisScore = e.axisScore || {}; e.axisScore[ax.key] = scores[e.key]; });
   });
-  const sScores = normalizeField(entities.map(e=>({ n:e.key, v:e.rawStrength })), true);
+  const sScores = percentileScore(entities.map(e=>({ n:e.key, v:e.rawStrength })), true);
   entities.forEach(e => e.strengthScore = sScores[e.key]);
   return entities;
 }
@@ -1305,7 +1307,7 @@ function drawCarPerf(){
   const shown = topN>0 ? entities.slice(0, topN) : entities;
 
   drawCarRadar(shown);
-  drawCarStrength(entities, strengthLabel);
+  drawCarStrength(shown, strengthLabel);
 }
 
 function drawCarRadar(entities){
