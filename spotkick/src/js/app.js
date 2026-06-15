@@ -3,7 +3,7 @@
 
 import {
   loadData, applyFilters, summary, zoneStats, bySeason,
-  takerProfile, uniqueValues, ZONE_LABEL,
+  takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket,
 } from './data.js';
 
 const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
@@ -33,6 +33,7 @@ function render() {
   renderHeatmap(rows);
   renderPlayer(rows);
   renderTrend(rows);
+  renderPressure(rows);
   renderPenalties(rows);
 }
 
@@ -179,6 +180,67 @@ function renderTrend(rows) {
   data.forEach((d, i) => ctx.fillText(d.season.replace(/^20/, '').replace('/20', '/'), tx(i), H - 4));
 }
 
+function renderPressure(rows) {
+  const buckets = byPressureBucket(rows);
+  const canvas = document.getElementById('pressureCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 32;
+  const H = 110;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const padL = 28, padR = 8, padT = 22, padB = 16;
+  const pW = W - padL - padR, pH = H - padT - padB;
+  const n = buckets.length;
+  const bw = pW / n;
+  const tx = i => padL + i * bw;
+  const ty = v => padT + pH - (v / 100) * pH;
+
+  [0, 25, 50, 75, 100].forEach(v => {
+    const y = ty(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+    ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 3, y + 3);
+  });
+
+  // Bars: conversion % per pressure band.
+  buckets.forEach((b, i) => {
+    if (!b.n) return;
+    const x = tx(i) + bw * 0.15, w = bw * 0.7;
+    const y = ty(b.pct);
+    ctx.fillStyle = 'rgba(180,71,31,0.18)';
+    ctx.fillRect(x, y, w, padT + pH - y);
+    ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, padT + pH - y);
+  });
+
+  // Strip plot: individual penalties, jittered within their band, dot per outcome.
+  const seeds = new Map();
+  rows.forEach(p => {
+    const i = Math.min(n - 1, Math.floor(p.pressureIndex / 10));
+    const key = i;
+    const seed = (seeds.get(key) || 0) + 1;
+    seeds.set(key, seed);
+    const jitter = ((seed * 37) % 100) / 100; // deterministic spread
+    const x = tx(i) + 4 + jitter * (bw - 8);
+    const y = padT - 6 - ((seed * 13) % 10);
+    ctx.beginPath();
+    ctx.arc(x, Math.max(3, y), 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = p.outcome === 'goal' ? '#2E6F4F' : '#C0392B';
+    ctx.globalAlpha = 0.6;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+  buckets.forEach((b, i) => ctx.fillText(b.lo + '–' + b.hi, tx(i) + bw / 2, H - 4));
+}
+
 function renderPenalties(rows) {
   const list = document.getElementById('penaltyList');
   const slice = rows.slice(0, state.visibleRows);
@@ -237,7 +299,11 @@ function wireEvents() {
       btn.classList.toggle(cls);
     });
   });
-  window.addEventListener('resize', () => renderTrend(applyFilters(state.filters)));
+  window.addEventListener('resize', () => {
+    const rows = applyFilters(state.filters);
+    renderTrend(rows);
+    renderPressure(rows);
+  });
 }
 
 function applyFromSheet() {
