@@ -182,19 +182,25 @@ function renderTrend(rows) {
 }
 
 function renderPressure(rows) {
-  const buckets = byPressureBucket(rows);
+  const buckets = byPressureBucket(rows).filter(b => b.n);
   const canvas = document.getElementById('pressureCanvas');
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.parentElement.clientWidth - 32;
-  const H = 110;
+  const H = 160;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   canvas.width = W * dpr; canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  const padL = 28, padR = 8, padT = 22, padB = 16;
+  if (!buckets.length) {
+    ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+    ctx.fillText('Not enough data for this view', W / 2, H / 2);
+    return;
+  }
+
+  const padL = 32, padR = 8, padT = 18, padB = 32;
   const pW = W - padL - padR, pH = H - padT - padB;
   const n = buckets.length;
   const bw = pW / n;
@@ -206,40 +212,24 @@ function renderPressure(rows) {
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
     ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
-    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 3, y + 3);
+    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 5, y + 3);
   });
 
-  // Bars: conversion % per pressure band.
+  // Bars: conversion % per pressure band, labelled with value and sample size.
   buckets.forEach((b, i) => {
-    if (!b.n) return;
     const x = tx(i) + bw * 0.15, w = bw * 0.7;
     const y = ty(b.pct);
     ctx.fillStyle = 'rgba(180,71,31,0.18)';
     ctx.fillRect(x, y, w, padT + pH - y);
     ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5;
     ctx.strokeRect(x, y, w, padT + pH - y);
-  });
 
-  // Strip plot: individual penalties, jittered within their band, dot per outcome.
-  const seeds = new Map();
-  rows.forEach(p => {
-    const i = Math.min(n - 1, Math.floor(p.pressureIndex / 10));
-    const key = i;
-    const seed = (seeds.get(key) || 0) + 1;
-    seeds.set(key, seed);
-    const jitter = ((seed * 37) % 100) / 100; // deterministic spread
-    const x = tx(i) + 4 + jitter * (bw - 8);
-    const y = padT - 6 - ((seed * 13) % 10);
-    ctx.beginPath();
-    ctx.arc(x, Math.max(3, y), 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = p.outcome === 'goal' ? '#2E6F4F' : '#C0392B';
-    ctx.globalAlpha = 0.6;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  });
+    ctx.fillStyle = '#211D17'; ctx.font = "700 11px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+    ctx.fillText(Math.round(b.pct) + '%', x + w / 2, Math.max(12, y - 6));
 
-  ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
-  buckets.forEach((b, i) => ctx.fillText(b.lo + '–' + b.hi, tx(i) + bw / 2, H - 4));
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+    ctx.fillText(`${b.lo}–${b.hi} (n=${b.n})`, tx(i) + bw / 2, H - 4);
+  });
 }
 
 function renderPressureTakers(rows) {
@@ -248,7 +238,7 @@ function renderPressureTakers(rows) {
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.parentElement.clientWidth - 32;
-  const H = 110;
+  const H = 160;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   canvas.width = W * dpr; canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
@@ -261,32 +251,40 @@ function renderPressureTakers(rows) {
     return;
   }
 
-  const padL = 28, padR = 8, padT = 8, padB = 22;
+  const padL = 32, padR = 8, padT = 8, padB = 28;
   const pW = W - padL - padR, pH = H - padT - padB;
   const minPI = 0, maxPI = 100;
   const tx = v => padL + ((v - minPI) / (maxPI - minPI)) * pW;
   const ty = v => padT + pH - (v / 100) * pH;
 
+  // Y gridlines (conversion %)
   [0, 25, 50, 75, 100].forEach(v => {
     const y = ty(v);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
     ctx.strokeStyle = '#C9C0AE'; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
-    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 3, y + 3);
+    ctx.textAlign = 'right'; ctx.fillText(v + '%', padL - 5, y + 3);
   });
+
+  // X axis (avg pressure index)
+  [0, 25, 50, 75, 100].forEach(v => {
+    const x = tx(v);
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + pH); ctx.strokeStyle = '#E7E1D4'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui";
+    ctx.textAlign = 'center'; ctx.fillText(v, x, padT + pH + 12);
+  });
+  ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
+  ctx.fillText('Avg pressure index', padL + pW / 2, H - 4);
 
   const maxN = Math.max(...points.map(p => p.n));
   points.forEach(p => {
-    const r = 3 + (p.n / maxN) * 6;
+    const r = 3 + Math.sqrt(p.n / maxN) * 9;
     ctx.beginPath();
     ctx.arc(tx(p.avgPI), ty(p.pct), r, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(180,71,31,0.18)';
     ctx.fill();
     ctx.strokeStyle = '#B4471F'; ctx.lineWidth = 1.5; ctx.stroke();
   });
-
-  ctx.fillStyle = '#8C8475'; ctx.font = "500 9px 'Plus Jakarta Sans',system-ui"; ctx.textAlign = 'center';
-  ctx.fillText('Avg pressure index →', padL + pW / 2, H - 4);
 }
 
 function renderPenalties(rows) {

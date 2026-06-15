@@ -77,7 +77,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .h2h-bar-fill{height:100%;}
 .h2h-score{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;width:30px;text-align:right;}
 
-#trendCanvas,#pressureCanvas,#pressureTakerCanvas{display:block;width:100%;height:110px;}
+#trendCanvas{display:block;width:100%;height:110px;}
+#pressureCanvas,#pressureTakerCanvas{display:block;width:100%;height:160px;}
 .trend-legend{display:flex;gap:16px;margin-top:10px;}
 .tl-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3);font-weight:500;}
 .tl-line{width:16px;height:2px;}
