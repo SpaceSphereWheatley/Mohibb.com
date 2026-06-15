@@ -168,10 +168,23 @@ tr.best .code{color:var(--accent-ink);}
 .seg button.active{background:var(--ink);color:var(--bg);}
 .seg button:hover:not(.active){color:var(--accent);}
 
+/* shared Top-N bar (one filter for every race chart) */
+.race-topbar{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:30px;}
+.race-topbar .topbar-label{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);}
+.race-topbar .topbar-gap{margin-left:6px;}
+
+/* weekend pit-loss estimate */
+.pitloss{padding:18px 16px;display:flex;flex-direction:column;gap:12px;}
+.pl-figure{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.pl-value{font-family:var(--mono);font-size:40px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1;}
+.pl-unit{font-size:20px;font-weight:600;color:var(--ink-3);margin-left:1px;}
+.pl-label{font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);}
+
 /* ---------- tyre strategy (generalised from the live dashboard) ---------- */
 .stints{padding:10px 16px 14px;}
-.stint-row{display:grid;grid-template-columns:54px 1fr;gap:12px;align-items:center;padding:7px 0;}
+.stint-row{display:grid;grid-template-columns:54px 1fr auto;gap:12px;align-items:center;padding:7px 0;}
 .stint-row .drv{font-family:var(--mono);font-weight:700;font-size:12px;display:flex;align-items:center;gap:7px;}
+.stint-total{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink-3);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}
 .stint-row .drv .chip{width:4px;height:14px;border-radius:2px;background:var(--team,var(--ink-4));}
 .bars{display:flex;width:100%;height:22px;border-radius:3px;overflow:hidden;background:var(--bg);border:1px solid var(--line-soft);}
 .bar{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:600;color:rgba(0,0,0,0.6);min-width:14px;overflow:hidden;white-space:nowrap;}
@@ -264,6 +277,9 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
 
   <div id="sections">
 
+    <!-- RACE: shared Top-N driver filter (controls every race chart at once) -->
+    <div id="raceTopBar" class="race-topbar" style="display:none"></div>
+
     <!-- PRACTICE: theoretical best lap -->
     <section class="section view-practice" id="sec-theoretical" style="display:none">
       <div class="sec-head"><span class="idx"></span><span class="label">Theoretical Best Lap</span><span class="note">fastest sectors, summed</span><span class="rule"></span></div>
@@ -294,13 +310,7 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
       <div class="panel"><div id="rpiBody"></div></div>
     </section>
 
-    <!-- RACE: lap chart -->
-    <section class="section view-race" id="sec-lapchart" style="display:none">
-      <div class="sec-head"><span class="idx"></span><span class="label">Lap Times</span><span class="note">per lap · pit laps ringed</span><span class="rule"></span></div>
-      <div class="panel"><div id="lapchartBody"></div></div>
-    </section>
-
-    <!-- RACE: race-history trace (gap to a reference car) -->
+    <!-- RACE: race-history trace (gap to a reference car) — the headline race view -->
     <section class="section view-race" id="sec-history" style="display:none">
       <div class="sec-head"><span class="idx"></span><span class="label">Race History</span><span class="note">gap to a reference car · above = ahead</span><span class="rule"></span></div>
       <div class="panel"><div id="historyBody"></div></div>
@@ -316,6 +326,18 @@ footer .credit{font-family:'Newsreader',serif;font-style:italic;}
     <section class="section view-race" id="sec-position" style="display:none">
       <div class="sec-head"><span class="idx"></span><span class="label">Position Changes</span><span class="note">race order over time</span><span class="rule"></span></div>
       <div class="panel"><div id="positionBody"></div></div>
+    </section>
+
+    <!-- RACE: lap chart (detail view, kept last) -->
+    <section class="section view-race" id="sec-lapchart" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Lap Times</span><span class="note">per lap · pit laps ringed</span><span class="rule"></span></div>
+      <div class="panel"><div id="lapchartBody"></div></div>
+    </section>
+
+    <!-- PRACTICE / QUALIFYING: weekend pit-loss estimate (rendered last in both views) -->
+    <section class="section view-practice view-qualifying" id="sec-pitloss" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Estimated Pit Loss</span><span class="note">from practice in/out-laps</span><span class="rule"></span></div>
+      <div class="panel"><div id="pitlossBody"></div></div>
     </section>
 
   </div>
@@ -352,13 +374,18 @@ const state = {
   history: null,         // cached cumulative-time data for the race-history chart
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
   raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
+  showPits: true,        // race charts: mark each driver's pit stops with a dot
+  renderGen: 0,          // bumped per session load; a scheduled panel retry aborts if it changed
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
+  pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
 };
 
 /* ---------- tiny DOM helpers ---------- */
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num = (x) => { const n = Number(x); return Number.isFinite(n) ? n : null; };
+// lap / stint numbers are 1-based, but num(null)===0 (Number(null)===0), so treat <=0 as missing
+const posInt = (x) => { const n = num(x); return (n != null && n > 0) ? n : null; };
 
 /* ---------- time / number formatting ---------- */
 const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour:'2-digit', minute:'2-digit', hour12:false });
@@ -454,6 +481,25 @@ function stateBox(badge, msg, kind){
 }
 function loadingBox(msg){ return stateBox('Loading', msg || 'Fetching session data…'); }
 
+/* ---------- panel auto-retry ----------
+   A panel that fails (usually OpenF1 rate-limiting a burst of concurrent
+   requests) waits a randomised 5–10s — to desync it from its siblings — and
+   re-runs itself, up to PANEL_RETRIES times, before falling back to its error
+   state. Each render function takes an `attempt` arg (0 on the first try) and
+   calls panelRetry() from its catch. */
+const PANEL_RETRIES = 2;
+const retryWait = () => 5000 + Math.random() * 5000;   // 5–10s, jittered per panel
+function panelRetry(label, err, body, attempt, again, failHtml){
+  logError(`${label} (attempt ${attempt + 1})`, err);
+  if (attempt < PANEL_RETRIES){
+    const gen = state.renderGen;   // don't let a queued retry clobber a newly-loaded session
+    if (body) body.innerHTML = stateBox('Retrying', `That didn’t load — trying again in a few seconds (attempt ${attempt + 2} of ${PANEL_RETRIES + 1})…`);
+    setTimeout(() => { if (state.renderGen === gen) again(); }, retryWait());
+  } else if (body){
+    body.innerHTML = failHtml;
+  }
+}
+
 /* team colour fallbacks (so cross-session tables still get an accent) */
 const TEAM_COLOURS = {
   'red bull':'#3671C6','mclaren':'#FF8000','ferrari':'#E8002D','mercedes':'#27F4D2',
@@ -514,6 +560,65 @@ function bestLap(laps){
 const COMPOUND = { SOFT:'SOFT', MEDIUM:'MEDIUM', HARD:'HARD', DRY:'HARD', INTERMEDIATE:'INTERMEDIATE', INTERMEDIATES:'INTERMEDIATE', INTER:'INTERMEDIATE', WET:'WET' };
 function normCompound(c){ return COMPOUND[(c||'').toUpperCase()] || 'UNKNOWN'; }
 
+/* Rebuild a clean, contiguous stint timeline from OpenF1's stints rows, which
+   in practice carry duplicates, missing lap_start/lap_end, overlaps, and a null
+   lap_end on the final stint. `lastLap` (the driver's last completed lap, from
+   lap data) closes the final stint and bounds the total. Returns ordered
+   [{start, end, laps, cmp}]. */
+function reconstructStints(rows, lastLap){
+  // merge rows that share a stint_number (OpenF1 can emit several per stint)
+  const byNum = new Map(), loose = [];
+  (Array.isArray(rows)?rows:[]).forEach(r => {
+    const seg = { sn:posInt(r.stint_number), ls:posInt(r.lap_start), le:posInt(r.lap_end), cmp:normCompound(r.compound) };
+    if (seg.sn == null){ loose.push(seg); return; }
+    const e = byNum.get(seg.sn);
+    if (!e){ byNum.set(seg.sn, seg); return; }
+    e.ls = e.ls==null ? seg.ls : (seg.ls==null ? e.ls : Math.min(e.ls, seg.ls));
+    e.le = e.le==null ? seg.le : (seg.le==null ? e.le : Math.max(e.le, seg.le));
+    if (e.cmp==='UNKNOWN' && seg.cmp!=='UNKNOWN') e.cmp = seg.cmp;
+  });
+  const segs = [...byNum.values(), ...loose].sort((a,b)=> (a.ls ?? a.sn ?? 0) - (b.ls ?? b.sn ?? 0));
+  const out = [];
+  for (let i=0; i<segs.length; i++){
+    const s = segs[i], next = segs[i+1];
+    let start = s.ls != null ? s.ls : (out.length ? out[out.length-1].end + 1 : 1);
+    const nextStart = next ? next.ls : null;
+    let end = s.le;
+    if (end == null) end = (nextStart != null) ? nextStart - 1 : (lastLap != null ? lastLap : start);
+    if (nextStart != null && end >= nextStart) end = nextStart - 1;        // trim overlaps with the next stint
+    if (next == null && lastLap != null) end = Math.max(start, lastLap);   // final stint runs to the driver's last lap
+    if (end >= start) out.push({ start, end, laps: end - start + 1, cmp: s.cmp });
+  }
+  return out;
+}
+
+/* Is the raw stints feed actually complete? OpenF1 sometimes returns only a
+   subset of stints (missing opening stints, mid-race gaps), which would make
+   the strategy bars misleading. A driver's stints are "complete" when they
+   open on lap 1, have no lap gaps between them, and reach the driver's last
+   lap. We trust the dataset only if most drivers pass. */
+function stintsLookComplete(byDrv, lastLapOf){
+  const dn = Object.keys(byDrv).map(Number);
+  if (!dn.length) return false;
+  let complete = 0;
+  for (const n of dn){
+    const segs = (byDrv[n]||[]).map(r => ({ ls:posInt(r.lap_start), le:posInt(r.lap_end) }))
+      .filter(s => s.ls!=null && s.le!=null && s.le>=s.ls).sort((a,b)=> a.ls-b.ls);
+    if (!segs.length) continue;
+    if (segs[0].ls > 1) continue;                               // missing the opening stint
+    let cursor = segs[0].le, ok = true;
+    for (let i=1; i<segs.length; i++){
+      if (segs[i].ls > cursor + 1){ ok = false; break; }        // gap between stints
+      cursor = Math.max(cursor, segs[i].le);
+    }
+    if (!ok) continue;
+    const last = lastLapOf(n);
+    if (last != null && cursor < last - 1) continue;            // missing the final stint(s)
+    complete++;
+  }
+  return complete / dn.length >= 0.6;
+}
+
 // long-run pace per driver: each stint of >=5 clean laps -> median of laps within 107% of the stint's quickest.
 // returns { byDriver: {n: {best:{compound,laps,median}, runs:[...]}}}
 function longRunPace(laps, stints){
@@ -564,16 +669,27 @@ function sessionKind(s){
   if (n.includes('qualifying') || n.includes('shootout')) return 'qualifying';
   return 'race';
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-lapchart','sec-history','sec-strategy','sec-position'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-history','sec-strategy','sec-position','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
-  practice:   ['sec-theoretical','sec-longrun'],
-  qualifying: ['sec-qpace','sec-qtheo','sec-rpi'],
-  race:       ['sec-lapchart','sec-history','sec-strategy','sec-position'],
+  practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
+  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-pitloss'],
+  race:       ['sec-history','sec-strategy','sec-position','sec-lapchart'],
 };
 function showView(kind){
   destroyAllCharts();
   state.raceRedraw = {};        // drop stale redraw closures from the previous session
   ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display = 'none'; });
+  // one shared Top-N toggle for every race chart (only shown in the race view)
+  const bar = $('raceTopBar');
+  if (bar){
+    if (kind === 'race'){
+      bar.innerHTML = `<span class="topbar-label">Pit stops</span>${pitToggle()}`
+        + `<span class="topbar-label topbar-gap">Drivers shown</span>${topToolbar()}`;
+      bar.style.display = '';
+      wirePits(bar.querySelector('.seg.pits'));
+      wireTopN(bar.querySelector('.seg.topn'));
+    } else { bar.style.display = 'none'; bar.innerHTML = ''; }
+  }
   const ids = VIEW_SECTIONS[kind] || [];
   ids.forEach((id, i) => {
     const n = $(id); if (!n) return;
@@ -581,7 +697,7 @@ function showView(kind){
     const idx = n.querySelector('.idx'); if (idx) idx.textContent = String(i+1).padStart(2,'0');
   });
 }
-function hideAllSections(){ ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display='none'; }); }
+function hideAllSections(){ ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display='none'; }); const bar=$('raceTopBar'); if (bar){ bar.style.display='none'; bar.innerHTML=''; } }
 
 function showNotice(eyebrow, title, body){
   $('ntEyebrow').textContent = eyebrow; $('ntTitle').textContent = title; $('ntBody').textContent = body;
@@ -647,6 +763,7 @@ async function loadSessions(meeting_key){
 async function loadSession(session_key){
   const s = state.sessions.find(x => String(x.session_key) === String(session_key));
   if (!s){ return; }
+  state.renderGen++;   // invalidate any panel retries still pending from a previous session
   state.session = s;
   setSessionBanner(s);
   writeHash();   // reflect the selection in the URL so it can be shared/bookmarked
@@ -671,10 +788,12 @@ async function loadSession(session_key){
   if (kind === 'practice'){
     renderTheoretical(session_key);
     renderLongRun(session_key);
+    renderPitLoss();
   } else if (kind === 'qualifying'){
     renderQualiPace(session_key);
     renderQualiTheo(s);
     renderRPI(s);
+    renderPitLoss();
   } else {
     renderLapChart(session_key);
     renderHistory(session_key);
@@ -684,7 +803,7 @@ async function loadSession(session_key){
 }
 
 /* ---------- PRACTICE: theoretical best lap ---------- */
-async function renderTheoretical(session_key){
+async function renderTheoretical(session_key, attempt=0){
   const body = $('theoreticalBody'); body.innerHTML = loadingBox('Computing theoretical best laps…');
   try {
     const laps = await fetchLaps(session_key);
@@ -705,11 +824,11 @@ async function renderTheoretical(session_key){
         <td class="num tar ${r.left!=null && r.left>0.001?'loss':'muted'}">${r.left!=null?('−'+r.left.toFixed(3)):'—'}</td>
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note">Theoretical best sums each driver’s quickest sector 1, 2 and 3 from this session — the lap they could have strung together. “Left on table” is how much their real fastest lap missed it by. Deleted laps aren’t flagged in the public data, so treat outliers with a pinch of salt.</div>`;
-  } catch (e){ logError('theoretical', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data for this session. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('theoretical', e, body, attempt, () => renderTheoretical(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data for this session. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- PRACTICE: long-run pace ---------- */
-async function renderLongRun(session_key){
+async function renderLongRun(session_key, attempt=0){
   const body = $('longrunBody'); body.innerHTML = loadingBox('Finding race-sim stints…');
   try {
     const [laps, stints] = await Promise.all([ fetchLaps(session_key), fetchStints(session_key) ]);
@@ -729,11 +848,11 @@ async function renderLongRun(session_key){
         <td class="num tar ${i===0?'muted':''}">${i===0?'—':fmtGap(r.median-leader)}</td>
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note">Each driver’s best race-sim stint: 5+ laps on one compound, median of the laps within ${Math.round((PACE_WINDOW-1)*100)}% of that stint’s quickest (filtering out traffic and cool-down laps). Fuel loads differ between cars, so read this as a directional pace guide rather than a stopwatch.</div>`;
-  } catch (e){ logError('long-run', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load stint/lap data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('long-run', e, body, attempt, () => renderLongRun(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load stint/lap data. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- QUALIFYING: pace ranking ---------- */
-async function renderQualiPace(session_key){
+async function renderQualiPace(session_key, attempt=0){
   const body = $('qpaceBody'); body.innerHTML = loadingBox('Ranking qualifying laps…');
   try {
     const laps = await fetchLaps(session_key);
@@ -747,7 +866,7 @@ async function renderQualiPace(session_key){
     const paint = (m) => { if (m === 'graph') drawQpaceChart(rows); else { destroyChart('qpace'); $('qpaceView').innerHTML = qpaceTable(rows); } };
     wireSeg('qpace', paint);
     paint(mode);
-  } catch (e){ logError('quali pace', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('quali pace', e, body, attempt, () => renderQualiPace(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error')); }
 }
 function qpaceTable(rows){
   const pole = rows[0].best;
@@ -791,7 +910,7 @@ function drawQpaceChart(rows){
 }
 
 /* ---------- QUALIFYING: actual vs practice theoretical ---------- */
-async function renderQualiTheo(qSession){
+async function renderQualiTheo(qSession, attempt=0){
   const body = $('qtheoBody'); body.innerHTML = loadingBox('Comparing quali laps to practice potential…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
@@ -816,7 +935,7 @@ async function renderQualiTheo(qSession){
     const paint = (m) => { if (m === 'graph') drawQtheoChart(rows); else { destroyChart('qtheo'); $('qtheoView').innerHTML = qtheoTable(rows); } };
     wireSeg('qtheo', paint);
     paint(mode);
-  } catch (e){ logError('quali-theo', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load practice/qualifying data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('quali-theo', e, body, attempt, () => renderQualiTheo(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t load practice/qualifying data. Tap Reload to retry.', 'error')); }
 }
 function qtheoTable(rows){
   return `<div class="tbl-scroll"><table class="tbl">
@@ -838,7 +957,7 @@ function drawQtheoChart(rows){
   destroyChart('qtheo');
   if (!window.Chart) return;
   const ctx = $('qtheoCanvas'); if (!ctx) return;
-  const colours = withGap.map(r => r.gap < 0 ? '#2E6F4F' : '#B4471F');   // green = found more, accent = left on table
+  const colours = withGap.map(r => drvColour(r.n));   // colour per team, matching the Qualifying Pace chart above
   state.charts.qtheo = new Chart(ctx, {
     type:'bar',
     data:{ labels: withGap.map(r => drv(r.n).acr),
@@ -864,7 +983,7 @@ function drawQtheoChart(rows){
 }
 
 /* ---------- QUALIFYING: race pace indicator ---------- */
-async function renderRPI(qSession){
+async function renderRPI(qSession, attempt=0){
   const body = $('rpiBody'); body.innerHTML = loadingBox('Building the race-pace picture…');
   try {
     // long-run source: prefer FP2, then FP3, then FP1 (teams run race sims mainly in FP2)
@@ -908,12 +1027,69 @@ async function renderRPI(qSession){
         <td class="num tar"><b>${r.combined===Infinity?'—':r.combined.toFixed(1)}</b></td>
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note"><b>Informational, not a prediction.</b> This blends one-lap qualifying rank with long-run pace rank (from ${lrLabel}) into a single directional signal of who looks strong heading into the race. It can’t see fuel loads, reliability, weather, strategy or Sunday track evolution — so it’s a rough guide, not a forecast.</div>`;
-  } catch (e){ logError('rpi', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t assemble the race-pace indicator. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('rpi', e, body, attempt, () => renderRPI(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t assemble the race-pace indicator. Tap Reload to retry.', 'error')); }
 }
 // {n,v} (lower v = better) -> {n: rank}
 function rankMap(entries){
   const sorted = entries.filter(e => e.v!=null).sort((a,b)=> a.v-b.v);
   const m = {}; sorted.forEach((e,i)=> m[e.n] = i+1); return m;
+}
+
+/* ---------- PRACTICE-DERIVED: weekend pit-loss estimate ---------- */
+/* The full time a stop costs — pit-lane transit plus the stationary change —
+   measured from every clean practice in/out-lap pair against that driver's
+   green-lap pace, then taken as a median across the weekend (implausible pairs
+   trimmed). Memoised per meeting and stashed on state for later use (e.g.
+   estimating track position after a race stop). */
+async function weekendPitLoss(){
+  const mk = state.session?.meeting_key ?? null;
+  if (state.pitLoss && state.pitLoss.meeting === mk) return state.pitLoss;   // one estimate per weekend
+  const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
+  const deltas = [];
+  for (const s of practice){
+    let laps, pits;
+    try { [laps, pits] = await Promise.all([ fetchLaps(s.session_key), fetchPit(s.session_key) ]); }
+    catch (e){ logError('pitloss fetch', e); continue; }
+    const groups = groupByDriver(laps);
+    const stopsByDrv = groupByDriver(pits);
+    for (const n of Object.keys(groups).map(Number)){
+      const ls = groups[n];
+      const byLap = {}; ls.forEach(l => { const ln = num(l.lap_number); if (ln!=null) byLap[ln] = l; });
+      // green baseline: this driver's clean laps (exclude out-laps), median
+      const base = median(ls.filter(l => !l.is_pit_out_lap && num(l.lap_duration)>0).map(l => num(l.lap_duration)));
+      if (base == null) continue;
+      for (const p of (stopsByDrv[n] || [])){
+        const L = num(p.lap_number); if (L == null) continue;
+        // pit lap_number is usually the in-lap; sometimes it's tagged on the out-lap
+        let inLap, outLap;
+        if (byLap[L] && byLap[L].is_pit_out_lap){ outLap = byLap[L]; inLap = byLap[L-1]; }
+        else { inLap = byLap[L]; outLap = byLap[L+1]; }
+        if (!inLap || !outLap || !outLap.is_pit_out_lap) continue;
+        const di = num(inLap.lap_duration), doo = num(outLap.lap_duration);
+        if (di==null || doo==null || di<=0 || doo<=0) continue;
+        const loss = (di + doo) - 2 * base;            // total time lost vs two green laps
+        if (loss > 8 && loss < 60) deltas.push(loss);  // trim garage stops / cold out-laps / bad timing
+      }
+    }
+  }
+  state.pitLoss = { meeting: mk, seconds: median(deltas), samples: deltas.length };
+  return state.pitLoss;
+}
+
+async function renderPitLoss(attempt=0){
+  const body = $('pitlossBody'); if (!body) return;
+  body.innerHTML = loadingBox('Estimating the weekend pit loss…');
+  try {
+    const r = await weekendPitLoss();
+    if (r.seconds == null){
+      body.innerHTML = stateBox('No estimate', 'Not enough clean practice in/out-lap pairs to estimate pit loss for this weekend.');
+      return;
+    }
+    body.innerHTML = `<div class="pitloss">
+      <div class="pl-figure"><span class="pl-value">${r.seconds.toFixed(1)}<span class="pl-unit">s</span></span><span class="pl-label">estimated pit loss</span></div>
+      <div class="panel-note" style="border-top:none;padding:0">The full time a stop costs — pit-lane transit plus the stationary tyre change — taken as the median of ${r.samples} clean practice in/out-lap pair${r.samples===1?'':'s'} measured against each driver's green-lap pace. A single weekend-level figure for gauging where a car rejoins after a race stop, not a per-team number; practice stops are noisy, so treat it as a guide.</div>
+    </div>`;
+  } catch (e){ panelRetry('pitloss', e, body, attempt, () => renderPitLoss(attempt+1), stateBox('Unavailable', 'Couldn’t estimate pit loss. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- RACE: lap chart ---------- */
@@ -1003,10 +1179,30 @@ function wireTopN(seg){
     const n = Number(b.dataset.n); if (state.raceTopN === n) return;
     state.raceTopN = n;
     document.querySelectorAll('.seg.topn button').forEach(x => x.classList.toggle('active', Number(x.dataset.n) === n));
-    Object.values(state.raceRedraw).forEach(fn => { try { fn && fn(); } catch (err){ logError('top-n redraw', err); } });
+    redrawRaceCharts();
   });
 }
 const topNSet = (order, n) => n > 0 ? new Set(order.slice(0, n)) : null;   // null = show all
+
+// Pit-stop marker toggle, shared across the three race charts.
+function pitToggle(){
+  return `<div class="seg pits">${[['1','On'],['0','Off']].map(([v,l]) => `<button type="button" data-pits="${v}" class="${(state.showPits?'1':'0')===v?'active':''}">${l}</button>`).join('')}</div>`;
+}
+function wirePits(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-pits]'); if (!b) return;
+    const on = b.dataset.pits === '1'; if (state.showPits === on) return;
+    state.showPits = on;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', (x.dataset.pits==='1')===on));
+    redrawRaceCharts();
+  });
+}
+// pit dot styling, shared so every race chart marks stops the same way
+const PIT_DOT = { fill: '#F7F3EA', ring: '#211D17' };
+function redrawRaceCharts(){
+  Object.values(state.raceRedraw).forEach(fn => { try { fn && fn(); } catch (err){ logError('race redraw', err); } });
+}
 // finishing order from laps: most laps completed, then least cumulative time
 function orderByLaps(groups){
   return Object.keys(groups).map(Number).map(n => {
@@ -1016,7 +1212,7 @@ function orderByLaps(groups){
   }).sort((a,b)=> (b.last - a.last) || (a.total - b.total)).map(o => o.n);
 }
 
-async function renderLapChart(session_key){
+async function renderLapChart(session_key, attempt=0){
   const body = $('lapchartBody'); body.innerHTML = loadingBox('Plotting lap times…');
   try {
     const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
@@ -1033,39 +1229,39 @@ async function renderLapChart(session_key){
     const yMin = Math.max(0, (Math.min(...all)||med) - 0.8);
     const yMax = med * 1.25;            // shows green-flag pace + most pit laps, clips SC/red-flag spikes
 
-    body.innerHTML = `<div class="panel-toolbar">${topToolbar()}</div>
-      <div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps. <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+    body.innerHTML = `<div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
 
     const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
     const redraw = () => {
       const host = $('lapHost'); if (!host) return;
       host.innerHTML = '<canvas id="lapCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
+      const showP = state.showPits;
       const datasets = drivers.filter(n => !set || set.has(n)).sort((a,b)=> a-b).map(n => {
         const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
         const colour = drvColour(n);
+        const mark = (l) => showP && isPit(n,l);
         return {
           label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) })),
           borderColor: colour, backgroundColor: colour, borderWidth: 1.5, tension: 0.25, spanGaps: true,
-          pointRadius: ls.map(l => isPit(n,l)?4:0), pointHoverRadius: 5,
-          pointBorderColor: ls.map(l => isPit(n,l)?'#211D17':colour), pointBorderWidth: 1.5,
-          pointBackgroundColor: ls.map(l => isPit(n,l)?'#F7F3EA':colour),
+          pointRadius: ls.map(l => mark(l)?4:0), pointHoverRadius: 5,
+          pointBorderColor: ls.map(l => mark(l)?PIT_DOT.ring:colour), pointBorderWidth: 1.5,
+          pointBackgroundColor: ls.map(l => mark(l)?PIT_DOT.fill:colour),
         };
       });
       drawLapChart(datasets, yMin, yMax, bands);
     };
     state.raceRedraw.lap = redraw;
-    wireTopN(body.querySelector('.seg.topn'));
     redraw();
-  } catch (e){ logError('lap chart', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('lap chart', e, body, attempt, () => renderLapChart(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- RACE: race-history trace (gap to a reference car) ---------- */
-async function renderHistory(session_key){
+async function renderHistory(session_key, attempt=0){
   const body = $('historyBody'); body.innerHTML = loadingBox('Building the race-history trace…');
   try {
-    const [laps, rc] = await Promise.all([ fetchLaps(session_key), fetchRC(session_key).catch(()=>[]) ]);
+    const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const groups = groupByDriver(laps);
     const drivers = Object.keys(groups).map(Number);
     if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
@@ -1088,17 +1284,19 @@ async function renderHistory(session_key){
       return (cum[a].get(lastLap[a]) ?? Infinity) - (cum[b].get(lastLap[b]) ?? Infinity);
     });
     if (!ranked.length){ body.innerHTML = stateBox('No data', 'Not enough lap timing to build the trace.'); return; }
-    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0] };
+    // pit in-laps per driver, to dot the trace where each car stopped
+    const pitLaps = {};
+    (Array.isArray(pit)?pit:[]).forEach(p => { const n = num(p.driver_number), l = num(p.lap_number); if (n==null || l==null) return; (pitLaps[n] = pitLaps[n] || new Set()).add(l); });
+    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0], pitLaps };
 
     const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
-    body.innerHTML = `<div class="panel-toolbar" style="justify-content:space-between">${topToolbar()}<label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
+    body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
       <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
-      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
     $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
     state.raceRedraw.hist = drawHistory;
-    wireTopN(body.querySelector('.seg.topn'));
     drawHistory();
-  } catch (e){ logError('history', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load lap data for the race-history trace. Tap Reload to retry.', 'error'); }
+  } catch (e){ panelRetry('history', e, body, attempt, () => renderHistory(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data for the race-history trace. Tap Reload to retry.', 'error')); }
 }
 function drawHistory(){
   const H = state.history; if (!H) return;
@@ -1114,8 +1312,12 @@ function drawHistory(){
       pts.push({ x: lap, y: rc - dc });           // ahead of the reference => positive => above the line
     }
     const colour = drvColour(n);
+    const pits = (state.showPits && H.pitLaps && H.pitLaps[n]) || null;   // dot the pit in-laps
     return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour,
-      borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true, pointRadius: 0, pointHoverRadius: 5 };
+      borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true,
+      pointRadius: pts.map(p => pits && pits.has(p.x) ? 4 : 0), pointHoverRadius: 5,
+      pointBackgroundColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.fill : colour),
+      pointBorderColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.ring : colour), pointBorderWidth: 1.5 };
   });
   drawHistoryChart(datasets, H.bands);
 }
@@ -1173,23 +1375,24 @@ function drawLapChart(datasets, yMin, yMax, bands){
 }
 
 /* ---------- RACE: tyre strategy + pit stops ---------- */
-async function renderStrategy(session_key){
+async function renderStrategy(session_key, attempt=0){
   const body = $('strategyBody'); body.innerHTML = loadingBox('Reconstructing strategies…');
   try {
-    const [stints, pit] = await Promise.all([ fetchStints(session_key), fetchPit(session_key).catch(()=>[]) ]);
+    const [stints, pit, laps] = await Promise.all([ fetchStints(session_key), fetchPit(session_key).catch(()=>[]), fetchLaps(session_key).catch(()=>[]) ]);
     const list = Array.isArray(stints) ? stints : [];
     if (!list.length){ body.innerHTML = stateBox('No data', 'No tyre stint data recorded for this session.'); return; }
     const byDrv = groupByDriver(list);
+    const lapGroups = groupByDriver(laps);
+    const lastLapOf = (n) => { const ls = lapGroups[n]; if (!ls || !ls.length) return null; let m = 0; for (const l of ls){ const v = num(l.lap_number); if (v!=null && v>m) m = v; } return m || null; };
     const drivers = Object.keys(byDrv).map(Number).sort((a,b)=> a-b);
-    const stintRows = drivers.map(n => {
-      const sts = byDrv[n].slice().sort((a,b)=> (num(a.stint_number)||0)-(num(b.stint_number)||0));
-      const segs = sts.map(s => {
-        const start = num(s.lap_start) ?? 0, end = num(s.lap_end) ?? start;
-        return { laps: Math.max(1, end - start + 1), cmp: normCompound(s.compound) };
-      });
-      const total = segs.reduce((a,s)=> a+s.laps, 0) || 1;
-      const bars = segs.map(s => `<span class="bar cmp-${s.cmp}" style="width:${(s.laps/total*100).toFixed(2)}%" title="${s.cmp} · ${s.laps} laps">${s.laps>=3?s.laps:''}</span>`).join('');
-      return `<div class="stint-row" style="--team:${drvColour(n)}"><span class="drv"><span class="chip"></span>${esc(drv(n).acr)}</span><span class="bars">${bars}</span></div>`;
+    // OpenF1's stint feed is sometimes incomplete (missing opening/mid stints);
+    // reconstructed bars would then be misleading, so show a warning instead.
+    const complete = stintsLookComplete(byDrv, lastLapOf);
+    const stintRows = !complete ? '' : drivers.map(n => {
+      const segs = reconstructStints(byDrv[n], lastLapOf(n));
+      const total = segs.reduce((a,s)=> a+s.laps, 0);
+      const bars = segs.map(s => `<span class="bar cmp-${s.cmp}" style="width:${total?(s.laps/total*100).toFixed(2):0}%" title="${s.cmp} · laps ${s.start}–${s.end} (${s.laps})">${s.laps>=3?s.laps:''}</span>`).join('');
+      return `<div class="stint-row" style="--team:${drvColour(n)}"><span class="drv"><span class="chip"></span>${esc(drv(n).acr)}</span><span class="bars">${bars}</span><span class="stint-total">${total||'—'}</span></div>`;
     }).join('');
 
     // pit stops ranked by stationary/pit time
@@ -1205,32 +1408,36 @@ async function renderStrategy(session_key){
         <td class="num tar"><b>${p.dur.toFixed(1)}</b></td>
       </tr>`).join('')}</tbody></table>` : stateBox('No pit data', 'No pit stops recorded for this session.');
 
-    body.innerHTML = `<div class="two-col">
-      <div class="pane">
-        <div class="pane-head">Stints by compound</div>
-        <div class="stints">${stintRows}</div>
+    const stintsPane = complete
+      ? `<div class="stints">${stintRows}</div>
         <div class="legend">
           <span><i style="background:#E8443B"></i>Soft</span>
           <span><i style="background:#F2C14E"></i>Medium</span>
           <span><i style="background:#E6E1D4"></i>Hard</span>
           <span><i style="background:#3FBF6F"></i>Inter</span>
           <span><i style="background:#3E82F7"></i>Wet</span>
-        </div>
+        </div>`
+      : stateBox('Incomplete data', 'OpenF1’s tyre-stint feed for this session is missing stints (gaps and absent opening stints), so the strategy bars would be misleading. They’ll appear here once the feed is complete.');
+
+    body.innerHTML = `<div class="two-col">
+      <div class="pane">
+        <div class="pane-head">Stints by compound</div>
+        ${stintsPane}
       </div>
       <div class="pane">
         <div class="pane-head">Pit stops · by pit time</div>
         <div class="tbl-scroll">${pitHtml}</div>
       </div>
     </div>
-    <div class="panel-note">Bar width is lap count per stint. Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
-  } catch (e){ logError('strategy', e); body.innerHTML = stateBox('Unavailable', 'Couldn’t load strategy data. Tap Reload to retry.', 'error'); }
+    <div class="panel-note">${complete ? `Bar width is lap count per stint; the figure at the right is the driver's total race laps (hover a bar for its compound and lap range). ` : ''}Pit time is total time in the pit lane (entry to exit) as reported by OpenF1, not just the stationary time, so it includes pit-lane travel.</div>`;
+  } catch (e){ panelRetry('strategy', e, body, attempt, () => renderStrategy(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load strategy data. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- RACE: position over time ---------- */
-async function renderPosition(session_key){
+async function renderPosition(session_key, attempt=0){
   const body = $('positionBody'); body.innerHTML = loadingBox('Tracing the order…');
   try {
-    const [pos, rc] = await Promise.all([ fetchPosition(session_key), fetchRC(session_key).catch(()=>[]) ]);
+    const [pos, pit, laps, rc] = await Promise.all([ fetchPosition(session_key), fetchPit(session_key).catch(()=>[]), fetchLaps(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
     const list = (Array.isArray(pos)?pos:[]).filter(p => num(p.driver_number)!=null && num(p.position)!=null && p.date);
     if (!list.length){ destroyChart('pos'); body.innerHTML = stateBox('No data', 'No position data recorded for this session.'); return; }
     const t0 = Math.min(...list.map(p => new Date(p.date).getTime()));
@@ -1243,26 +1450,51 @@ async function renderPosition(session_key){
       series[n] = pts;
       finals.push({ n, lastY: pts.length ? pts[pts.length-1].y : 99 });
     });
+    // the position feed only emits on a change, so a car that holds station (or
+    // leads flag-to-flag) stops early. Extend each trace to the end of its own
+    // last completed lap: finishers run to the flag, retirements stop where they ended.
+    const lapGroups = groupByDriver(laps);
+    Object.keys(series).map(Number).forEach(n => {
+      const pts = series[n], ls = lapGroups[n]; if (!pts.length || !ls || !ls.length) return;
+      let endMs = -Infinity;
+      for (const l of ls){ if (!l.date_start) continue; const d = num(l.lap_duration); const t = new Date(l.date_start).getTime() + (d>0 ? d*1000 : 0); if (t > endMs) endMs = t; }
+      if (endMs === -Infinity) return;
+      const endX = (endMs - t0) / 60000, last = pts[pts.length-1];
+      if (endX > last.x) pts.push({ x: endX, y: last.y });   // hold final position to the flag (stepped line)
+    });
     const order = finals.sort((a,b)=> a.lastY - b.lastY).map(o => o.n);
     const bands = safetyByTime(parseSafety(rc), t0);
 
-    body.innerHTML = `<div class="panel-toolbar">${topToolbar()}</div>
-      <div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
+    // pit-stop markers: place a dot at the position the car held when it entered the pits
+    const posAt = (pts, x) => { let y = null; for (const p of pts){ if (p.x <= x) y = p.y; else break; } return y; };
+    const pitMarks = {};
+    (Array.isArray(pit)?pit:[]).forEach(p => {
+      const n = num(p.driver_number); if (n==null || !p.date || !series[n]) return;
+      const x = (new Date(p.date).getTime() - t0) / 60000; const y = posAt(series[n], x);
+      if (y!=null) (pitMarks[n] = pitMarks[n] || []).push({ x, y });
+    });
+
+    body.innerHTML = `<div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Each line runs to that car's final lap, so finishers reach the flag and retirements stop where they ended. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
     const redraw = () => {
       const host = $('posHost'); if (!host) return;
       host.innerHTML = '<canvas id="posCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
-      const datasets = order.filter(n => !set || set.has(n)).map(n => {
+      const shown = order.filter(n => !set || set.has(n));
+      const datasets = shown.map(n => {
         const colour = drvColour(n);
         return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
       });
+      if (state.showPits){
+        const marks = shown.flatMap(n => pitMarks[n] || []);
+        if (marks.length) datasets.push({ label:'Pit stops', data: marks, showLine:false, pointStyle:'circle',
+          pointRadius:4, pointHoverRadius:5, backgroundColor:PIT_DOT.fill, borderColor:PIT_DOT.ring, borderWidth:1.5 });
+      }
       drawPositionChart(datasets, maxPos || 20, bands);
     };
     state.raceRedraw.pos = redraw;
-    wireTopN(body.querySelector('.seg.topn'));
     redraw();
-  } catch (e){ logError('position', e); destroyChart('pos'); body.innerHTML = stateBox('Unavailable', 'Couldn’t load position data. Tap Reload to retry.', 'error'); }
+  } catch (e){ destroyChart('pos'); panelRetry('position', e, body, attempt, () => renderPosition(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load position data. Tap Reload to retry.', 'error')); }
 }
 function drawPositionChart(datasets, maxPos, bands){
   if (!window.Chart) return;
@@ -1360,6 +1592,7 @@ async function reload(){
     if (state.session) clearSessionCache(state.session.session_key);
     // also clear sibling practice/quali caches that the quali views pull in
     state.sessions.forEach(s => clearSessionCache(s.session_key));
+    state.pitLoss = null;   // recompute the weekend pit-loss estimate from fresh data
   } catch {}
   if (state.session) await onSessionChange();
   else await onYearChange();
