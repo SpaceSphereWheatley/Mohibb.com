@@ -102,10 +102,16 @@ function deriveConfidence_(p) {
 
 // -- MERGE / DEDUPE -----------------------------------------------------------
 
-// Two penalties are the "same" if they share the same date + taker + minute.
-// (Good enough across sources that don't share matchIds.)
+// Two penalties are the "same" event if they share matchId + taker + minute.
+// Using matchId avoids false collisions when the same player takes two penalties
+// in different matches on the same date, or in shootouts where every kick
+// shares minute=120.
+// StatsBomb matchIds are numeric; Understat matchIds are "understat-N" strings —
+// keys differ by design so cross-source records don't collide here. Overlap
+// between sources is rare (different seasons) and StatsBomb wins at rebuild
+// time via sbFinalize_'s merge ordering anyway.
 function penaltyKey_(p) {
-  return [p.date, normalizeName_(p.taker), p.minute].join('|');
+  return [p.matchId, normalizeName_(p.taker), p.minute].join('|');
 }
 
 function normalizeName_(name) {

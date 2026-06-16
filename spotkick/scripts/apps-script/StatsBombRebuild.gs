@@ -3,20 +3,31 @@
  *
  * One-shot Google Apps Script for rebuilding the full StatsBomb historical
  * penalty baseline. Runs across multiple executions using a continuation
- * pattern (PropertiesService + time-driven trigger) to work around GAS's
- * 6-minute execution limit.
+ * pattern (GitHub files for large state + PropertiesService for tiny state +
+ * time-driven trigger) to work around GAS's 6-minute execution limit.
  *
  * USAGE
  * -----
  * 1. Run startStatsBombRebuild() once manually from the GAS editor.
- *    It fetches the competition/match index, saves state to PropertiesService,
- *    starts the first batch, and schedules itself to continue every minute.
+ *    It fetches the competition/match index, saves state, then starts the
+ *    first batch and schedules itself to continue every minute.
  * 2. Check progress at any point with rebuildStatus().
  * 3. Wait ~20–60 minutes. The script processes matches in parallel batches of
  *    5 and reschedules automatically until all event files are processed.
  * 4. When complete, penalties.json is updated on GitHub and the trigger is
  *    removed automatically.
  * 5. Use cancelStatsBombRebuild() to stop early.
+ *
+ * STATE STORAGE
+ * -------------
+ * PropertiesService (9 KB per-property limit, 500 KB total) stores only:
+ *   SB_STATUS      – "running" | "complete" | "error"
+ *   SB_TRIGGER_ID  – trigger UID
+ *   SB_IDS_0, SB_IDS_1, … – pending match IDs chunked at 7 KB each
+ *
+ * Large data lives in temporary GitHub files (deleted at finalize):
+ *   spotkick/data/_sb_rebuild_index.json – matchId → meta map
+ *   spotkick/data/_sb_rebuild_wip.json   – accumulated penalties array
  *
  * Shares functions from AggregatePenalties.gs (same GAS project):
  *   computePressureIndex_, deriveConfidence_, mergePenalties_,
@@ -26,10 +37,12 @@
  * Laget av Mohibb Malik, 2025
  */
 
-const SB_RAW_BASE = 'https://raw.githubusercontent.com/statsbomb/open-data/master/data';
-const SB_BATCH_SIZE = 5;              // event files fetched in parallel per iteration
-const SB_TIME_BUDGET_MS = 5.5 * 60 * 1000; // leave 30 s for cleanup before GAS kills us
-const SB_CHUNK_SIZE = 380 * 1024;    // bytes per Properties chunk (limit is 500 KB)
+const SB_RAW_BASE      = 'https://raw.githubusercontent.com/statsbomb/open-data/master/data';
+const SB_BATCH_SIZE    = 5;
+const SB_TIME_BUDGET_MS = 5.5 * 60 * 1000; // 30 s buffer before GAS kills the run
+const SB_IDS_CHUNK     = 7 * 1024;          // 7 KB per PropertiesService chunk (limit is 9 KB)
+const SB_INDEX_PATH    = 'spotkick/data/_sb_rebuild_index.json';
+const SB_WIP_PATH      = 'spotkick/data/_sb_rebuild_wip.json';
 
 // StatsBomb competition_ids to include in the rebuild.
 const STATSBOMB_COMPETITION_ALLOWLIST = [
@@ -89,10 +102,12 @@ function startStatsBombRebuild() {
   const matchIds = Object.keys(matchIndex).map(Number);
   Logger.log('%s matches in scope', matchIds.length);
 
-  // Persist Phase 1 state.
-  sbWriteChunked_('SB_MATCH_INDEX', matchIndex);
-  sbWriteChunked_('SB_PENALTIES', []);
-  props.setProperty('SB_PENDING_IDS', JSON.stringify(matchIds));
+  // Write large data to GitHub files.
+  sbWriteGithubJson_(SB_INDEX_PATH, matchIndex, 'StatsBomb rebuild: write match index');
+  sbWriteGithubJson_(SB_WIP_PATH, [], 'StatsBomb rebuild: init wip penalties');
+
+  // Store small state in PropertiesService.
+  sbWriteIds_(matchIds);
   props.setProperty('SB_STATUS', 'running');
   props.deleteProperty('SB_TRIGGER_ID');
 
@@ -112,11 +127,11 @@ function continueStatsBombRebuild() {
     return;
   }
 
-  let pendingIds = JSON.parse(props.getProperty('SB_PENDING_IDS') || '[]');
+  let pendingIds = sbReadIds_();
   if (!pendingIds.length) { sbFinalize_(); return; }
 
-  const matchIndex = sbReadChunked_('SB_MATCH_INDEX') || {};
-  let penalties   = sbReadChunked_('SB_PENALTIES')   || [];
+  const matchIndex = sbReadGithubJson_(SB_INDEX_PATH) || {};
+  let penalties    = sbReadGithubJson_(SB_WIP_PATH)   || [];
 
   Logger.log('%s matches remaining, %s penalties so far', pendingIds.length, penalties.length);
 
@@ -147,9 +162,10 @@ function continueStatsBombRebuild() {
     }
 
     batchCount++;
-    // Save after each parallel batch so a crash only loses one batch.
-    props.setProperty('SB_PENDING_IDS', JSON.stringify(pendingIds));
-    sbWriteChunked_('SB_PENALTIES', penalties);
+    // Save progress so a crash only loses one batch.
+    sbWriteIds_(pendingIds);
+    sbWriteGithubJson_(SB_WIP_PATH, penalties,
+      'StatsBomb rebuild: batch ' + batchCount + ' (' + pendingIds.length + ' remaining)');
   }
 
   Logger.log('Ran %s batches; %s remaining, %s penalties total', batchCount, pendingIds.length, penalties.length);
@@ -178,10 +194,10 @@ function cancelStatsBombRebuild() {
 
 /** Logs current rebuild progress to the execution log. */
 function rebuildStatus() {
-  const props = PropertiesService.getScriptProperties();
+  const props    = PropertiesService.getScriptProperties();
   const status   = props.getProperty('SB_STATUS') || 'idle';
-  const pending  = JSON.parse(props.getProperty('SB_PENDING_IDS') || '[]');
-  const penalties = sbReadChunked_('SB_PENALTIES') || [];
+  const pending  = sbReadIds_();
+  const penalties = sbReadGithubJson_(SB_WIP_PATH) || [];
   Logger.log('Status: %s | Remaining matches: %s | Penalties accumulated: %s',
     status, pending.length, penalties.length);
 }
@@ -192,7 +208,7 @@ function sbFinalize_() {
   const props = PropertiesService.getScriptProperties();
   Logger.log('All matches processed. Finalizing...');
 
-  let sbPenalties = sbReadChunked_('SB_PENALTIES') || [];
+  let sbPenalties = sbReadGithubJson_(SB_WIP_PATH) || [];
   sbPenalties.sort((a, b) => (a.date < b.date ? 1 : -1));
 
   // Merge with current GitHub file so Understat rows added since the last
@@ -206,6 +222,10 @@ function sbFinalize_() {
 
   merged.sort((a, b) => (a.date < b.date ? 1 : -1));
   writePenaltiesToGithub_(merged);
+
+  // Delete temporary rebuild files from GitHub.
+  sbDeleteGithubFile_(SB_INDEX_PATH);
+  sbDeleteGithubFile_(SB_WIP_PATH);
 
   props.setProperty('SB_STATUS', 'complete');
   sbDeleteTrigger_(props.getProperty('SB_TRIGGER_ID'));
@@ -308,7 +328,7 @@ function sbMapStage_(compName, match) {
   if (stage.includes('semi'))    return 'semi_final';
   if (stage.includes('quarter')) return 'quarter_final';
   if (stage.includes('16') || stage.includes('last 16')) return 'round_of_16';
-  return 'group'; // regular group stage or league match
+  return 'group';
 }
 
 function sbMapLeagueContext_(compName) {
@@ -338,40 +358,116 @@ function sbKeeper_(shot) {
   return gk ? ((gk.player || {}).name || 'Unknown') : 'Unknown';
 }
 
-// -- PROPERTIES / CHUNK HELPERS -----------------------------------------------
+// -- PENDING IDS (PropertiesService chunks at 7 KB) ---------------------------
 
-// PropertiesService has a 500 KB per-property limit. These helpers transparently
-// split large JSON values across numbered keys: {prefix}_0, {prefix}_1, …
-
-function sbWriteChunked_(prefix, obj) {
+function sbWriteIds_(ids) {
   const props = PropertiesService.getScriptProperties();
-  const str   = JSON.stringify(obj);
+  const str   = JSON.stringify(ids);
 
-  // Delete existing chunks (array may have been smaller before).
+  // Delete existing chunks.
   for (let i = 0; ; i++) {
-    const key = prefix + '_' + i;
-    if (props.getProperty(key) == null) break;
-    props.deleteProperty(key);
+    if (props.getProperty('SB_IDS_' + i) == null) break;
+    props.deleteProperty('SB_IDS_' + i);
   }
 
-  // Write new chunks.
-  const n = Math.max(1, Math.ceil(str.length / SB_CHUNK_SIZE));
+  const n = Math.max(1, Math.ceil(str.length / SB_IDS_CHUNK));
   for (let i = 0; i < n; i++) {
-    props.setProperty(prefix + '_' + i, str.slice(i * SB_CHUNK_SIZE, (i + 1) * SB_CHUNK_SIZE));
+    props.setProperty('SB_IDS_' + i, str.slice(i * SB_IDS_CHUNK, (i + 1) * SB_IDS_CHUNK));
   }
 }
 
-function sbReadChunked_(prefix) {
+function sbReadIds_() {
   const props = PropertiesService.getScriptProperties();
   let str = '';
   for (let i = 0; ; i++) {
-    const chunk = props.getProperty(prefix + '_' + i);
+    const chunk = props.getProperty('SB_IDS_' + i);
     if (chunk == null) break;
     str += chunk;
   }
-  if (!str) return null;
-  try { return JSON.parse(str); } catch (_) { return null; }
+  if (!str) return [];
+  try { return JSON.parse(str); } catch (_) { return []; }
 }
+
+// -- GITHUB FILE HELPERS -------------------------------------------------------
+
+function sbReadGithubJson_(path) {
+  const { token, repo, branch } = githubConfig_();
+  const url = 'https://api.github.com/repos/' + repo + '/contents/' + path + '?ref=' + branch;
+  const res = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() === 404) return null;
+  if (res.getResponseCode() !== 200) {
+    Logger.log('sbReadGithubJson_: HTTP %s for %s', res.getResponseCode(), path);
+    return null;
+  }
+  try {
+    const body    = JSON.parse(res.getContentText());
+    const content = Utilities.newBlob(Utilities.base64Decode(body.content)).getDataAsString();
+    return JSON.parse(content);
+  } catch (_) { return null; }
+}
+
+function sbWriteGithubJson_(path, data, commitMsg) {
+  const { token, repo, branch } = githubConfig_();
+  const apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + path;
+  const encoded = Utilities.base64Encode(JSON.stringify(data));
+
+  // Retry up to 3 times on 409 (SHA conflict from a concurrent run).
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    // Always fetch the current SHA fresh to avoid stale-SHA conflicts.
+    let sha;
+    const getRes = UrlFetchApp.fetch(apiUrl + '?ref=' + branch, {
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+      muteHttpExceptions: true,
+    });
+    if (getRes.getResponseCode() === 200) {
+      sha = JSON.parse(getRes.getContentText()).sha;
+    }
+
+    const payload = { message: commitMsg, content: encoded, branch };
+    if (sha) payload.sha = sha;
+
+    const putRes = UrlFetchApp.fetch(apiUrl, {
+      method: 'put',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+
+    if (putRes.getResponseCode() < 300) return;
+    if (putRes.getResponseCode() === 409 && attempt < 3) {
+      Logger.log('SHA conflict writing %s (attempt %s/3), retrying...', path, attempt);
+      Utilities.sleep(1000 * attempt);
+      continue;
+    }
+    throw new Error('sbWriteGithubJson_ failed for ' + path + ': ' + putRes.getResponseCode() + ' ' + putRes.getContentText());
+  }
+}
+
+function sbDeleteGithubFile_(path) {
+  const { token, repo, branch } = githubConfig_();
+  const apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + path;
+
+  const getRes = UrlFetchApp.fetch(apiUrl + '?ref=' + branch, {
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+    muteHttpExceptions: true,
+  });
+  if (getRes.getResponseCode() !== 200) return; // already gone
+
+  const sha = JSON.parse(getRes.getContentText()).sha;
+  UrlFetchApp.fetch(apiUrl, {
+    method: 'delete',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+    payload: JSON.stringify({ message: 'StatsBomb rebuild: delete ' + path.split('/').pop(), sha, branch }),
+    muteHttpExceptions: true,
+  });
+}
+
+// -- MISC HELPERS -------------------------------------------------------------
 
 function sbDeleteTrigger_(triggerId) {
   if (!triggerId) return;
@@ -382,17 +478,15 @@ function sbDeleteTrigger_(triggerId) {
 
 function sbClearRebuildState_() {
   const props = PropertiesService.getScriptProperties();
-  ['SB_STATUS', 'SB_PENDING_IDS', 'SB_TRIGGER_ID'].forEach(k => props.deleteProperty(k));
-  for (const prefix of ['SB_MATCH_INDEX', 'SB_PENALTIES']) {
-    for (let i = 0; ; i++) {
-      const key = prefix + '_' + i;
-      if (props.getProperty(key) == null) break;
-      props.deleteProperty(key);
-    }
+  ['SB_STATUS', 'SB_TRIGGER_ID'].forEach(k => props.deleteProperty(k));
+  for (let i = 0; ; i++) {
+    if (props.getProperty('SB_IDS_' + i) == null) break;
+    props.deleteProperty('SB_IDS_' + i);
   }
+  // Best-effort cleanup of GitHub temp files (may already be gone).
+  try { sbDeleteGithubFile_(SB_INDEX_PATH); } catch (_) {}
+  try { sbDeleteGithubFile_(SB_WIP_PATH);   } catch (_) {}
 }
-
-// -- FETCH HELPER -------------------------------------------------------------
 
 function sbFetch_(path) {
   const url = SB_RAW_BASE + '/' + path;
