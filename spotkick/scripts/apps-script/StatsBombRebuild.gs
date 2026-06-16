@@ -412,28 +412,37 @@ function sbReadGithubJson_(path) {
 function sbWriteGithubJson_(path, data, commitMsg) {
   const { token, repo, branch } = githubConfig_();
   const apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + path;
+  const encoded = Utilities.base64Encode(JSON.stringify(data));
 
-  // Fetch existing SHA (needed for update; omit for create).
-  let sha;
-  const getRes = UrlFetchApp.fetch(apiUrl + '?ref=' + branch, {
-    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
-    muteHttpExceptions: true,
-  });
-  if (getRes.getResponseCode() === 200) {
-    sha = JSON.parse(getRes.getContentText()).sha;
-  }
+  // Retry up to 3 times on 409 (SHA conflict from a concurrent run).
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    // Always fetch the current SHA fresh to avoid stale-SHA conflicts.
+    let sha;
+    const getRes = UrlFetchApp.fetch(apiUrl + '?ref=' + branch, {
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+      muteHttpExceptions: true,
+    });
+    if (getRes.getResponseCode() === 200) {
+      sha = JSON.parse(getRes.getContentText()).sha;
+    }
 
-  const payload = { message: commitMsg, content: Utilities.base64Encode(JSON.stringify(data)), branch };
-  if (sha) payload.sha = sha;
+    const payload = { message: commitMsg, content: encoded, branch };
+    if (sha) payload.sha = sha;
 
-  const putRes = UrlFetchApp.fetch(apiUrl, {
-    method: 'put',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-  if (putRes.getResponseCode() >= 300) {
+    const putRes = UrlFetchApp.fetch(apiUrl, {
+      method: 'put',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+
+    if (putRes.getResponseCode() < 300) return;
+    if (putRes.getResponseCode() === 409 && attempt < 3) {
+      Logger.log('SHA conflict writing %s (attempt %s/3), retrying...', path, attempt);
+      Utilities.sleep(1000 * attempt);
+      continue;
+    }
     throw new Error('sbWriteGithubJson_ failed for ' + path + ': ' + putRes.getResponseCode() + ' ' + putRes.getContentText());
   }
 }
