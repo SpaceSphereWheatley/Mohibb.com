@@ -1,15 +1,18 @@
 /**
  * AggregatePenalties.gs
  *
- * Weekly Google Apps Script job that pulls penalty data from multiple free
- * sources, normalizes them to Spotkick's flat penalty schema, merges +
- * dedupes against the existing spotkick/data/penalties.json, and pushes the
- * result back to GitHub via the Contents API.
+ * Weekly Google Apps Script job that pulls penalty data from live sources,
+ * normalizes them to Spotkick's flat penalty schema, merges + dedupes against
+ * the existing spotkick/data/penalties.json, and pushes back via the Contents API.
+ *
+ * For the one-time StatsBomb historical baseline rebuild, see StatsBombRebuild.gs
+ * in the same GAS project.
  *
  * Output schema (one object per penalty), matches spotkick/data/penalties.json:
  *   {
  *     matchId, date, competition, season, taker, takerId, keeper, team,
- *     opponent, minute, placement, outcome, isShootout, pressureIndex
+ *     opponent, minute, placement, outcome, isShootout, pressureIndex,
+ *     confidence   -- "full" | "partial" | "minimal" (see deriveConfidence_)
  *   }
  *
  * ADDING A NEW SOURCE
@@ -17,9 +20,8 @@
  * 1. Write a function `fetchFromYourSource_()` that returns an array of
  *    "raw" penalty records in whatever shape that source provides.
  * 2. Write a `normalizeYourSource_(raw)` function that maps one raw record
- *    to the schema above (set fields you can't determine to null — the
- *    merge step will keep existing values for those if a match already
- *    exists).
+ *    to the schema above. Set fields you can't determine to null.
+ *    Always set `confidence` using deriveConfidence_(p) at the end.
  * 3. Register both in the SOURCES array below.
  *
  * SETUP (Script Properties)
@@ -55,7 +57,7 @@ const SOURCES = [
 
 // -- ENTRY POINT --------------------------------------------------------------
 function run() {
-  const existing = fetchExistingPenalties_();
+  const { penalties: existing, dirty } = fetchExistingPenalties_();
   Logger.log('Existing penalties: %s', existing.length);
 
   let incoming = [];
@@ -75,10 +77,11 @@ function run() {
   }
 
   const merged = mergePenalties_(existing, incoming);
+  const hasNew = merged.length > existing.length;
   Logger.log('Merged total: %s (added %s)', merged.length, merged.length - existing.length);
 
-  if (merged.length === existing.length) {
-    Logger.log('No new penalties found, skipping commit.');
+  if (!hasNew && !dirty) {
+    Logger.log('Nothing changed, skipping commit.');
     return;
   }
 
@@ -86,9 +89,20 @@ function run() {
   writePenaltiesToGithub_(merged);
 }
 
+// -- CONFIDENCE ---------------------------------------------------------------
+// Derives a data-quality tier from whichever fields are populated.
+//   "full"    – placement known (StatsBomb rows and any source with zone data)
+//   "partial" – outcome known but no placement (Understat and similar)
+//   "minimal" – everything fell back to defaults
+function deriveConfidence_(p) {
+  if (p.placement != null) return 'full';
+  if (p.outcome != null) return 'partial';
+  return 'minimal';
+}
+
 // -- MERGE / DEDUPE -----------------------------------------------------------
 
-// Two penalties are the "same" if they're the same date + taker + minute.
+// Two penalties are the "same" if they share the same date + taker + minute.
 // (Good enough across sources that don't share matchIds.)
 function penaltyKey_(p) {
   return [p.date, normalizeName_(p.taker), p.minute].join('|');
@@ -190,7 +204,7 @@ function fetchFromUnderstat_() {
   const penalties = [];
 
   for (const league of UNDERSTAT_LEAGUES) {
-    const url = `https://understat.com/league/${league}/${season}`;
+    const url = 'https://understat.com/league/' + league + '/' + season;
     const html = UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getContentText();
     const datesJson = extractJsonVar_(html, 'datesData');
     if (!datesJson) continue;
@@ -212,7 +226,7 @@ function fetchFromUnderstat_() {
 }
 
 function fetchUnderstatMatchPenalties_(match, league, season) {
-  const url = `https://understat.com/match/${match.id}`;
+  const url = 'https://understat.com/match/' + match.id;
   const html = UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getContentText();
   const shotsJson = extractJsonVar_(html, 'shotsData');
   if (!shotsJson) return [];
@@ -250,66 +264,36 @@ function normalizeUnderstat_(raw) {
   const team = isHome ? match.h.title : match.a.title;
   const opponent = isHome ? match.a.title : match.h.title;
 
-  // Goals scored by each side *before* this shot (for scoreline context).
-  const goalsBefore = goalsBeforeMinute_(shot, match, minute);
-  const teamGoals = isHome ? goalsBefore.h : goalsBefore.a;
-  const oppGoals = isHome ? goalsBefore.a : goalsBefore.h;
-  const diff = teamGoals - oppGoals;
-  let scoreSituation = 'level';
-  if (diff >= 2) scoreSituation = 'winning2+';
-  else if (diff === 1) scoreSituation = 'winning1';
-  else if (diff === -1) scoreSituation = 'losing1';
-  else if (diff <= -2) scoreSituation = 'losing2+';
+  // Understat's match-page shot data doesn't expose per-minute scorelines,
+  // so scoreSituation defaults to 'level'. This is a known limitation — the
+  // pressureIndex for Understat rows is less precise than StatsBomb's.
+  const scoreSituation = 'level';
 
   let outcome = 'missed';
   if (shot.result === 'Goal') outcome = 'goal';
   else if (shot.result === 'SavedShot') outcome = 'saved';
 
-  return {
-    matchId: `understat-${match.id}`,
+  const p = {
+    matchId: 'understat-' + match.id,
     date: (match.datetime || '').slice(0, 10),
     competition: UNDERSTAT_LEAGUE_NAMES[league] || league,
-    season: `${season}/${Number(season) + 1}`,
+    season: season + '/' + (Number(season) + 1),
     taker: shot.player,
-    takerId: shot.player_id != null ? `understat-${shot.player_id}` : null,
-    // Understat shot data doesn't identify the keeper.
-    keeper: null,
+    takerId: shot.player_id != null ? 'understat-' + shot.player_id : null,
+    keeper: null,       // Understat shot data doesn't identify the keeper
     team,
     opponent,
     minute,
-    // Understat doesn't give shot placement within the goal.
-    placement: null,
+    placement: null,   // Understat doesn't give shot placement within the goal
     outcome,
     isShootout: false,
-    // Stage/league context aren't derivable from this endpoint; pressureIndex
-    // falls back to defaults (treated as a regular league match).
     scoreSituation,
     stage: 'league_run_in',
     leagueContext: 'na',
   };
-}
 
-// Sum goals scored by each side strictly before `minute`.
-function goalsBeforeMinute_(shot, match, minute) {
-  // Understat match pages don't expose all shots at the league-page level,
-  // so approximate using the final score and this shot's own minute: assume
-  // goals are evenly distributed isn't great, but Understat's `h_goals`/
-  // `a_goals` on the league page are FULL-TIME scores, not "before this kick".
-  // Since we don't have a cheap source of minute-by-minute scoring here,
-  // default to level (0-0) before the kick — pressureIndex then falls back
-  // to its 'level' weighting (0.70), a reasonable middle ground.
-  return { h: 0, a: 0 };
-}
-
-// Extracts `var <name> = JSON.parse('...')` payloads embedded in Understat pages.
-function extractJsonVar_(html, varName) {
-  const re = new RegExp(varName + "\\s*=\\s*JSON\\.parse\\('([^']*)'\\)");
-  const match = html.match(re);
-  if (!match) return null;
-  // Understat escapes the JSON string for single-quoted JS (e.g. \xHH, \").
-  return match[1]
-    .replace(/\\x([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/\\'/g, "'");
+  p.confidence = deriveConfidence_(p);
+  return p;
 }
 
 // -- GITHUB I/O ----------------------------------------------------------------
@@ -325,37 +309,52 @@ function githubConfig_() {
   return { token, repo, branch };
 }
 
+// Fetches existing penalties.json from GitHub and backfills any records
+// missing a `confidence` field. Returns { penalties, dirty } where dirty
+// is true if any records were patched (so the caller knows to write even
+// if no new penalties arrived).
 function fetchExistingPenalties_() {
   const { token, repo, branch } = githubConfig_();
-  const url = `https://api.github.com/repos/${repo}/contents/${DATA_PATH}?ref=${branch}`;
+  const url = 'https://api.github.com/repos/' + repo + '/contents/' + DATA_PATH + '?ref=' + branch;
   const res = UrlFetchApp.fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
   if (res.getResponseCode() !== 200) {
-    throw new Error(`Failed to fetch ${DATA_PATH}: ${res.getResponseCode()} ${res.getContentText()}`);
+    throw new Error('Failed to fetch ' + DATA_PATH + ': ' + res.getResponseCode() + ' ' + res.getContentText());
   }
   const body = JSON.parse(res.getContentText());
   const content = Utilities.newBlob(Utilities.base64Decode(body.content)).getDataAsString();
-  return JSON.parse(content);
+  const penalties = JSON.parse(content);
+
+  let dirty = false;
+  for (const p of penalties) {
+    if (!p.confidence) {
+      p.confidence = deriveConfidence_(p);
+      dirty = true;
+    }
+  }
+  if (dirty) Logger.log('Backfilled confidence on existing records.');
+
+  return { penalties, dirty };
 }
 
 function writePenaltiesToGithub_(penalties) {
   const { token, repo, branch } = githubConfig_();
-  const getUrl = `https://api.github.com/repos/${repo}/contents/${DATA_PATH}?ref=${branch}`;
+  const getUrl = 'https://api.github.com/repos/' + repo + '/contents/' + DATA_PATH + '?ref=' + branch;
   const getRes = UrlFetchApp.fetch(getUrl, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
   if (getRes.getResponseCode() !== 200) {
-    throw new Error(`Failed to fetch sha for ${DATA_PATH}: ${getRes.getResponseCode()}`);
+    throw new Error('Failed to fetch sha for ' + DATA_PATH + ': ' + getRes.getResponseCode());
   }
   const sha = JSON.parse(getRes.getContentText()).sha;
 
   const content = Utilities.base64Encode(JSON.stringify(penalties, null, 0));
-  const putUrl = `https://api.github.com/repos/${repo}/contents/${DATA_PATH}`;
+  const putUrl = 'https://api.github.com/repos/' + repo + '/contents/' + DATA_PATH;
   const payload = {
-    message: `Weekly penalty data update (${new Date().toISOString().slice(0, 10)})`,
+    message: 'Weekly penalty data update (' + new Date().toISOString().slice(0, 10) + ')',
     content,
     sha,
     branch,
@@ -363,12 +362,26 @@ function writePenaltiesToGithub_(penalties) {
   const putRes = UrlFetchApp.fetch(putUrl, {
     method: 'put',
     contentType: 'application/json',
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
   if (putRes.getResponseCode() >= 300) {
-    throw new Error(`Failed to write ${DATA_PATH}: ${putRes.getResponseCode()} ${putRes.getContentText()}`);
+    throw new Error('Failed to write ' + DATA_PATH + ': ' + putRes.getResponseCode() + ' ' + putRes.getContentText());
   }
   Logger.log('Pushed updated %s (%s penalties).', DATA_PATH, penalties.length);
+}
+
+// Extracts `var <name> = JSON.parse('...')` payloads embedded in Understat pages.
+function extractJsonVar_(html, varName) {
+  const re = new RegExp(varName + "\\s*=\\s*JSON\\.parse\\('([^']*)'\\)");
+  const match = html.match(re);
+  if (!match) return null;
+  // Understat escapes the JSON string for single-quoted JS.
+  return match[1]
+    .replace(/\\x([0-9A-Fa-f]{2})/g, function(_, hex) { return String.fromCharCode(parseInt(hex, 16)); })
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, '"');
 }

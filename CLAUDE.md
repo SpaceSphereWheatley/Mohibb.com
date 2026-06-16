@@ -107,14 +107,51 @@ changes).
 ## Spotkick (mohibb.com/spotkick)
 
 `spotkick/` is a self-contained, client-side penalty analytics dashboard
-built on StatsBomb open data. A local build script
-(`spotkick/scripts/build-data.mjs`, run with plain `node`, requires `unzip`)
-downloads StatsBomb's open data once into `.statsbomb-cache/` (gitignored at
-the repo root) and writes a flat `spotkick/data/penalties.json` with a
-computed "Pressure Index" per penalty (`spotkick/src/js/pressureIndex.js`).
-The page (`spotkick/src/js/app.js` + `data.js`) loads that file (falling back
-to `spotkick/data/penalties.sample.json` if absent) and does all filtering and
-aggregation in the browser — nothing is uploaded, no backend.
+built on open football data. The page (`spotkick/src/js/app.js` + `data.js`)
+loads `spotkick/data/penalties.json` (falling back to `penalties.sample.json`
+if absent) and does all filtering and aggregation in the browser — nothing is
+uploaded, no backend.
+
+**Data pipeline — fully GAS-based:**
+- **StatsBomb historical backbone** — `spotkick/scripts/apps-script/StatsBombRebuild.gs`
+  fetches StatsBomb open data directly from `raw.githubusercontent.com` and rebuilds
+  `penalties.json` in the repo via the GitHub Contents API. Uses a continuation
+  pattern (PropertiesService + 1-minute trigger) to work around GAS's 6-minute
+  execution limit. Run `startStatsBombRebuild()` manually when a historical rebuild
+  is needed (e.g. new StatsBomb data releases).
+- **Weekly Google Apps Script job** — `spotkick/scripts/apps-script/AggregatePenalties.gs`
+  runs on a weekly time-driven trigger, fetches recent penalties from Understat
+  (current season, big-5 leagues), merges/dedupes against the existing file, and
+  pushes any new records directly to `main`.
+
+**GAS project setup** (one-time):
+1. [script.google.com](https://script.google.com) → New project
+2. Create two script files: `AggregatePenalties.gs` and `StatsBombRebuild.gs`
+   (paste content from `spotkick/scripts/apps-script/`)
+3. ⚙ Project Settings → Script properties → Add:
+   - `GITHUB_TOKEN` — PAT with `repo` scope (Contents read/write)
+   - `GITHUB_REPO` — `SpaceSphereWheatley/Mohibb.com`
+   - `GITHUB_BRANCH` — `main`
+4. Triggers → Add Trigger → `run` → Time-driven → Weekly (for ongoing updates)
+5. For the initial historical seed: select `startStatsBombRebuild` → Run once.
+   Takes ~30–60 min; auto-reschedules itself. Check with `rebuildStatus()`.
+
+**Adding a new data source** to the weekly job:
+1. Write `fetchFromYourSource_()` returning an array of raw records
+2. Write `normalizeYourSource_(raw)` mapping one raw record to the penalty schema;
+   set unknown fields to `null`; end with `p.confidence = deriveConfidence_(p)`
+3. Add `{ name: 'your-source', fetch: fetchFromYourSource_, normalize: normalizeYourSource_ }`
+   to the `SOURCES` array in `AggregatePenalties.gs` — nothing else changes
+
+**`confidence` field** — each penalty has `confidence: "full" | "partial" | "minimal"`:
+- `"full"`: placement zone + real scoreline known (StatsBomb)
+- `"partial"`: outcome known but no placement/keeper (Understat and similar)
+- `"minimal"`: all fields fell back to defaults
+Derived automatically by `deriveConfidence_()` in the GAS script. The UI has an
+"Include estimated penalties" toggle that excludes `partial`/`minimal` rows.
+
+**`pressureIndex`** computed per penalty by `spotkick/src/js/pressureIndex.js`
+(ported to GAS as inline functions in `AggregatePenalties.gs`).
 
 It shares this repo's design tokens (warm palette, sharp 1.5px borders, Plus
 Jakarta Sans + Newsreader) via its own `spotkick/src/css/style.css`, but keeps

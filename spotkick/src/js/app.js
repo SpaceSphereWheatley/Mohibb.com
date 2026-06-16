@@ -11,7 +11,7 @@ const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
 const ZONE_ORDER = ['TL','TC','TR','ML','MC','MR','BL','BC','BR'];
 
 const state = {
-  filters: { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null },
+  filters: { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null, confidence: new Set() },
   visibleRows: 8,
 };
 
@@ -443,7 +443,7 @@ function renderPenalties(rows) {
       </div>
       <div class="pi-right">
         <div class="pi-badge ${p.outcome}">${p.outcome}</div>
-        <div class="pi-pressure">PI <b>${p.pressureIndex}</b> · ${ZONE_LABEL[p.placement]}</div>
+        <div class="pi-pressure">PI <b>${p.pressureIndex}</b>${p.placement ? ' · ' + ZONE_LABEL[p.placement] : ''}</div>
       </div>
     </div>`).join('');
   document.getElementById('showMore').style.display = rows.length > state.visibleRows ? '' : 'none';
@@ -522,6 +522,7 @@ function wireEvents() {
   document.getElementById('selLbMinSample').addEventListener('change', () => {
     renderLeaderboard(applyFilters(state.filters));
   });
+  document.getElementById('chkEstimated').addEventListener('change', applyFromSheet);
   document.getElementById('selComp').addEventListener('change', applyFromSheet);
   document.getElementById('selSeason').addEventListener('change', applyFromSheet);
   document.getElementById('selTaker').addEventListener('change', applyFromSheet);
@@ -548,7 +549,7 @@ function wireEvents() {
 }
 
 function clearFilters() {
-  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null };
+  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null, confidence: new Set() };
   state.visibleRows = 8;
 
   document.getElementById('selComp').value = 'All competitions';
@@ -560,6 +561,7 @@ function clearFilters() {
   document.getElementById('dateTo').value = '';
   document.getElementById('dateRangeGroup').hidden = true;
   document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
+  document.getElementById('chkEstimated').checked = true;
 
   closeFilter();
   render();
@@ -584,6 +586,10 @@ function applyFromSheet() {
   state.filters.outcomes = outcomes;
   state.filters.dateFrom = document.getElementById('dateFrom').value || null;
   state.filters.dateTo = document.getElementById('dateTo').value || null;
+
+  const includeEstimated = document.getElementById('chkEstimated').checked;
+  state.filters.confidence = includeEstimated ? new Set() : new Set(['full']);
+
   state.visibleRows = 8;
 
   render();

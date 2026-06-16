@@ -28,7 +28,8 @@ export async function loadData() {
 
 export function getAll() { return ALL; }
 
-// filters: { competition, season, taker, keeper, team, outcomes:Set, zone, minPI, maxPI, dateFrom, dateTo }
+// filters: { competition, season, taker, keeper, team, outcomes:Set, zone, minPI, maxPI,
+//            dateFrom, dateTo, confidence:Set (default: all tiers) }
 export function applyFilters(filters = {}) {
   return ALL.filter(p => {
     if (filters.competition && filters.competition !== 'all' && p.competition !== filters.competition) return false;
@@ -42,6 +43,7 @@ export function applyFilters(filters = {}) {
     if (filters.maxPI != null && p.pressureIndex > filters.maxPI) return false;
     if (filters.dateFrom && p.date < filters.dateFrom) return false;
     if (filters.dateTo && p.date > filters.dateTo) return false;
+    if (filters.confidence && filters.confidence.size && !filters.confidence.has(p.confidence || 'full')) return false;
     return true;
   });
 }
@@ -157,10 +159,12 @@ export function takerProfile(taker) {
   const rows = ALL.filter(p => p.taker === taker);
   if (!rows.length) return null;
   const goals = rows.filter(p => p.outcome === 'goal').length;
-  // favoured zone
+  // favoured zone (only count rows with known placement)
   const zoneCount = {};
-  for (const p of rows) zoneCount[p.placement] = (zoneCount[p.placement] || 0) + 1;
-  const favoured = Object.entries(zoneCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'MC';
+  for (const p of rows) {
+    if (p.placement) zoneCount[p.placement] = (zoneCount[p.placement] || 0) + 1;
+  }
+  const favoured = Object.entries(zoneCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '–';
   // h2h
   const h2h = new Map();
   for (const p of rows) {

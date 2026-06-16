@@ -118,6 +118,14 @@
     <input class="sheet-select player-search" id="selKeeper" type="text" list="keeperOptions" placeholder="Any goalkeeper" autocomplete="off">
     <datalist id="keeperOptions"></datalist>
   </div>
+  <div class="sheet-group">
+    <div class="sheet-label">Data quality</div>
+    <label class="quality-toggle">
+      <input type="checkbox" id="chkEstimated" checked>
+      <span>Include estimated penalties</span>
+      <span class="quality-badge">partial data</span>
+    </label>
+  </div>
   <button type="button" class="clear-btn" id="clearBtn">Clear filters</button>
 </div>
 
@@ -272,7 +280,7 @@
 </div>
 </div>
 
-<div class="data-credit">Data: <a href="https://github.com/statsbomb/open-data" target="_blank" rel="noopener">StatsBomb open data</a></div>
+<div class="data-credit">Data: <a href="https://github.com/statsbomb/open-data" target="_blank" rel="noopener">StatsBomb open data</a> · <a href="https://understat.com" target="_blank" rel="noopener">Understat</a></div>
 </div>
 
 <nav class="bottom-nav">
