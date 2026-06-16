@@ -141,6 +141,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',syste
 .date-range-row{display:flex;gap:8px;}
 .date-range-row .sheet-select{flex:1;min-width:0;}
 
+.quality-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px 14px;background:var(--bg);border:1.5px solid var(--line);font-size:15px;font-weight:500;color:var(--ink-2);width:100%;}
+.quality-toggle input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;}
+.quality-toggle span:first-of-type{flex:1;}
+.quality-badge{font-size:10px;font-weight:700;padding:2px 6px;background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber);flex-shrink:0;}
+
 .lb-list{display:flex;flex-direction:column;gap:8px;}
 .lb-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line);background:var(--bg);cursor:pointer;transition:.15s;}
 .lb-row:hover{border-color:var(--accent);}

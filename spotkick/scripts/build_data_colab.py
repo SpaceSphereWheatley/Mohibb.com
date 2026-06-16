@@ -1,3 +1,5 @@
+# Historical baseline only. For ongoing weekly updates, see apps-script/AggregatePenalties.gs
+
 # build_data_colab.py
 # Spotkick data builder for Google Colab.
 #

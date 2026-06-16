@@ -107,14 +107,32 @@ changes).
 ## Spotkick (mohibb.com/spotkick)
 
 `spotkick/` is a self-contained, client-side penalty analytics dashboard
-built on StatsBomb open data. A local build script
-(`spotkick/scripts/build-data.mjs`, run with plain `node`, requires `unzip`)
-downloads StatsBomb's open data once into `.statsbomb-cache/` (gitignored at
-the repo root) and writes a flat `spotkick/data/penalties.json` with a
-computed "Pressure Index" per penalty (`spotkick/src/js/pressureIndex.js`).
-The page (`spotkick/src/js/app.js` + `data.js`) loads that file (falling back
-to `spotkick/data/penalties.sample.json` if absent) and does all filtering and
-aggregation in the browser — nothing is uploaded, no backend.
+built on open football data. The page (`spotkick/src/js/app.js` + `data.js`)
+loads `spotkick/data/penalties.json` (falling back to `penalties.sample.json`
+if absent) and does all filtering and aggregation in the browser — nothing is
+uploaded, no backend.
+
+**Data pipeline (dual-source):**
+- **StatsBomb historical backbone** — 855+ penalties from `scripts/build-data.mjs`
+  (Node 18+) or `scripts/build_data_colab.py` (Colab), covering World Cup, Euro,
+  UCL, and big-5 leagues with full event detail (keeper, placement zone, shootouts).
+  Run manually when a historical rebuild is needed; output committed to
+  `spotkick/data/penalties.json`.
+- **Weekly Google Apps Script job** — `spotkick/scripts/apps-script/AggregatePenalties.gs`
+  runs on a weekly time-driven trigger, fetches recent penalties from Understat
+  (current season, big-5 leagues), merges/dedupes against the existing file, and
+  pushes any new records directly to `main` via the GitHub Contents API. Setup
+  instructions and source-registry pattern in `apps-script/README.md`.
+
+**`confidence` field** — each penalty has `confidence: "full" | "partial" | "minimal"`:
+- `"full"`: placement zone + real scoreline known (StatsBomb)
+- `"partial"`: outcome known but no placement/keeper (Understat and similar)
+- `"minimal"`: all fields fell back to defaults
+Derived automatically by `deriveConfidence_()` in the GAS script. The UI has an
+"Include estimated penalties" toggle that excludes `partial`/`minimal` rows.
+
+**`pressureIndex`** computed per penalty by `spotkick/src/js/pressureIndex.js`
+(ported to GAS as inline functions in `AggregatePenalties.gs`).
 
 It shares this repo's design tokens (warm palette, sharp 1.5px borders, Plus
 Jakarta Sans + Newsreader) via its own `spotkick/src/css/style.css`, but keeps

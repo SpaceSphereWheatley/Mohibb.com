@@ -1,3 +1,5 @@
+// Historical baseline only. For ongoing weekly updates, see apps-script/AggregatePenalties.gs
+
 // build-data.mjs
 // Downloads StatsBomb open data, extracts all penalties, computes scoreline
 // context + pressure index, writes a single flat data/penalties.json.
