@@ -112,17 +112,18 @@ loads `spotkick/data/penalties.json` (falling back to `penalties.sample.json`
 if absent) and does all filtering and aggregation in the browser — nothing is
 uploaded, no backend.
 
-**Data pipeline (dual-source):**
-- **StatsBomb historical backbone** — 855+ penalties from `scripts/build-data.mjs`
-  (Node 18+) or `scripts/build_data_colab.py` (Colab), covering World Cup, Euro,
-  UCL, and big-5 leagues with full event detail (keeper, placement zone, shootouts).
-  Run manually when a historical rebuild is needed; output committed to
-  `spotkick/data/penalties.json`.
+**Data pipeline — fully GAS-based:**
+- **StatsBomb historical backbone** — `spotkick/scripts/apps-script/StatsBombRebuild.gs`
+  fetches StatsBomb open data directly from `raw.githubusercontent.com` and rebuilds
+  `penalties.json` in the repo via the GitHub Contents API. Uses a continuation
+  pattern (PropertiesService + 1-minute trigger) to work around GAS's 6-minute
+  execution limit. Run `startStatsBombRebuild()` manually when a historical rebuild
+  is needed (e.g. new StatsBomb data releases).
 - **Weekly Google Apps Script job** — `spotkick/scripts/apps-script/AggregatePenalties.gs`
   runs on a weekly time-driven trigger, fetches recent penalties from Understat
   (current season, big-5 leagues), merges/dedupes against the existing file, and
-  pushes any new records directly to `main` via the GitHub Contents API. Setup
-  instructions and source-registry pattern in `apps-script/README.md`.
+  pushes any new records directly to `main`. Setup instructions and source-registry
+  pattern in `spotkick/scripts/apps-script/README.md`.
 
 **`confidence` field** — each penalty has `confidence: "full" | "partial" | "minimal"`:
 - `"full"`: placement zone + real scoreline known (StatsBomb)

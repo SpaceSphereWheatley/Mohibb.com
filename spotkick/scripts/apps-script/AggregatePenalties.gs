@@ -1,10 +1,12 @@
 /**
  * AggregatePenalties.gs
  *
- * Weekly Google Apps Script job that pulls penalty data from multiple free
- * sources, normalizes them to Spotkick's flat penalty schema, merges +
- * dedupes against the existing spotkick/data/penalties.json, and pushes the
- * result back to GitHub via the Contents API.
+ * Weekly Google Apps Script job that pulls penalty data from live sources,
+ * normalizes them to Spotkick's flat penalty schema, merges + dedupes against
+ * the existing spotkick/data/penalties.json, and pushes back via the Contents API.
+ *
+ * For the one-time StatsBomb historical baseline rebuild, see StatsBombRebuild.gs
+ * in the same GAS project.
  *
  * Output schema (one object per penalty), matches spotkick/data/penalties.json:
  *   {
