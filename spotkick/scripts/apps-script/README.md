@@ -53,24 +53,40 @@ auto-schedules itself to continue every minute via a time-driven trigger.
 
 **Estimated time:** 20–60 minutes depending on network latency.
 
+### State storage
+
+GAS `PropertiesService` has a 9 KB per-property limit and 500 KB total —
+far too small for the match index (~600 KB) and accumulated penalties (~1.5 MB).
+Instead, large data is written to temporary GitHub files during the rebuild:
+
+| Data | Storage |
+|------|---------|
+| Match index | `spotkick/data/_sb_rebuild_index.json` (deleted at finalize) |
+| Accumulated penalties | `spotkick/data/_sb_rebuild_wip.json` (deleted at finalize) |
+| Status, trigger ID | `PropertiesService` (`SB_STATUS`, `SB_TRIGGER_ID`) |
+| Pending match IDs | `PropertiesService`, chunked at 7 KB each (`SB_IDS_0`, `SB_IDS_1`, …) |
+
 ### Steps
 
 1. Select `startStatsBombRebuild` in the function dropdown → click **Run**.
    - The execution log shows the competition count, match count, and
      `"Phase 1 done. Starting first batch..."`.
+   - `_sb_rebuild_index.json` and `_sb_rebuild_wip.json` appear in the repo.
    - A 1-minute recurring trigger is created automatically.
 2. Check progress at any time by running `rebuildStatus()`.
 3. When all matches are processed, the script:
    - Merges rebuilt StatsBomb records with any existing data (Understat rows
      added by the weekly job are preserved; StatsBomb wins on conflict).
    - Writes the result to `spotkick/data/penalties.json` on GitHub.
+   - Deletes the two temporary `_sb_rebuild_*.json` files from GitHub.
    - Deletes the trigger and clears all `SB_` properties.
 4. The log says `Done. penalties.json updated on GitHub.` and Cloudflare Pages
    picks up the commit automatically.
 
 ### Stopping early
 
-Run `cancelStatsBombRebuild()` — removes the trigger and clears all state.
+Run `cancelStatsBombRebuild()` — removes the trigger, clears PropertiesService
+state, and deletes the temporary GitHub files.
 
 ### When to run a rebuild
 
