@@ -122,8 +122,26 @@ uploaded, no backend.
 - **Weekly Google Apps Script job** — `spotkick/scripts/apps-script/AggregatePenalties.gs`
   runs on a weekly time-driven trigger, fetches recent penalties from Understat
   (current season, big-5 leagues), merges/dedupes against the existing file, and
-  pushes any new records directly to `main`. Setup instructions and source-registry
-  pattern in `spotkick/scripts/apps-script/README.md`.
+  pushes any new records directly to `main`.
+
+**GAS project setup** (one-time):
+1. [script.google.com](https://script.google.com) → New project
+2. Create two script files: `AggregatePenalties.gs` and `StatsBombRebuild.gs`
+   (paste content from `spotkick/scripts/apps-script/`)
+3. ⚙ Project Settings → Script properties → Add:
+   - `GITHUB_TOKEN` — PAT with `repo` scope (Contents read/write)
+   - `GITHUB_REPO` — `SpaceSphereWheatley/Mohibb.com`
+   - `GITHUB_BRANCH` — `main`
+4. Triggers → Add Trigger → `run` → Time-driven → Weekly (for ongoing updates)
+5. For the initial historical seed: select `startStatsBombRebuild` → Run once.
+   Takes ~30–60 min; auto-reschedules itself. Check with `rebuildStatus()`.
+
+**Adding a new data source** to the weekly job:
+1. Write `fetchFromYourSource_()` returning an array of raw records
+2. Write `normalizeYourSource_(raw)` mapping one raw record to the penalty schema;
+   set unknown fields to `null`; end with `p.confidence = deriveConfidence_(p)`
+3. Add `{ name: 'your-source', fetch: fetchFromYourSource_, normalize: normalizeYourSource_ }`
+   to the `SOURCES` array in `AggregatePenalties.gs` — nothing else changes
 
 **`confidence` field** — each penalty has `confidence: "full" | "partial" | "minimal"`:
 - `"full"`: placement zone + real scoreline known (StatsBomb)
