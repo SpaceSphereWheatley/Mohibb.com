@@ -42,6 +42,13 @@
       "label": "Other / Misc",
       "items": [
         {
+          "name": "Panhandle",
+          "category": "Home",
+          "description": "A shared shopping list and meal planner for two, with live sync and multi-tenant lists.",
+          "url": "https://shopping.mohibb.com",
+          "status": "live"
+        },
+        {
           "name": "Panello",
           "category": "Home",
           "description": "Family dashboard pulling calendar, photos, and weather into one shared screen.",
