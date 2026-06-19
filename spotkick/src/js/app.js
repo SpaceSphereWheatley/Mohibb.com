@@ -6,6 +6,7 @@ import {
   takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket, pressureByTaker,
   topTakers, dateBounds,
 } from './data.js';
+import { clampTooltipPos } from './tooltip.js';
 
 const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
 const ZONE_ORDER = ['TL','TC','TR','ML','MC','MR','BL','BC','BR'];
@@ -135,7 +136,7 @@ function renderPlayer(rows) {
   document.getElementById('playerRate').textContent = Math.round(prof.rate) + '%';
   document.getElementById('playerFavoured').textContent = prof.favoured;
 
-  const maxN = Math.max(...prof.h2h.map(h => h.n), 1);
+  const maxN = Math.max(1, ...prof.h2h.map(h => h.n));
   document.getElementById('h2hList').innerHTML = prof.h2h.slice(0, 5).map(h => {
     const pct = (h.goals / h.n) * 100;
     const color = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
@@ -390,9 +391,13 @@ function handlePressureTakerHover(evt) {
   const hit = pressureTakerPoints.find(p => Math.hypot(p.x - mx, p.y - my) <= p.r + 1.5);
   if (!hit) { tooltip.classList.remove('visible'); return; }
   tooltip.textContent = hit.label || `${hit.taker} — ${Math.round(hit.pct)}% (${hit.n} taken, avg PI ${Math.round(hit.avgPI)})`;
-  tooltip.style.left = hit.x + 'px';
-  tooltip.style.top = (hit.y - hit.r - 6) + 'px';
-  tooltip.classList.add('visible');
+  tooltip.classList.add('visible'); // measure after making it visible so offsetWidth/Height are accurate
+  const { left, top } = clampTooltipPos(
+    hit.x, hit.y, hit.r, tooltip.offsetWidth, tooltip.offsetHeight,
+    canvas.clientWidth, canvas.clientHeight
+  );
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = top + 'px';
 }
 
 function renderLeaderboard(rows) {
