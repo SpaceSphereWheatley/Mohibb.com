@@ -99,7 +99,7 @@ jobs:
         with:
           node-version: 20
       - name: Run Spotkick unit tests
-        run: node --test "spotkick/test/*.test.js"
+        run: node --test spotkick/test/*.test.js
 
   html:
     runs-on: ubuntu-latest
