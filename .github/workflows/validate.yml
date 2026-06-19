@@ -91,6 +91,16 @@ jobs:
           if (!files.length) console.log('(no JS files)');
           EOF
 
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run Spotkick unit tests
+        run: node --test spotkick/test/*.test.js
+
   html:
     runs-on: ubuntu-latest
     steps:
