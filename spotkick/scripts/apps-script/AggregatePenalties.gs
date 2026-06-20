@@ -124,16 +124,26 @@ function normalizeName_(name) {
   return String(name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
+// Ported from src/js/mergePenalties.js. Keep in sync if that file changes.
+const CONFIDENCE_RANK_ = { full: 3, partial: 2, minimal: 1 };
+function confidenceRank_(c) {
+  return CONFIDENCE_RANK_[c] || 0;
+}
+
+// On a key collision, the higher-confidence record wins (full > partial >
+// minimal) so a richer re-fetch (e.g. a StatsBomb rebuild filling in a
+// placement that Understat couldn't) overwrites a lower-quality existing
+// record instead of being silently discarded.
 function mergePenalties_(existing, incoming) {
   const byKey = new Map();
   for (const p of existing) byKey.set(penaltyKey_(p), p);
 
   for (const p of incoming) {
     const key = penaltyKey_(p);
-    if (!byKey.has(key)) {
+    const current = byKey.get(key);
+    if (!current || confidenceRank_(p.confidence) > confidenceRank_(current.confidence)) {
       byKey.set(key, p);
     }
-    // Already present (e.g. from StatsBomb's richer dataset) -> keep existing.
   }
   return Array.from(byKey.values());
 }
@@ -217,7 +227,7 @@ function fetchFromUnderstat_() {
 
   for (const league of UNDERSTAT_LEAGUES) {
     const url = 'https://understat.com/league/' + league + '/' + season;
-    const html = UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getContentText();
+    const html = fetchWithRetry_(url, { muteHttpExceptions: true }).getContentText();
     const datesJson = extractJsonVar_(html, 'datesData');
     if (!datesJson) continue;
 
@@ -239,7 +249,7 @@ function fetchFromUnderstat_() {
 
 function fetchUnderstatMatchPenalties_(match, league, season) {
   const url = 'https://understat.com/match/' + match.id;
-  const html = UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getContentText();
+  const html = fetchWithRetry_(url, { muteHttpExceptions: true }).getContentText();
   const shotsJson = extractJsonVar_(html, 'shotsData');
   if (!shotsJson) return [];
 
@@ -308,6 +318,34 @@ function normalizeUnderstat_(raw) {
   return p;
 }
 
+// -- RETRY / BACKOFF ------------------------------------------------------------
+// Ported from src/js/backoff.js. Keep in sync if that file changes.
+const RETRY_BASE_MS = 500;
+const RETRY_MAX_MS  = 8000;
+const RETRY_MAX_ATTEMPTS = 3;
+
+function backoffDelayMs_(attempt, baseMs, maxMs) {
+  return Math.min(baseMs * Math.pow(2, attempt - 1), maxMs);
+}
+
+function shouldRetry_(statusCode) {
+  return statusCode === 429 || statusCode === 403 || statusCode >= 500;
+}
+
+// Wraps UrlFetchApp.fetch with exponential-backoff retry on 429/403/5xx.
+// `options` must set muteHttpExceptions: true so retryable codes don't throw.
+function fetchWithRetry_(url, options) {
+  let res;
+  for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+    res = UrlFetchApp.fetch(url, options);
+    const code = res.getResponseCode();
+    if (!shouldRetry_(code) || attempt === RETRY_MAX_ATTEMPTS) return res;
+    Logger.log('fetchWithRetry_: HTTP %s for %s (attempt %s/%s), backing off...', code, url, attempt, RETRY_MAX_ATTEMPTS);
+    Utilities.sleep(backoffDelayMs_(attempt, RETRY_BASE_MS, RETRY_MAX_MS));
+  }
+  return res;
+}
+
 // -- GITHUB I/O ----------------------------------------------------------------
 
 function githubConfig_() {
@@ -328,7 +366,7 @@ function githubConfig_() {
 function fetchExistingPenalties_() {
   const { token, repo, branch } = githubConfig_();
   const url = 'https://api.github.com/repos/' + repo + '/contents/' + DATA_PATH + '?ref=' + branch;
-  const res = UrlFetchApp.fetch(url, {
+  const res = fetchWithRetry_(url, {
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
@@ -354,7 +392,7 @@ function fetchExistingPenalties_() {
 function writePenaltiesToGithub_(penalties) {
   const { token, repo, branch } = githubConfig_();
   const getUrl = 'https://api.github.com/repos/' + repo + '/contents/' + DATA_PATH + '?ref=' + branch;
-  const getRes = UrlFetchApp.fetch(getUrl, {
+  const getRes = fetchWithRetry_(getUrl, {
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
@@ -371,7 +409,7 @@ function writePenaltiesToGithub_(penalties) {
     sha,
     branch,
   };
-  const putRes = UrlFetchApp.fetch(putUrl, {
+  const putRes = fetchWithRetry_(putUrl, {
     method: 'put',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
