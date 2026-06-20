@@ -36,6 +36,14 @@ test('applyFilters filters by outcomes set', () => {
   assert.equal(rows[0].outcome, 'goal');
 });
 
+test('applyFilters ignores team/minPI/maxPI — no UI exposes them, so they are dead filter keys', () => {
+  // team: 'X' would match nothing under matchId 2 if applied; minPI/maxPI would
+  // exclude the pressureIndex:20 row. Confirms removing them from applyFilters
+  // didn't change behavior for callers that still happen to pass these keys.
+  const rows = applyFilters({ team: 'X', minPI: 50, maxPI: 60 });
+  assert.equal(rows.length, 3);
+});
+
 test('applyFilters respects dateFrom/dateTo bounds', () => {
   assert.equal(applyFilters({ dateFrom: '2021-01-01' }).length, 1);
   assert.equal(applyFilters({ dateTo: '2020-12-31' }).length, 2);
