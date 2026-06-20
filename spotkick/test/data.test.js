@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   uniqueValues, loadData, applyFilters, summary, zoneStats, bySeason,
   byPressureBucket, pressureByTaker, topTakers, takerProfile, dateBounds,
+  isValidDateRange,
 } from '../src/js/data.js';
 
 const FIXTURE = [
@@ -110,4 +111,19 @@ test('takerProfile aggregates h2h per keeper, sorted by volume', () => {
 test('takerProfile picks the most frequent known placement as favoured zone', () => {
   const prof = takerProfile('Bob');
   assert.equal(prof.favoured, '–'); // Bob's only penalty has no placement
+});
+
+test('isValidDateRange allows an unset bound on either side', () => {
+  assert.equal(isValidDateRange(null, '2021-01-01'), true);
+  assert.equal(isValidDateRange('2021-01-01', null), true);
+  assert.equal(isValidDateRange(null, null), true);
+});
+
+test('isValidDateRange allows from === to and from < to', () => {
+  assert.equal(isValidDateRange('2021-01-01', '2021-01-01'), true);
+  assert.equal(isValidDateRange('2021-01-01', '2021-06-01'), true);
+});
+
+test('isValidDateRange rejects a reversed range', () => {
+  assert.equal(isValidDateRange('2021-06-01', '2021-01-01'), false);
 });
