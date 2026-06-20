@@ -330,7 +330,7 @@ function fetchExistingPenalties_() {
     throw new Error('Failed to fetch ' + DATA_PATH + ': ' + res.getResponseCode() + ' ' + res.getContentText());
   }
   const body = JSON.parse(res.getContentText());
-  const content = Utilities.newBlob(Utilities.base64Decode(body.content)).getDataAsString();
+  const content = Utilities.newBlob(Utilities.base64Decode(body.content)).getDataAsString('UTF-8');
   const penalties = JSON.parse(content);
 
   let dirty = false;
@@ -357,7 +357,7 @@ function writePenaltiesToGithub_(penalties) {
   }
   const sha = JSON.parse(getRes.getContentText()).sha;
 
-  const content = Utilities.base64Encode(JSON.stringify(penalties, null, 0));
+  const content = Utilities.base64Encode(JSON.stringify(penalties, null, 0), Utilities.Charset.UTF_8);
   const putUrl = 'https://api.github.com/repos/' + repo + '/contents/' + DATA_PATH;
   const payload = {
     message: 'Weekly penalty data update (' + new Date().toISOString().slice(0, 10) + ')',

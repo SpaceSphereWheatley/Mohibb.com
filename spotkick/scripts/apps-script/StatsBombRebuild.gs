@@ -404,7 +404,7 @@ function sbReadGithubJson_(path) {
   }
   try {
     const body    = JSON.parse(res.getContentText());
-    const content = Utilities.newBlob(Utilities.base64Decode(body.content)).getDataAsString();
+    const content = Utilities.newBlob(Utilities.base64Decode(body.content)).getDataAsString('UTF-8');
     return JSON.parse(content);
   } catch (_) { return null; }
 }
@@ -412,7 +412,7 @@ function sbReadGithubJson_(path) {
 function sbWriteGithubJson_(path, data, commitMsg) {
   const { token, repo, branch } = githubConfig_();
   const apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + path;
-  const encoded = Utilities.base64Encode(JSON.stringify(data));
+  const encoded = Utilities.base64Encode(JSON.stringify(data), Utilities.Charset.UTF_8);
 
   // Retry up to 3 times on 409 (SHA conflict from a concurrent run).
   for (let attempt = 1; attempt <= 3; attempt++) {
