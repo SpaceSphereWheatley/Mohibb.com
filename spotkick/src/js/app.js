@@ -4,7 +4,7 @@
 import {
   loadData, applyFilters, summary, zoneStats, bySeason,
   takerProfile, uniqueValues, ZONE_LABEL, byPressureBucket, pressureByTaker,
-  topTakers, dateBounds,
+  topTakers, dateBounds, isValidDateRange,
 } from './data.js';
 import { clampTooltipPos } from './tooltip.js';
 
@@ -12,7 +12,7 @@ const EMOJI = { goal: '⚽', saved: '🧤', missed: '✗' };
 const ZONE_ORDER = ['TL','TC','TR','ML','MC','MR','BL','BC','BR'];
 
 const state = {
-  filters: { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null, confidence: new Set() },
+  filters: { competition: 'all', season: 'all', taker: null, keeper: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null, confidence: new Set() },
   visibleRows: 8,
 };
 
@@ -48,17 +48,50 @@ function renderTopbarCount(n) {
 
 function renderChips() {
   const f = state.filters;
-  const set = (id, label, active) => {
+  // Active chips get a ✕ to clear just that filter, without opening the
+  // sheet or touching the others — previously only the global "Clear
+  // filters" button could reset a single chip.
+  const set = (id, label, active, onClear) => {
     const el = document.getElementById(id);
-    el.textContent = label;
     el.classList.toggle('active', active);
+    if (!active) { el.textContent = label; return; }
+    el.innerHTML = `<span class="chip-label">${label}</span><span class="chip-x" role="button" aria-label="Clear ${label}">✕</span>`;
+    el.querySelector('.chip-x').addEventListener('click', evt => { evt.stopPropagation(); onClear(); });
   };
-  set('chipComp', f.competition === 'all' ? 'All competitions' : f.competition, f.competition !== 'all');
-  set('chipSeason', f.season === 'all' ? 'All seasons' : f.season, f.season !== 'all');
-  set('chipOutcome', f.outcomes.size ? [...f.outcomes].join(', ') : 'All outcomes', f.outcomes.size > 0);
-  set('chipTaker', f.taker || 'Any taker', !!f.taker);
-  set('chipKeeper', f.keeper || 'Any keeper', !!f.keeper);
-  set('chipDate', dateRangeLabel(f), !!(f.dateFrom || f.dateTo));
+  set('chipComp', f.competition === 'all' ? 'All competitions' : f.competition, f.competition !== 'all', () => {
+    state.filters.competition = 'all';
+    document.getElementById('selComp').value = 'All competitions';
+    render();
+  });
+  set('chipSeason', f.season === 'all' ? 'All seasons' : f.season, f.season !== 'all', () => {
+    state.filters.season = 'all';
+    document.getElementById('selSeason').value = 'All seasons';
+    render();
+  });
+  set('chipOutcome', f.outcomes.size ? [...f.outcomes].join(', ') : 'All outcomes', f.outcomes.size > 0, () => {
+    state.filters.outcomes = new Set();
+    document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
+    render();
+  });
+  set('chipTaker', f.taker || 'Any taker', !!f.taker, () => {
+    state.filters.taker = null;
+    document.getElementById('selTaker').value = '';
+    render();
+  });
+  set('chipKeeper', f.keeper || 'Any keeper', !!f.keeper, () => {
+    state.filters.keeper = null;
+    document.getElementById('selKeeper').value = '';
+    render();
+  });
+  set('chipDate', dateRangeLabel(f), !!(f.dateFrom || f.dateTo), () => {
+    state.filters.dateFrom = null;
+    state.filters.dateTo = null;
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    document.getElementById('selDatePreset').value = 'all';
+    document.getElementById('dateRangeGroup').hidden = true;
+    render();
+  });
 }
 
 function dateRangeLabel(f) {
@@ -114,6 +147,7 @@ function renderHeatmap(rows) {
 
 function renderPlayer(rows) {
   // Show profile for the filtered taker, else the most frequent taker in view.
+  const autoSelected = !state.filters.taker;
   let taker = state.filters.taker;
   if (!taker) {
     const counts = {};
@@ -130,7 +164,9 @@ function renderPlayer(rows) {
   const initials = prof.taker.split(/[\s.]+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase();
   document.getElementById('playerInitials').textContent = initials;
   document.getElementById('playerName').textContent = prof.taker;
-  document.getElementById('playerSub').textContent = prof.team;
+  document.getElementById('playerSub').textContent = autoSelected
+    ? `${prof.team} · most frequent taker in view`
+    : prof.team;
   document.getElementById('playerTaken').textContent = prof.taken;
   document.getElementById('playerGoals').textContent = prof.goals;
   document.getElementById('playerRate').textContent = Math.round(prof.rate) + '%';
@@ -153,7 +189,7 @@ function renderPlayer(rows) {
 function renderTrend(rows) {
   const data = bySeason(rows);
   const canvas = document.getElementById('trendCanvas');
-  if (!canvas || !data.length) return;
+  if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.parentElement.clientWidth - 32;
   const H = 110;
@@ -162,6 +198,12 @@ function renderTrend(rows) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+
+  if (!data.length) {
+    ctx.fillStyle = '#8C8475'; ctx.font = "italic 12px 'Newsreader',serif"; ctx.textAlign = 'center';
+    ctx.fillText('Not enough data for this view', W / 2, H / 2);
+    return;
+  }
 
   const padL = 28, padR = 8, padT = 8, padB = 22;
   const pW = W - padL - padR, pH = H - padT - padB;
@@ -502,6 +544,12 @@ function fillDatalist(id, options) {
 // -- EVENTS --
 function wireEvents() {
   document.getElementById('chipFilters').addEventListener('click', openFilter);
+  document.querySelector('.chips-row').addEventListener('click', evt => {
+    if (evt.target.classList.contains('chip-x')) return; // handled by its own listener
+    const chip = evt.target.closest('.chip');
+    if (!chip || chip.id === 'chipFilters') return;
+    openFilter();
+  });
   document.getElementById('chipPlayerChange').addEventListener('click', () => {
     openFilter();
     const input = document.getElementById('selTaker');
@@ -554,7 +602,7 @@ function wireEvents() {
 }
 
 function clearFilters() {
-  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, team: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null, confidence: new Set() };
+  state.filters = { competition: 'all', season: 'all', taker: null, keeper: null, outcomes: new Set(), zone: null, dateFrom: null, dateTo: null, confidence: new Set() };
   state.visibleRows = 8;
 
   document.getElementById('selComp').value = 'All competitions';
@@ -565,6 +613,7 @@ function clearFilters() {
   document.getElementById('dateFrom').value = '';
   document.getElementById('dateTo').value = '';
   document.getElementById('dateRangeGroup').hidden = true;
+  document.getElementById('dateRangeWarning').hidden = true;
   document.querySelectorAll('.outcome-btn').forEach(btn => btn.classList.remove(btn.dataset.active));
   document.getElementById('chkEstimated').checked = true;
 
@@ -591,6 +640,8 @@ function applyFromSheet() {
   state.filters.outcomes = outcomes;
   state.filters.dateFrom = document.getElementById('dateFrom').value || null;
   state.filters.dateTo = document.getElementById('dateTo').value || null;
+  document.getElementById('dateRangeWarning').hidden =
+    isValidDateRange(state.filters.dateFrom, state.filters.dateTo);
 
   const includeEstimated = document.getElementById('chkEstimated').checked;
   state.filters.confidence = includeEstimated ? new Set() : new Set(['full']);

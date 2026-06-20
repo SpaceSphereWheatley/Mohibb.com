@@ -28,6 +28,13 @@ export async function loadData() {
 
 export function getAll() { return ALL; }
 
+// A date range is invalid only when both bounds are set and reversed —
+// that combination always yields zero rows with no indication why.
+export function isValidDateRange(dateFrom, dateTo) {
+  if (!dateFrom || !dateTo) return true;
+  return dateFrom <= dateTo;
+}
+
 // filters: { competition, season, taker, keeper, outcomes:Set, zone,
 //            dateFrom, dateTo, confidence:Set (default: all tiers) }
 export function applyFilters(filters = {}) {
