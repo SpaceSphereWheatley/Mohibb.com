@@ -41,6 +41,12 @@ const DATA_PATH = 'spotkick/data/penalties.json';
 // Each source: { name, fetch, normalize }
 // - fetch(): returns an array of raw records (any shape)
 // - normalize(raw): maps one raw record -> the common penalty schema
+//
+// NOTE: 'understat' has produced 0 records in every recent run — every row
+// in penalties.json is currently confidence:"full" (StatsBomb). This needs
+// live debugging against understat.com (HTML/JSON var names may have
+// changed, or UrlFetchApp may be getting blocked) which isn't verifiable
+// from this environment, so it's left wired up rather than guess-fixed.
 const SOURCES = [
   {
     name: 'understat',

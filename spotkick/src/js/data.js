@@ -28,7 +28,7 @@ export async function loadData() {
 
 export function getAll() { return ALL; }
 
-// filters: { competition, season, taker, keeper, team, outcomes:Set, zone, minPI, maxPI,
+// filters: { competition, season, taker, keeper, outcomes:Set, zone,
 //            dateFrom, dateTo, confidence:Set (default: all tiers) }
 export function applyFilters(filters = {}) {
   return ALL.filter(p => {
@@ -36,11 +36,8 @@ export function applyFilters(filters = {}) {
     if (filters.season && filters.season !== 'all' && p.season !== filters.season) return false;
     if (filters.taker && p.taker !== filters.taker) return false;
     if (filters.keeper && p.keeper !== filters.keeper) return false;
-    if (filters.team && p.team !== filters.team) return false;
     if (filters.outcomes && filters.outcomes.size && !filters.outcomes.has(p.outcome)) return false;
     if (filters.zone && p.placement !== filters.zone) return false;
-    if (filters.minPI != null && p.pressureIndex < filters.minPI) return false;
-    if (filters.maxPI != null && p.pressureIndex > filters.maxPI) return false;
     if (filters.dateFrom && p.date < filters.dateFrom) return false;
     if (filters.dateTo && p.date > filters.dateTo) return false;
     if (filters.confidence && filters.confidence.size && !filters.confidence.has(p.confidence || 'full')) return false;
