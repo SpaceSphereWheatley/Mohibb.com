@@ -70,6 +70,11 @@ function startStatsBombRebuild() {
     return;
   }
 
+  // A previous run may have crashed mid-rebuild, leaving stale properties
+  // and/or temp GitHub files (_sb_rebuild_index.json / _sb_rebuild_wip.json)
+  // behind. Clear them before starting a fresh run so we don't read stale state.
+  sbClearRebuildState_();
+
   Logger.log('Phase 1: fetching competition list...');
   const competitions = sbFetch_('competitions.json');
   if (!competitions) throw new Error('Failed to fetch competitions.json from StatsBomb.');
@@ -141,7 +146,7 @@ function continueStatsBombRebuild() {
   while (pendingIds.length && (Date.now() - start) < SB_TIME_BUDGET_MS) {
     const batch = pendingIds.splice(0, SB_BATCH_SIZE);
 
-    const responses = UrlFetchApp.fetchAll(
+    const responses = sbFetchAllWithRetry_(
       batch.map(id => ({ url: SB_RAW_BASE + '/events/' + id + '.json', muteHttpExceptions: true }))
     );
 
@@ -296,6 +301,13 @@ function sbExtractPenalties_(events, matchId, meta) {
       placement,
       outcome,
       isShootout,
+      // Raw pressure-index inputs, persisted alongside the computed index so
+      // a future formula change can be re-applied without a full rebuild.
+      scoreSituation,
+      stage:         meta.stage,
+      leagueContext: meta.leagueContext,
+      shootoutKick,
+      shootoutDelta,
       pressureIndex,
       confidence:  placement != null ? 'full' : 'partial',
     });
@@ -388,12 +400,54 @@ function sbReadIds_() {
   try { return JSON.parse(str); } catch (_) { return []; }
 }
 
+// -- RETRY / BACKOFF ------------------------------------------------------------
+// Ported from src/js/backoff.js. Keep in sync if that file changes.
+const SB_RETRY_BASE_MS = 500;
+const SB_RETRY_MAX_MS  = 8000;
+const SB_RETRY_MAX_ATTEMPTS = 3;
+
+function sbBackoffDelayMs_(attempt, baseMs, maxMs) {
+  return Math.min(baseMs * Math.pow(2, attempt - 1), maxMs);
+}
+
+function sbShouldRetry_(statusCode) {
+  return statusCode === 429 || statusCode === 403 || statusCode >= 500;
+}
+
+// Wraps UrlFetchApp.fetch with exponential-backoff retry on 429/403/5xx.
+// `options` must set muteHttpExceptions: true so retryable codes don't throw.
+function sbFetchWithRetry_(url, options) {
+  let res;
+  for (let attempt = 1; attempt <= SB_RETRY_MAX_ATTEMPTS; attempt++) {
+    res = UrlFetchApp.fetch(url, options);
+    const code = res.getResponseCode();
+    if (!sbShouldRetry_(code) || attempt === SB_RETRY_MAX_ATTEMPTS) return res;
+    Logger.log('sbFetchWithRetry_: HTTP %s for %s (attempt %s/%s), backing off...', code, url, attempt, SB_RETRY_MAX_ATTEMPTS);
+    Utilities.sleep(sbBackoffDelayMs_(attempt, SB_RETRY_BASE_MS, SB_RETRY_MAX_MS));
+  }
+  return res;
+}
+
+// Retries a batch of fetchAll() requests individually (with backoff) for any
+// response that came back with a retryable status code. fetchAll() doesn't
+// retry internally, and a 429 from StatsBomb/GitHub mid-rebuild would
+// otherwise just be logged as a permanently skipped event file.
+function sbFetchAllWithRetry_(requests) {
+  const responses = UrlFetchApp.fetchAll(requests);
+  for (let i = 0; i < responses.length; i++) {
+    if (sbShouldRetry_(responses[i].getResponseCode())) {
+      responses[i] = sbFetchWithRetry_(requests[i].url, requests[i]);
+    }
+  }
+  return responses;
+}
+
 // -- GITHUB FILE HELPERS -------------------------------------------------------
 
 function sbReadGithubJson_(path) {
   const { token, repo, branch } = githubConfig_();
   const url = 'https://api.github.com/repos/' + repo + '/contents/' + path + '?ref=' + branch;
-  const res = UrlFetchApp.fetch(url, {
+  const res = sbFetchWithRetry_(url, {
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
@@ -418,7 +472,7 @@ function sbWriteGithubJson_(path, data, commitMsg) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     // Always fetch the current SHA fresh to avoid stale-SHA conflicts.
     let sha;
-    const getRes = UrlFetchApp.fetch(apiUrl + '?ref=' + branch, {
+    const getRes = sbFetchWithRetry_(apiUrl + '?ref=' + branch, {
       headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
       muteHttpExceptions: true,
     });
@@ -429,7 +483,7 @@ function sbWriteGithubJson_(path, data, commitMsg) {
     const payload = { message: commitMsg, content: encoded, branch };
     if (sha) payload.sha = sha;
 
-    const putRes = UrlFetchApp.fetch(apiUrl, {
+    const putRes = sbFetchWithRetry_(apiUrl, {
       method: 'put',
       contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
@@ -451,14 +505,14 @@ function sbDeleteGithubFile_(path) {
   const { token, repo, branch } = githubConfig_();
   const apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + path;
 
-  const getRes = UrlFetchApp.fetch(apiUrl + '?ref=' + branch, {
+  const getRes = sbFetchWithRetry_(apiUrl + '?ref=' + branch, {
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
   if (getRes.getResponseCode() !== 200) return; // already gone
 
   const sha = JSON.parse(getRes.getContentText()).sha;
-  UrlFetchApp.fetch(apiUrl, {
+  sbFetchWithRetry_(apiUrl, {
     method: 'delete',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
@@ -491,7 +545,7 @@ function sbClearRebuildState_() {
 function sbFetch_(path) {
   const url = SB_RAW_BASE + '/' + path;
   try {
-    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const res = sbFetchWithRetry_(url, { muteHttpExceptions: true });
     if (res.getResponseCode() !== 200) return null;
     return JSON.parse(res.getContentText());
   } catch (_) {
