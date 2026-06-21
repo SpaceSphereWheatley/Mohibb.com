@@ -11,6 +11,13 @@
           "status": "live"
         },
         {
+          "name": "Perfect Stop",
+          "category": "Puzzle · pit stop",
+          "description": "A relaxing F1 pit-stop puzzle — plan the crew's jobs, respect the dependencies, and nail the perfect stop.",
+          "url": "/pitstop/",
+          "status": "live"
+        },
+        {
           "name": "F1 Dashboard",
           "category": "Analysis · full",
           "description": "The full F1 analysis suite — deep qualifying analysis and race telemetry built on FastF1.",
