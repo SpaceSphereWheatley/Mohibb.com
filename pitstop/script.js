@@ -519,10 +519,10 @@ function initScene() {
   buildJacks();
   buildLights();
 
-  window.addEventListener('resize', resizeRenderer);
+  window.addEventListener('resize', () => { resizeRenderer(); renderOnce(); });
   resizeRenderer();
   sceneReady = true;
-  requestAnimationFrame(loop);
+  renderOnce(); // draw the rest scene; per-level posing happens once a level loads
 }
 
 function mat(color, opts = {}) { return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.5, metalness: 0.1 }, opts)); }
@@ -609,13 +609,14 @@ function resetScene() {
   driveX = 0;
   if (!sceneReady) return;
   applyState(0, null); // rest pose
+  renderOnce();
 }
 
 /* Map a scheduling time t (units) + schedule to scene transforms. */
 function applyState(t, sched) {
   if (!sceneReady) return;
   const prog = (id) => {
-    if (!sched || !jobById[id]) return 0;
+    if (!sched || !jobById || !jobById[id]) return 0;
     const s = sched.start[id], f = sched.finish[id];
     if (!isFinite(s)) return 0;
     return clamp((t - s) / Math.max(0.0001, f - s), 0, 1);
@@ -639,7 +640,7 @@ function applyState(t, sched) {
   CORNERS.forEach(c => {
     const b = wheelBase[c.id], g = wheelMeshes[c.id];
     const pOff = prog('off_' + c.id), pOn = prog('on_' + c.id);
-    const hasJobs = jobById['off_' + c.id];
+    const hasJobs = jobById && jobById['off_' + c.id];
     const out = hasJobs ? clamp(pOff - pOn, 0, 1) : 0;
     const attachedY = GROUND + (hasJobs ? carLift : 0);
     g.position.x = b.x + driveX;
@@ -649,7 +650,7 @@ function applyState(t, sched) {
   });
 
   // start lights -> release flourish
-  if (sched && jobById.release) {
+  if (sched && jobById && jobById.release) {
     const relF = sched.finish.release;
     const lit = isFinite(relF) ? clamp((t - (relF - 2)) / 2, 0, 1) * 5 : 0;
     const out = t >= relF; // lights out, GO
@@ -663,17 +664,11 @@ function applyState(t, sched) {
   }
 }
 
-let swayT = 0;
-function loop(ts) {
-  requestAnimationFrame(loop);
-  if (!sceneReady) return;
-  if (!running) {
-    swayT += 0.005;
-    camera.position.x = 6.4 + Math.sin(swayT) * 0.5;
-    camera.position.z = 7.2 + Math.cos(swayT * 0.8) * 0.3;
-    camera.lookAt(0, 0.5, 0);
-  }
-  renderer.render(scene, camera);
+// Render on demand only — a static puzzle should not run a 60fps loop forever
+// (it pegs software-WebGL renderers in headless/no-GPU environments). The rAF
+// loop runs solely during the "Run stop" animation (see stepRun).
+function renderOnce() {
+  if (sceneReady && renderer) renderer.render(scene, camera);
 }
 
 /* ============================================================
