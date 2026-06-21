@@ -74,9 +74,10 @@
     <div class="hud">
       <div class="hud-mode" id="hudMode">Level 1</div>
       <div class="hud-times">
-        <span class="hud-readout" id="hudTime">Planned: —</span>
-        <span class="hud-par">Par: <span id="hudPar">—</span></span>
-        <span class="stars" id="hudStars" role="img" aria-label="Stars earned">&#9734;&#9734;&#9734;</span>
+        <span class="hud-readout" id="hudTime">Planned —</span>
+        <span class="hud-par">Target <span id="hudPar">—</span></span>
+        <span class="hud-par hud-gap">Gap <span id="hudLimit">—</span></span>
+        <span class="stars" id="hudStars" role="img" aria-label="Projected stars">&#9734;&#9734;&#9734;</span>
       </div>
     </div>
   </section>
@@ -85,19 +86,23 @@
   <section class="panel" aria-labelledby="plan-h">
     <div class="panel-head">
       <h2 id="plan-h">Plan the stop</h2>
-      <p class="panel-sub" id="planSub">Pick a job, then add it to a crew lane. Respect the order — a wheel can't go on before the old one is off, and the car can't be released until both jacks are down.</p>
+      <p class="panel-sub" id="planSub">Assign every job to a crew member who can actually do it — each mechanic only handles certain jobs and reaches certain corners — then order them. Mind the rules (a wheel can't go on before the old one is off; the car can't be released until both jacks are down) and the air-lines (only so many wheel-guns run at once). Beat the <strong>target</strong>; finish past the <strong>gap</strong> and the chasing car gets by.</p>
     </div>
 
     <div class="toolbar" role="toolbar" aria-label="Game controls">
       <button class="btn btn-primary" id="runBtn" type="button">Run stop</button>
       <button class="btn" id="resetBtn" type="button">Reset</button>
-      <button class="btn" id="hintBtn" type="button">Hint</button>
+      <button class="btn" id="hintBtn" type="button" aria-pressed="false">Engineer</button>
       <span class="toolbar-gap"></span>
       <button class="btn btn-icon" id="prevBtn" type="button" aria-label="Previous level">&larr;</button>
-      <button class="btn" id="dailyBtn" type="button" aria-pressed="false">Daily puzzle</button>
+      <button class="btn" id="dailyBtn" type="button" aria-pressed="false">Daily</button>
+      <button class="btn" id="endlessBtn" type="button" aria-pressed="false">Endless</button>
       <button class="btn btn-icon" id="nextBtn" type="button" aria-label="Next level">&rarr;</button>
       <button class="btn" id="helpBtn" type="button">How to play</button>
     </div>
+
+    <!-- Engineer's read (tips) -->
+    <section class="tips" id="tips" aria-label="Race engineer's notes" hidden></section>
 
     <!-- Unplaced jobs -->
     <div class="tray-wrap">
@@ -108,7 +113,7 @@
 
     <!-- Crew lanes / timeline -->
     <div class="lanes-wrap">
-      <h3 class="block-label">Crew lanes <span class="block-note">(left to right = time)</span></h3>
+      <h3 class="block-label">Crew <span class="block-note">(each row is one mechanic; left to right = time)</span></h3>
       <div class="timeaxis" id="timeaxis" aria-hidden="true"></div>
       <div class="lanes" id="lanes"></div>
     </div>
@@ -131,14 +136,16 @@
 <div class="overlay" id="helpOverlay" hidden>
   <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
     <h2 id="help-title">How to play</h2>
-    <p>You're the pit-stop strategist. The crew has a fixed number of <strong>lanes</strong> — each lane does one job at a time, in the order you place them.</p>
+    <p>You're the pit-stop strategist. Each <strong>crew member</strong> works one job at a time, in the order you give them — but they're specialists.</p>
     <ul>
-      <li><strong>Assign every job.</strong> Select a job from “Jobs to assign”, then press <em>Add here</em> on a lane.</li>
-      <li><strong>Order matters.</strong> Each job has rules: a wheel only goes on after the old one is off, tyres only come off once that end is jacked up, and the car is only released once both jacks are back down.</li>
-      <li><strong>Beat par.</strong> Lanes run in parallel, so packing jobs cleverly shortens the stop. Match par for a <strong>Perfect Stop</strong> (★★★).</li>
-      <li><strong>Stuck?</strong> <em>Hint</em> lays out one optimal plan for you.</li>
+      <li><strong>Assign every job to someone who can do it.</strong> Select a job, then press <em>Add here</em> on a crew member. If a row can't take that job (wrong role or can't reach that corner), its button is greyed out.</li>
+      <li><strong>Respect the rules.</strong> A wheel only goes on after the old one's off; tyres only come off once that end is jacked up; the car is only released once both jacks are down (and any wing change is finished).</li>
+      <li><strong>Watch the air-lines.</strong> Only a limited number of wheel-guns can run at once, so you can't fire every corner simultaneously — sequence them.</li>
+      <li><strong>Mind complications.</strong> Sticky nuts, wrong-compound deliveries and front-wing changes show up procedurally and reshape the plan.</li>
+      <li><strong>Beat the target, hold the gap.</strong> Match the <strong>target</strong> for a perfect stop (★★★). Finish past the <strong>gap</strong> to the chasing car and you lose the position.</li>
+      <li><strong>Stuck?</strong> <em>Engineer</em> gives you the constraints and the target to aim for — it won't solve it for you.</li>
     </ul>
-    <p class="overlay-note">Keyboard friendly: every job and control is a button — Tab to move, Enter to activate. Nothing is uploaded; progress is saved on this device.</p>
+    <p class="overlay-note">Modes: numbered levels (tutorials → career), a date-seeded <em>Daily</em>, and an <em>Endless</em> run that keeps getting harder. Keyboard friendly: Tab to move, Enter to activate; on a placed job use arrow keys to move it and Delete to remove. Nothing is uploaded; progress is saved on this device.</p>
     <button class="btn btn-primary" id="helpClose" type="button">Got it</button>
   </div>
 </div>
