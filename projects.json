@@ -92,6 +92,13 @@
           "description": "Orbit a Schwarzschild black hole in real time — gravitational lensing, a warped accretion disk, Doppler beaming and redshift, with an in-page primer on the physics.",
           "url": "/blackhole/",
           "status": "live"
+        },
+        {
+          "name": "Double Pendulum",
+          "category": "Canvas · chaos simulator",
+          "description": "A swarm of double pendulums released from nearly identical angles, each tracing a colored fading trail — watch deterministic chaos and the butterfly effect unfold in real time, with an in-page primer on the physics.",
+          "url": "/pendulum/",
+          "status": "live"
         }
       ]
     }
