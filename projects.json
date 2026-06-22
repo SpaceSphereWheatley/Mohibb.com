@@ -102,8 +102,8 @@
         },
         {
           "name": "Ocean Waves",
-          "category": "Canvas · wave theory comparison",
-          "description": "Compare how Linear, Stokes 2nd-order, and cnoidal wave theory each shape a wave at the same height, period, and depth — plus a live dispersion/superposition demo of crests racing through a wave group's envelope, with an in-page primer on the physics.",
+          "category": "Canvas · particle velocities & wave theory",
+          "description": "A single propagating wave with particle-velocity arrows that fade out with depth, driven by any of six wave theories — Linear, Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) — plus a six-theory comparison overlay, with an in-page primer on the physics.",
           "url": "/waves/",
           "status": "live"
         }

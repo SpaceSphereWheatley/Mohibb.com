@@ -4,22 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Mohibb Malik">
-<meta name="description" content="Compare how Linear (Airy), Stokes 2nd-order, and cnoidal wave theory each shape an ocean wave at the same height, period, and depth, alongside a live dispersion and superposition demo of a wave group's crests racing through its envelope — with a built-in primer on the physics.">
+<meta name="description" content="A single propagating ocean wave with particle-velocity arrows at depth, showing orbital motion fade out toward the seabed — plus a six-theory comparison: Linear (Airy), Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) waves, with a built-in primer on the physics.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://mohibb.com/waves/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<title>Ocean Waves — Theory Comparison | Mohibb Malik</title>
+<title>Ocean Waves — Particle Velocities | Mohibb Malik</title>
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Mohibb Malik">
-<meta property="og:title" content="Ocean Waves — Theory Comparison">
-<meta property="og:description" content="Compare how Linear, Stokes 2nd-order, and cnoidal wave theory shape an ocean wave at the same height, period, and depth, alongside a live dispersion/superposition demo.">
+<meta property="og:title" content="Ocean Waves — Particle Velocities &amp; Theory Comparison">
+<meta property="og:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, then compare Linear, Stokes, cnoidal, solitary, and trochoidal wave theory side by side.">
 <meta property="og:url" content="https://mohibb.com/waves/">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Ocean Waves — Theory Comparison">
-<meta name="twitter:description" content="Compare how Linear, Stokes 2nd-order, and cnoidal wave theory shape an ocean wave at the same height, period, and depth, alongside a live dispersion/superposition demo.">
+<meta name="twitter:title" content="Ocean Waves — Particle Velocities &amp; Theory Comparison">
+<meta name="twitter:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, then compare Linear, Stokes, cnoidal, solitary, and trochoidal wave theory side by side.">
 
 <script type="application/ld+json">
 {
@@ -27,7 +27,7 @@
   "@type": "WebApplication",
   "name": "Ocean Waves",
   "url": "https://mohibb.com/waves/",
-  "description": "Compare how Linear (Airy), Stokes 2nd-order, and cnoidal wave theory each shape an ocean wave at the same height, period, and depth, alongside a live dispersion and superposition demo of a wave group's crests racing through its envelope — with a built-in primer on the physics.",
+  "description": "A single propagating ocean wave with particle-velocity arrows at depth, showing orbital motion fade out toward the seabed — plus a six-theory comparison: Linear (Airy), Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) waves, with a built-in primer on the physics.",
   "applicationCategory": "EducationalApplication",
   "operatingSystem": "Any",
   "offers": {
@@ -68,25 +68,25 @@
 <main class="wrap">
 
   <section class="intro">
-    <p class="eyebrow">three theories, one ocean</p>
+    <p class="eyebrow">one wave, six theories</p>
     <h1>Ocean Waves</h1>
-    <p class="lede">A wave group's crests racing through its own envelope —
-      the dispersion relation and the gap between phase and group speed,
-      made visible. Below it, the same wave's height, period, and depth fed
-      into three different theories at once: Linear (Airy), Stokes
-      2nd-order, and cnoidal — watch the crest sharpen and the trough flatten
-      as the theories diverge. Tune the wave and the depth below.</p>
+    <p class="lede">A single wave propagating over a still-water line, with
+      arrows showing each water particle's instantaneous velocity at several
+      depths &mdash; watch the orbital motion fade out toward the seabed.
+      Pick a theory to drive that wave: Linear (Airy), Stokes 2nd- or
+      5th-order, cnoidal, solitary, or trochoidal (Gerstner). Below, the same
+      height/period/depth re-evaluated under all six at once, overlaid.</p>
   </section>
 
   <!-- ---------- the render stage ---------- -->
-  <section class="stage stage-waves" aria-label="Wave group and wave-theory comparison render">
-    <div class="substage substage-surface">
-      <canvas id="surface" role="img" aria-label="A live cross-section of the ocean surface showing a wave group's envelope, with individual crests born at the trailing edge, racing through, and dying at the leading edge."></canvas>
+  <section class="stage stage-waves" aria-label="Single wave with particle-velocity arrows, and a six-theory comparison render">
+    <div class="substage substage-wave">
+      <canvas id="wave" role="img" aria-label="A single propagating ocean wave above a still-water reference line, with arrows showing particle velocity at several depths down to the seabed, shrinking with depth."></canvas>
+      <div class="stage-hint" id="exaggerationHint" aria-hidden="true"></div>
     </div>
     <div class="substage substage-compare">
-      <canvas id="compare" role="img" aria-label="One wavelength of a single wave, drawn three times under Linear, Stokes second-order, and cnoidal wave theory, showing how the predicted crest and trough shape diverges between theories."></canvas>
+      <canvas id="compare" role="img" aria-label="One wavelength of a single wave, drawn under up to six wave theories at once, showing how the predicted crest and trough shape diverges between theories."></canvas>
     </div>
-    <div class="stage-hint" id="stageHint" aria-hidden="true">runs on its own &middot; tune the wave below</div>
     <div class="stage-readout" id="fpsReadout" aria-hidden="true">&ndash; fps</div>
   </section>
 
@@ -94,12 +94,12 @@
   <section class="controls" aria-label="Controls">
 
     <div class="panel">
-      <h2 class="panel-head"><span class="idx">01</span> Wave group</h2>
+      <h2 class="panel-head"><span class="idx">01</span> Wave</h2>
       <div class="field">
-        <label for="numComponents">Components in the group</label>
+        <label for="waveHeight">Wave height <span class="unit">(m)</span></label>
         <div class="field-row">
-          <input type="range" id="numComponents" min="3" max="9" step="2" value="5">
-          <output for="numComponents" id="numComponentsOut">5</output>
+          <input type="range" id="waveHeight" min="0.2" max="3" step="0.1" value="1">
+          <output for="waveHeight" id="waveHeightOut">1.0</output>
         </div>
       </div>
       <div class="field">
@@ -109,23 +109,8 @@
           <output for="period0" id="period0Out">8.0</output>
         </div>
       </div>
-      <div class="field">
-        <label for="spreadFrac">Frequency spread <span class="unit">(&Delta;&omega;/&omega;&#8320;)</span></label>
-        <div class="field-row">
-          <input type="range" id="spreadFrac" min="0.05" max="0.6" step="0.01" value="0.18">
-          <output for="spreadFrac" id="spreadFracOut">0.18</output>
-        </div>
-      </div>
-      <div class="field">
-        <label for="waveHeight">Wave height <span class="unit">(m)</span></label>
-        <div class="field-row">
-          <input type="range" id="waveHeight" min="0.2" max="3" step="0.1" value="1">
-          <output for="waveHeight" id="waveHeightOut">1.0</output>
-        </div>
-      </div>
-      <p class="panel-note">Components spread around the carrier period,
-        amplitude-tapered into one wave group. Height and period also drive
-        the single-wave comparison below.</p>
+      <p class="panel-note">Height and period drive both the single-wave
+        view above and the theory comparison below.</p>
     </div>
 
     <div class="panel panel-depth">
@@ -147,10 +132,6 @@
           <span class="readout-value" id="cOut">&ndash;</span>
         </div>
         <div class="readout-item">
-          <span class="readout-label">Group speed c<sub>g</sub></span>
-          <span class="readout-value" id="cgOut">&ndash;</span>
-        </div>
-        <div class="readout-item">
           <span class="readout-label">Wavelength &lambda;</span>
           <span class="readout-value" id="lambdaOut">&ndash;</span>
         </div>
@@ -158,31 +139,80 @@
     </div>
 
     <div class="panel">
-      <h2 class="panel-head"><span class="idx">03</span> Theory comparison</h2>
-      <div class="legend">
-        <div class="legend-item">
-          <input type="checkbox" id="showLinear" checked>
-          <span class="legend-swatch legend-linear" aria-hidden="true"></span>
-          <label for="showLinear">Linear (Airy)</label>
+      <h2 class="panel-head"><span class="idx">03</span> Theory &amp; arrows</h2>
+      <div class="radio-group">
+        <div class="radio-item">
+          <input type="radio" name="theory" id="theoryLinear" value="linear" checked>
+          <label for="theoryLinear">Linear (Airy)</label>
         </div>
-        <div class="legend-item">
-          <input type="checkbox" id="showStokes" checked>
-          <span class="legend-swatch legend-stokes" aria-hidden="true"></span>
-          <label for="showStokes">Stokes 2nd-order</label>
+        <div class="radio-item">
+          <input type="radio" name="theory" id="theoryStokes2" value="stokes2">
+          <label for="theoryStokes2">Stokes 2nd-order</label>
         </div>
-        <div class="legend-item">
-          <input type="checkbox" id="showCnoidal" checked>
-          <span class="legend-swatch legend-cnoidal" aria-hidden="true"></span>
-          <label for="showCnoidal">Cnoidal (shallow water)</label>
+        <div class="radio-item">
+          <input type="radio" name="theory" id="theoryStokes5" value="stokes5">
+          <label for="theoryStokes5">Stokes 5th-order</label>
+        </div>
+        <div class="radio-item">
+          <input type="radio" name="theory" id="theoryCnoidal" value="cnoidal">
+          <label for="theoryCnoidal">Cnoidal</label>
+        </div>
+        <div class="radio-item">
+          <input type="radio" name="theory" id="theorySolitary" value="solitary">
+          <label for="theorySolitary">Solitary</label>
+        </div>
+        <div class="radio-item">
+          <input type="radio" name="theory" id="theoryTrochoidal" value="trochoidal">
+          <label for="theoryTrochoidal">Trochoidal (Gerstner)</label>
         </div>
       </div>
-      <p class="panel-note">All three theories use the same height, period,
-        and depth from the panels above — only the shape they predict
-        differs.</p>
+      <div class="field check check-spaced">
+        <input type="checkbox" id="showArrows" checked>
+        <label for="showArrows">Show velocity arrows</label>
+      </div>
     </div>
 
     <div class="panel">
-      <h2 class="panel-head"><span class="idx">04</span> Playback &amp; view</h2>
+      <h2 class="panel-head"><span class="idx">04</span> Theory comparison</h2>
+      <div class="legend">
+        <div class="legend-item">
+          <input type="checkbox" id="compareLinear" checked>
+          <span class="legend-swatch legend-linear" aria-hidden="true"></span>
+          <label for="compareLinear">Linear (Airy)</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="compareStokes2" checked>
+          <span class="legend-swatch legend-stokes" aria-hidden="true"></span>
+          <label for="compareStokes2">Stokes 2nd-order</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="compareStokes5">
+          <span class="legend-swatch legend-stokes5" aria-hidden="true"></span>
+          <label for="compareStokes5">Stokes 5th-order</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="compareCnoidal" checked>
+          <span class="legend-swatch legend-cnoidal" aria-hidden="true"></span>
+          <label for="compareCnoidal">Cnoidal</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="compareSolitary">
+          <span class="legend-swatch legend-solitary" aria-hidden="true"></span>
+          <label for="compareSolitary">Solitary</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="compareTrochoidal">
+          <span class="legend-swatch legend-trochoidal" aria-hidden="true"></span>
+          <label for="compareTrochoidal">Trochoidal (Gerstner)</label>
+        </div>
+      </div>
+      <p class="panel-note">All six theories use the same height, period,
+        and depth from the panels above &mdash; only the shape (and, above,
+        the velocity field) each one predicts differs.</p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">05</span> Playback</h2>
       <div class="field">
         <label for="speed">Simulation speed <span class="unit">(&times;)</span></label>
         <div class="field-row">
@@ -193,23 +223,15 @@
       <div class="field-row btn-row btn-row-tight">
         <button type="button" class="btn" id="pauseBtn">Pause</button>
       </div>
-      <div class="field check check-spaced">
-        <input type="checkbox" id="showEnvelope" checked>
-        <label for="showEnvelope">Show envelope</label>
-      </div>
-      <div class="field check check-spaced">
-        <input type="checkbox" id="showTracers" checked>
-        <label for="showTracers">Show crest tracers</label>
-      </div>
     </div>
 
   </section>
 
-  <p class="footnote">A linear wave group (superposition of sinusoids,
-    integrated from the dispersion relation) above; the same wave's height,
-    period and depth re-evaluated under three different theories below. For
-    the equations behind every term, open
-    <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
+  <p class="footnote">A single wave above a still-water line, with arrows
+    showing how far each theory thinks particle motion reaches below the
+    surface; the same wave's height, period, and depth re-evaluated under
+    all six theories at once below. For the equations behind every term,
+    open <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
 
 </main>
 
@@ -222,23 +244,21 @@
     </header>
     <div class="learn-body" id="learnBody">
 
-      <p class="learn-lede">Everything this page computes, term by term —
+      <p class="learn-lede">Everything this page computes, term by term &mdash;
         with the equation behind each and where it shows up on screen.
         Surface elevation is \(\eta\), wavenumber \(k\), angular frequency
         \(\omega\), water depth \(h\), gravity \(g\), wave height \(H\),
-        phase speed \(c\), group speed \(c_g\).</p>
+        phase speed \(c\), and particle velocity components \(u\) (horizontal)
+        and \(w\) (vertical), with \(z\) measured from still water level down
+        to the seabed at \(z=-h\).</p>
 
       <article>
         <h3>Linear (Airy) wave theory</h3>
         <p>Linear theory assumes the wave height is small compared to both
           the wavelength and the depth, which lets the free-surface boundary
-          conditions be linearized. The payoff is that any sum of sinusoidal
-          solutions is itself a solution &mdash; <em>superposition</em>
-          holds. A single linear wave is simply:</p>
-        <p>$$\eta(x,t) = A\cos(kx - \omega t)$$</p>
-        <p>The wave group in the top panel is built from several of these,
-          each with a slightly different \(\omega_i\) (and matching
-          \(k_i\)), summed together.</p>
+          conditions be linearized:</p>
+        <p>$$\eta(x,t) = \frac{H}{2}\cos(kx - \omega t)$$</p>
+        <p>That's the wave drawn above when "Linear (Airy)" is selected.</p>
       </article>
 
       <article>
@@ -249,71 +269,115 @@
         <p>$$\omega^2 = gk\tanh(kh)$$</p>
         <p>In deep water (\(kh\gg1\), \(\tanh\to1\)) this simplifies to
           \(\omega^2\approx gk\); in shallow water (\(kh\ll1\),
-          \(\tanh(kh)\approx kh\)) it becomes \(\omega^2\approx ghk^2\),
-          i.e. waves of every frequency travel at the same speed
-          \(\sqrt{gh}\). In between there's no closed form for \(k(\omega)\)
-          &mdash; this page solves it numerically with Newton&ndash;Raphson,
-          every time the period or depth slider moves.</p>
+          \(\tanh(kh)\approx kh\)) it becomes \(\omega^2\approx ghk^2\).
+          There's no closed form for \(k(\omega)\) in between &mdash; this
+          page solves it numerically with Newton&ndash;Raphson, every time
+          the period or depth slider moves.</p>
       </article>
 
       <article>
-        <h3>Phase speed vs. group speed</h3>
-        <p>A single crest travels at the <em>phase speed</em>
-          \(c=\omega/k\). A wave <em>group</em>'s envelope travels at the
-          <em>group speed</em>, the derivative of the dispersion relation:</p>
-        <p>$$c_g=\frac{d\omega}{dk}=\frac{c}{2}\left(1+\frac{2kh}{\sinh(2kh)}\right)$$</p>
-        <p>In deep water this gives the famous \(c_g=c/2\): individual
-          crests are born at the back of the group, race forward through it,
-          and vanish at the front &mdash; exactly what the tracers in the top
-          panel do. In shallow water \(c_g\to c\): every crest and the
-          envelope move together, non-dispersively.</p>
+        <h3>Particle orbits and depth attenuation</h3>
+        <p>Linear potential-flow theory gives the horizontal and vertical
+          particle velocity at any depth as:</p>
+        <p>$$u(x,z,t)=\frac{H\omega}{2}\cdot\frac{\cosh(k(z+h))}{\sinh(kh)}\cos\theta,\qquad
+          w(x,z,t)=\frac{H\omega}{2}\cdot\frac{\sinh(k(z+h))}{\sinh(kh)}\sin\theta$$</p>
+        <p>with \(\theta=kx-\omega t\). The depth-attenuation factor
+          \(\cosh(k(z+h))/\sinh(kh)\) is what the arrows above are showing:
+          in deep water it collapses to \(e^{kz}\) &mdash; orbits shrink
+          exponentially within about one wavelength of the surface &mdash;
+          while in shallow water (\(kh\ll1\)) it flattens out toward 1, so
+          orbits barely shrink at all between the surface and the seabed.
+          That contrast is exactly why the arrows under a deep-water theory
+          (Linear, Stokes, Trochoidal) taper sharply, while the arrows under
+          a shallow-water theory (Cnoidal, Solitary) stay almost the same
+          length all the way down.</p>
       </article>
 
       <article>
-        <h3>Beyond linear: Stokes second-order</h3>
+        <h3>Beyond linear: Stokes 2nd- and 5th-order</h3>
         <p>Real waves aren't perfectly sinusoidal: crests are sharper and
-          troughs are flatter than \(\cos\) allows. Stokes expansion adds a
-          second-order correction at twice the wavenumber and frequency:</p>
-        <p>$$\eta_{\text{Stokes}}=\frac{H}{2}\cos\theta+\frac{\pi H}{8}\cdot\frac{H}{\lambda}\coth(kh)\left[3\coth^2(kh)-1\right]\cos(2\theta)$$</p>
-        <p>with \(\theta=kx-\omega t\). The correction term scales with
-          steepness \(H/\lambda\) &mdash; turn up the wave height in the
-          panels above and watch the Stokes curve in the comparison plot
-          peel away from the Linear curve.</p>
+          troughs are flatter than \(\cos\) allows. Stokes expansion adds
+          higher-frequency corrections on top of the linear term. The
+          2nd-order correction, at twice the wavenumber and frequency:</p>
+        <p>$$\eta_{\text{Stokes-2}}=\frac{H}{2}\cos\theta+\frac{\pi H}{8}\cdot\frac{H}{\lambda}\coth(kh)\left[3\coth^2(kh)-1\right]\cos(2\theta)$$</p>
+        <p>This page's "Stokes 5th-order" extends that pattern with three
+          further harmonics (\(3\theta\), \(4\theta\), \(5\theta\)), each
+          one's amplitude a fixed fraction of the one before it. <em>This is
+          a simplified, illustrative truncation, not the full closed-form
+          Fenton (1985) fifth-order coefficient set</em> &mdash; it produces
+          a visibly sharper, more peaked crest than 2nd-order, in the right
+          qualitative direction, but isn't engineering-grade. Velocities for
+          both follow the same depth-attenuation pattern as linear theory,
+          applied separately to each harmonic (each one decays with depth
+          using its own wavenumber, \(\cosh(nk(z+h))/\sinh(nkh)\)).</p>
       </article>
 
       <article>
-        <h3>Shallow water: cnoidal waves</h3>
+        <h3>Shallow water: cnoidal and solitary waves</h3>
         <p>In shallow water, nonlinearity reshapes a wave into tall, narrow
           crests separated by long, flat troughs &mdash; the cnoidal wave,
           built from the Jacobi elliptic function \(\mathrm{cn}\):</p>
         <p>$$\eta(x,t)=\eta_{\text{trough}}+H\,\mathrm{cn}^2\!\left(\frac{2K(m)}{\lambda}(x-ct),\,m\right)$$</p>
         <p>where \(K(m)\) is the complete elliptic integral of the first
-          kind and \(m\) (computed here from the wave's Ursell number, a
-          steepness-over-depth measure) controls the shape: \(m\to0\)
-          recovers a plain sinusoid, \(m\to1\) approaches an isolated
-          solitary wave. <em>This page maps Ursell number to \(m\) with a
+          kind. <em>This page maps the wave's Ursell number to \(m\) with a
           simple monotonic approximation tuned for the right qualitative
-          shape, not the full cnoidal/KdV dispersion closure</em> &mdash;
-          see the caveats below.</p>
+          shape, not the full cnoidal/KdV dispersion closure</em> &mdash; see
+          the caveats below. The "Solitary" option pins \(m\) close to its
+          \(m\to1\) limit: a single tall, isolated hump with long flat
+          stretches on either side, the cnoidal wave's solitary-wave limit.</p>
+        <p>Both use the long-wave (Boussinesq) approximation for particle
+          velocity, valid when \(kh\ll1\): horizontal velocity is nearly
+          uniform with depth, \(u(x,z,t)\approx c\,\eta(x,t)/h\), with the
+          small vertical velocity \(w\) recovered from continuity. This is
+          why the arrows under these two theories barely taper toward the
+          seabed &mdash; the direct contrast with the deep-water theories
+          above.</p>
+      </article>
+
+      <article>
+        <h3>Trochoidal (Gerstner) waves</h3>
+        <p>The Gerstner wave is an exact nonlinear solution for deep water,
+          first found by Gerstner (1809). Each particle, labeled by its mean
+          position \((x_0,z_0)\), traces a perfect circle:</p>
+        <p>$$x(x_0,t)=x_0-\frac{H}{2}e^{kz_0}\sin\varphi,\qquad
+          z(x_0,t)=z_0+\frac{H}{2}e^{kz_0}\cos\varphi,\qquad\varphi=kx_0-\omega t$$</p>
+        <p>The free surface (\(z_0=0\)) traced by this family of circles is
+          a trochoid &mdash; peaked crests, broad troughs, with no
+          small-amplitude assumption needed. Differentiating gives the
+          orbital velocity directly: \(u=\frac{H\omega}{2}e^{kz_0}\cos\varphi\),
+          \(w=\frac{H\omega}{2}e^{kz_0}\sin\varphi\) &mdash; the same
+          \(e^{kz}\) deep-water decay as linear theory's limit, but exact
+          rather than approximate. This page draws the Gerstner wave at
+          whatever depth is set on the slider, even though the solution is
+          strictly valid only for deep water; accuracy degrades as \(kh\)
+          drops into the shallow/intermediate regime.</p>
       </article>
 
       <article class="learn-caveat">
         <h3>What's simplified</h3>
-        <p>The dispersion solver, Stokes correction, and group-velocity
-          formula are exact linear-theory results. The cnoidal curve's
-          elliptic parameter \(m\) is fit with an approximate Ursell-number
-          mapping rather than solved from the full KdV dispersion relation
-          &mdash; good for showing the right trend (sinusoid &rarr; peaked
-          crest &rarr; solitary wave as steepness/shallowness increases),
-          not for engineering-grade prediction.</p>
-        <p>Stokes and cnoidal theory each describe a single monochromatic
-          wave train; neither one is valid to simply add together the way
-          linear waves are, which is why the wave-group/superposition demo
-          above stays strictly linear, while the comparison plot below shows
-          all three theories as single waves rather than groups.</p>
+        <p>The dispersion solver and the Linear/Stokes-2nd-order/cnoidal
+          elevation formulas are established results, each checked against
+          a standard reference during implementation (Dean &amp; Dalrymple,
+          <em>Water Wave Mechanics for Engineers and Scientists</em>, for the
+          Stokes terms). Stokes 5th-order here is a deliberately simplified
+          harmonic truncation rather than the full Fenton (1985)
+          coefficients. The cnoidal/solitary elliptic parameter \(m\) is fit
+          with an approximate Ursell-number mapping rather than solved from
+          the full KdV dispersion relation. Cnoidal/solitary particle
+          velocities use the leading-order long-wave (Boussinesq)
+          approximation, not exact potential flow. The Gerstner wave is
+          shown regardless of depth, though it's only exact in deep water.</p>
+        <p>None of these theories are valid to add together the way linear
+          waves are &mdash; each one describes a single monochromatic wave
+          train on its own, which is why this page always shows one theory
+          at a time driving the wave-and-arrows view, and shows all six only
+          as separate overlaid curves below, never summed.</p>
         <p>The seabed is assumed flat and uniform, the sea is unidirectional
           (no directional spreading), and there's no wave breaking, wind
-          input, or dissipation modeled anywhere on this page.</p>
+          input, or dissipation modeled anywhere on this page. The wave's
+          vertical scale in the top panel is exaggerated relative to the
+          depth axis for visibility &mdash; the exaggeration factor in use
+          is shown in the corner of that panel.</p>
       </article>
 
     </div>

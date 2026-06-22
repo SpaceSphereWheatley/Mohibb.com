@@ -1,7 +1,6 @@
-// Ocean Waves — a linear wave group (dispersion + superposition) animated
-// live, alongside a single wave's height/period/depth re-evaluated under
-// three different theories: Linear (Airy), Stokes 2nd-order, and cnoidal.
-// Plain 2D canvas, no dependencies.
+// Ocean Waves — a single propagating wave (any of six theories) with a
+// particle-velocity arrow grid showing orbital decay with depth, plus a
+// static six-theory comparison overlay. Plain 2D canvas, no dependencies.
 
 const G = 9.80665;
 
@@ -26,14 +25,6 @@ function solveK(omega, h) {
     if (Math.abs(dk) < 1e-10 * k0) break;
   }
   return k;
-}
-
-function groupVelocity(omega, k, h) {
-  const c = omega / k;
-  const kh = k * h;
-  if (!isFinite(h) || kh > 20) return c / 2;
-  const n = 0.5 * (1 + (2 * kh) / Math.sinh(2 * kh));
-  return n * c;
 }
 
 function khRegime(kh) {
@@ -78,7 +69,7 @@ function ellipticK(m) {
 }
 
 // mean of cn^2(u,m) over one full period (4K(m)), sampled numerically —
-// used to re-center the cnoidal profile around zero mean elevation.
+// used to re-center the cnoidal/solitary profile around zero mean elevation.
 function meanCn2(m, Km) {
   const N = 40;
   let s = 0;
@@ -92,19 +83,22 @@ function meanCn2(m, Km) {
 /* ============================================================
    Wave parameters and per-theory surface elevation
    ============================================================ */
-const params = { N: 5, T0: 8, spreadFrac: 0.18, H: 1, depth: 40 };
-const carrier = { omega0: 0, k0: 0, lambda0: 0, c: 0, cg: 0 };
+const params = { T0: 8, H: 1, depth: 40 };
+const carrier = { omega0: 0, k0: 0, lambda0: 0, c: 0 };
 const cnoidalState = { m: 0, Km: 0, mean: 0 };
-let components = [];
+
+// Solitary wave: the cnoidal family's m -> 1 limit, fixed once — the
+// elliptic machinery here is identical, only m is pinned rather than
+// driven by the Ursell number.
+const SOLITARY_M = 0.999;
+const solitaryKm = ellipticK(SOLITARY_M);
+const solitaryMean = meanCn2(SOLITARY_M, solitaryKm);
 
 function updateCarrier() {
   carrier.omega0 = (2 * Math.PI) / params.T0;
   carrier.k0 = solveK(carrier.omega0, params.depth);
   carrier.lambda0 = (2 * Math.PI) / carrier.k0;
   carrier.c = carrier.omega0 / carrier.k0;
-  carrier.cg = groupVelocity(carrier.omega0, carrier.k0, params.depth);
-
-  buildComponents();
 
   // Cnoidal: Ursell number drives a simplified, documented approximation
   // of the elliptic parameter m (see the in-page primer's caveats) —
@@ -117,50 +111,44 @@ function updateCarrier() {
   updateReadouts();
 }
 
-function buildComponents() {
-  const N = params.N;
-  const omega0 = carrier.omega0;
-  const domega = params.spreadFrac * omega0;
-  const sigma = 0.5 / Math.sqrt(2 * Math.log(1 / 0.15));
-  const A0 = params.H / 2;
-  const next = [];
-  for (let i = 0; i < N; i++) {
-    const frac = N > 1 ? i / (N - 1) - 0.5 : 0;
-    const omega = omega0 + frac * domega;
-    const k = solveK(omega, params.depth);
-    const w = Math.exp(-(frac * frac) / (2 * sigma * sigma));
-    next.push({ omega, k, amplitude: A0 * w });
-  }
-  components = next;
-}
-
-function evalGroup(x, t) {
-  let eta = 0, re = 0, im = 0;
-  for (const c of components) {
-    const phase = c.k * x - c.omega * t;
-    eta += c.amplitude * Math.cos(phase);
-    im += c.amplitude * Math.sin(phase);
-  }
-  re = eta;
-  return { eta, env: Math.sqrt(re * re + im * im) };
-}
-
-function linearProfile(x, t) {
-  return (params.H / 2) * Math.cos(carrier.k0 * x - carrier.omega0 * t);
-}
-
-function stokesProfile(x, t) {
+// Harmonic sets driving Linear / Stokes-2nd / Stokes-5th elevation and
+// velocity alike: order 1 is linear-only, order 2 adds the Stokes 2nd-order
+// correction at 2*theta, order 5 extends that pattern with a simplified,
+// documented harmonic-truncation approximation at 3*theta..5*theta (see
+// the primer's caveats — not the full Fenton 1985 coefficient set).
+function stokesHarmonics(order) {
   const { H, depth } = params;
-  const k = carrier.k0, omega = carrier.omega0;
-  const theta = k * x - omega * t;
-  const lambda = carrier.lambda0;
-  const kh = Math.max(k * depth, 0.05); // avoid coth blow-up in very shallow water
-  const cothKh = 1 / Math.tanh(kh);
-  let correction = (Math.PI * H / 8) * (H / lambda) * cothKh * (3 * cothKh * cothKh - 1);
-  const cap = 0.6 * H; // display-only clamp: Stokes 2nd-order isn't valid this shallow anyway
-  correction = Math.max(-cap, Math.min(cap, correction));
-  return (H / 2) * Math.cos(theta) + correction * Math.cos(2 * theta);
+  const harmonics = [{ n: 1, amp: H / 2 }];
+  if (order >= 2) {
+    const k = carrier.k0, lambda = carrier.lambda0;
+    const kh = Math.max(k * depth, 0.05); // avoid coth blow-up in very shallow water
+    const cothKh = 1 / Math.tanh(kh);
+    let c2 = (Math.PI * H / 8) * (H / lambda) * cothKh * (3 * cothKh * cothKh - 1);
+    const cap = 0.6 * H; // display-only clamp: Stokes 2nd-order isn't valid this shallow anyway
+    c2 = Math.max(-cap, Math.min(cap, c2));
+    harmonics.push({ n: 2, amp: c2 });
+    if (order >= 5) {
+      const FALLOFF = 0.45;
+      harmonics.push({ n: 3, amp: c2 * FALLOFF });
+      harmonics.push({ n: 4, amp: c2 * FALLOFF * FALLOFF });
+      harmonics.push({ n: 5, amp: c2 * FALLOFF * FALLOFF * FALLOFF });
+    }
+  }
+  return harmonics;
 }
+
+function profileFromHarmonics(harmonics, x, t) {
+  const k = carrier.k0, omega = carrier.omega0;
+  let eta = 0;
+  for (const { n, amp } of harmonics) {
+    eta += amp * Math.cos(n * (k * x - omega * t));
+  }
+  return eta;
+}
+
+function linearProfile(x, t) { return profileFromHarmonics(stokesHarmonics(1), x, t); }
+function stokesProfile(x, t) { return profileFromHarmonics(stokesHarmonics(2), x, t); }
+function stokes5Profile(x, t) { return profileFromHarmonics(stokesHarmonics(5), x, t); }
 
 function cnoidalProfile(x, t) {
   const { H } = params;
@@ -171,31 +159,127 @@ function cnoidalProfile(x, t) {
   return H * (cn * cn - mean);
 }
 
+function solitaryProfile(x, t) {
+  const { H } = params;
+  const lambda = carrier.lambda0;
+  const u = ((2 * solitaryKm) / lambda) * (x - carrier.c * t);
+  const { cn } = sncndn(u, SOLITARY_M);
+  return H * (cn * cn - solitaryMean);
+}
+
+// Gerstner (trochoidal) surface — exact deep-water nonlinear solution.
+// Particles labeled by mean position x0 trace circles; for z0=0 this
+// parametrically traces the surface trochoid (not a function eta(x)).
+function gerstnerPosition(x0, t) {
+  const a = params.H / 2, k = carrier.k0, omega = carrier.omega0;
+  const phi = k * x0 - omega * t;
+  return { x: x0 - a * Math.sin(phi), z: a * Math.cos(phi) };
+}
+
+const PROFILE_FNS = {
+  linear: linearProfile,
+  stokes2: stokesProfile,
+  stokes5: stokes5Profile,
+  cnoidal: cnoidalProfile,
+  solitary: solitaryProfile
+};
+const THEORY_COLORS = {
+  linear: '#5EC8E0',
+  stokes2: '#E0A23D',
+  stokes5: '#E0653D',
+  cnoidal: '#E0708A',
+  solitary: '#4FB286',
+  trochoidal: '#9B7EE0'
+};
+const THEORY_NAMES = {
+  linear: 'Linear (Airy)',
+  stokes2: 'Stokes 2nd-order',
+  stokes5: 'Stokes 5th-order',
+  cnoidal: 'Cnoidal',
+  solitary: 'Solitary',
+  trochoidal: 'Trochoidal (Gerstner)'
+};
+
+/* ============================================================
+   Per-theory particle velocity field (u, w), z measured from
+   still water level (z=0) down to the seabed (z=-h).
+   ============================================================ */
+function harmonicVelocity(harmonics, x, z, t) {
+  const { depth: h } = params;
+  const k = carrier.k0, omega = carrier.omega0;
+  let u = 0, w = 0;
+  for (const { n, amp } of harmonics) {
+    const theta = n * (k * x - omega * t);
+    const nkh = Math.max(n * k * h, 1e-6);
+    const sh = Math.sinh(nkh) || 1e-6;
+    const coeff = amp * n * omega;
+    u += coeff * (Math.cosh(n * k * (z + h)) / sh) * Math.cos(theta);
+    w += coeff * (Math.sinh(n * k * (z + h)) / sh) * Math.sin(theta);
+  }
+  return { u, w };
+}
+
+// Shallow-water (Boussinesq) long-wave approximation for cnoidal/solitary:
+// horizontal velocity nearly depth-uniform, vertical recovered from
+// continuity — the direct contrast to the deep-water theories' e^{kz} decay.
+function shallowVelocity(etaFn, x, z, t) {
+  const { depth: h } = params;
+  const dx = Math.max(carrier.lambda0 * 0.005, 1e-4);
+  const eL = etaFn(x - dx, t), eR = etaFn(x + dx, t);
+  const detadx = (eR - eL) / (2 * dx);
+  const eta = etaFn(x, t);
+  const c = carrier.c;
+  const u = (c * eta) / h;
+  const dudx = (c * detadx) / h;
+  const w = -(z + h) * dudx;
+  return { u, w };
+}
+
+function gerstnerVelocity(x, z, t) {
+  const { H } = params;
+  const a = H / 2;
+  const k = carrier.k0, omega = carrier.omega0;
+  const phi = k * x - omega * t;
+  const decay = Math.exp(Math.min(k * z, 0));
+  return { u: a * omega * decay * Math.cos(phi), w: a * omega * decay * Math.sin(phi) };
+}
+
+function velocityField(theory, x, z, t) {
+  switch (theory) {
+    case 'linear': return harmonicVelocity(stokesHarmonics(1), x, z, t);
+    case 'stokes2': return harmonicVelocity(stokesHarmonics(2), x, z, t);
+    case 'stokes5': return harmonicVelocity(stokesHarmonics(5), x, z, t);
+    case 'cnoidal': return shallowVelocity(cnoidalProfile, x, z, t);
+    case 'solitary': return shallowVelocity(solitaryProfile, x, z, t);
+    case 'trochoidal': return gerstnerVelocity(x, z, t);
+    default: return { u: 0, w: 0 };
+  }
+}
+
 /* ============================================================
    Canvas setup
    ============================================================ */
-const stage = document.querySelector('.stage');
-const surfaceCv = document.getElementById('surface');
+const waveCv = document.getElementById('wave');
 const compareCv = document.getElementById('compare');
-const surfaceSub = document.querySelector('.substage-surface');
+const waveSub = document.querySelector('.substage-wave');
 const compareSub = document.querySelector('.substage-compare');
-const surfaceCtx = surfaceCv.getContext('2d');
+const waveCtx = waveCv.getContext('2d');
 const compareCtx = compareCv.getContext('2d');
 const DEEP = '#04141C';
 
 let dpr = 1;
-let surfaceW = 1, surfaceH = 1, compareW = 1, compareH = 1;
+let waveW = 1, waveH = 1, compareW = 1, compareH = 1;
 
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
-  surfaceW = surfaceSub.clientWidth || 1;
-  surfaceH = surfaceSub.clientHeight || 1;
+  waveW = waveSub.clientWidth || 1;
+  waveH = waveSub.clientHeight || 1;
   compareW = compareSub.clientWidth || 1;
   compareH = compareSub.clientHeight || 1;
 
-  surfaceCv.width = Math.round(surfaceW * dpr);
-  surfaceCv.height = Math.round(surfaceH * dpr);
-  surfaceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  waveCv.width = Math.round(waveW * dpr);
+  waveCv.height = Math.round(waveH * dpr);
+  waveCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   compareCv.width = Math.round(compareW * dpr);
   compareCv.height = Math.round(compareH * dpr);
@@ -203,27 +287,8 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 if (window.ResizeObserver) {
-  new ResizeObserver(resize).observe(surfaceSub);
+  new ResizeObserver(resize).observe(waveSub);
   new ResizeObserver(resize).observe(compareSub);
-}
-
-/* ============================================================
-   Crest tracers — positions where the carrier component's own
-   phase crosses a crest (k0*x - omega0*t = 2*pi*n), recomputed
-   analytically each frame rather than integrated.
-   ============================================================ */
-function centerCrestXs(t, width) {
-  const lambda0 = carrier.lambda0;
-  if (!isFinite(lambda0) || lambda0 <= 0) return [];
-  const shift = (carrier.omega0 * t) / carrier.k0;
-  const n0 = Math.ceil((0 - shift) / lambda0 - 1);
-  const xs = [];
-  for (let n = n0, guard = 0; guard < 200; n++, guard++) {
-    const x = shift + n * lambda0;
-    if (x > width) break;
-    if (x >= 0) xs.push(x);
-  }
-  return xs;
 }
 
 /* ============================================================
@@ -235,9 +300,11 @@ function centerCrestXs(t, width) {
 const FIXED_DT = 1 / 240;
 const MAX_STEPS_PER_FRAME = 20;
 let simTime = 0, acc = 0, lastT = 0, fpsAcc = 0, fpsFrames = 0;
-let speedMul = 1, paused = false, showEnvelope = true, showTracers = true;
-let showLinear = true, showStokes = true, showCnoidal = true;
+let speedMul = 1, paused = false, activeTheory = 'linear', showArrows = true;
+let compareLinear = true, compareStokes2 = true, compareStokes5 = false;
+let compareCnoidal = true, compareSolitary = false, compareTrochoidal = false;
 const fpsEl = document.getElementById('fpsReadout');
+const exaggerationHintEl = document.getElementById('exaggerationHint');
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -255,66 +322,137 @@ function frame(now) {
     }
   }
 
-  drawSurface(simTime);
+  drawWave(simTime);
   drawCompare(simTime);
 
   fpsAcc += dt; fpsFrames++;
   if (fpsAcc >= 0.5 && fpsEl) { fpsEl.textContent = Math.round(fpsFrames / fpsAcc) + ' fps'; fpsAcc = 0; fpsFrames = 0; }
 }
 
-function drawSurface(t) {
-  surfaceCtx.fillStyle = DEEP;
-  surfaceCtx.fillRect(0, 0, surfaceW, surfaceH);
+function sampleSurface(theory, x, t) {
+  if (theory === 'trochoidal') return gerstnerPosition(x, t).z;
+  const fn = PROFILE_FNS[theory];
+  return fn ? fn(x, t) : 0;
+}
 
-  const width = 6 * carrier.lambda0; // ~6 wavelengths of the carrier, always
-  if (!isFinite(width) || width <= 0) return;
-  const midY = surfaceH * 0.55;
-  const ampScale = (surfaceH * 0.32) / Math.max(params.H * 0.7, 0.05);
-  const xToPx = (x) => (x / width) * surfaceW;
+function drawArrow(ctx, x1, y1, x2, y2, color) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 2) {
+    ctx.beginPath();
+    ctx.arc(x1, y1, 1.6, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    return;
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
 
-  const cols = Math.max(2, Math.min(surfaceW, 480));
-  const etas = new Array(cols + 1), envs = new Array(cols + 1);
+  const ang = Math.atan2(dy, dx);
+  const headLen = Math.min(6, len * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(ang - Math.PI / 6), y2 - headLen * Math.sin(ang - Math.PI / 6));
+  ctx.lineTo(x2 - headLen * Math.cos(ang + Math.PI / 6), y2 - headLen * Math.sin(ang + Math.PI / 6));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawWave(t) {
+  waveCtx.fillStyle = DEEP;
+  waveCtx.fillRect(0, 0, waveW, waveH);
+
+  const lambda = carrier.lambda0;
+  if (!isFinite(lambda) || lambda <= 0) return;
+  const width = lambda; // one wavelength, scrolling
+  const depth = params.depth;
+  const visibleDepth = Math.max(Math.min(depth, 1.5 * lambda), 1e-3);
+  const seabedVisible = depth <= visibleDepth + 1e-6;
+
+  const midY = waveH * 0.32;
+  const usableHeight = waveH * 0.6;
+  const depthScale = usableHeight / visibleDepth; // px per metre, depth axis
+  const exaggeration = Math.max(1, visibleDepth / (6 * Math.max(params.H, 0.05)));
+  const ampScale = depthScale * exaggeration;
+
+  // still-water line
+  waveCtx.setLineDash([5, 5]);
+  waveCtx.strokeStyle = 'rgba(237,232,221,0.55)';
+  waveCtx.lineWidth = 1.4;
+  waveCtx.beginPath();
+  waveCtx.moveTo(0, midY);
+  waveCtx.lineTo(waveW, midY);
+  waveCtx.stroke();
+  waveCtx.setLineDash([]);
+
+  // seabed
+  if (seabedVisible) {
+    const seabedY = midY + depth * depthScale;
+    waveCtx.strokeStyle = 'rgba(184,174,156,0.7)';
+    waveCtx.lineWidth = 2;
+    waveCtx.beginPath();
+    waveCtx.moveTo(0, seabedY);
+    waveCtx.lineTo(waveW, seabedY);
+    waveCtx.stroke();
+  } else {
+    waveCtx.fillStyle = 'rgba(237,232,221,0.5)';
+    waveCtx.font = '11px IBM Plex Mono, monospace';
+    waveCtx.fillText('seabed below view (' + Math.round(depth) + ' m)', 12, waveH - 14);
+  }
+
+  // wave curve
+  const color = THEORY_COLORS[activeTheory];
+  const cols = Math.max(2, Math.min(waveW, 360));
+  waveCtx.strokeStyle = color;
+  waveCtx.lineWidth = 2.4;
+  waveCtx.beginPath();
   for (let i = 0; i <= cols; i++) {
-    const x = (i / cols) * width;
-    const { eta, env } = evalGroup(x, t);
-    etas[i] = eta; envs[i] = env;
+    let x, eta;
+    if (activeTheory === 'trochoidal') {
+      const x0 = (i / cols) * width;
+      const p = gerstnerPosition(x0, t);
+      x = p.x; eta = p.z;
+    } else {
+      x = (i / cols) * width;
+      eta = sampleSurface(activeTheory, x, t);
+    }
+    const px = (((x % width) + width) % width) / width * waveW;
+    const py = midY - eta * ampScale;
+    if (i === 0) waveCtx.moveTo(px, py); else waveCtx.lineTo(px, py);
+  }
+  waveCtx.stroke();
+
+  if (showArrows) {
+    const COLS = 6, ROWS = 7;
+    let maxSpeed = 1e-6;
+    const pts = [];
+    for (let j = 0; j < ROWS; j++) {
+      const z = -(j / (ROWS - 1)) * visibleDepth;
+      for (let i = 0; i < COLS; i++) {
+        const x = ((i + 0.5) / COLS) * width;
+        const { u, w } = velocityField(activeTheory, x, z, t);
+        const speed = Math.hypot(u, w);
+        if (speed > maxSpeed) maxSpeed = speed;
+        pts.push({ x, z, u, w });
+      }
+    }
+    const velScale = 30 / maxSpeed;
+    for (const p of pts) {
+      const px = (p.x / width) * waveW;
+      const baseY = midY - p.z * depthScale;
+      const px2 = px + p.u * velScale;
+      const py2 = baseY - p.w * velScale;
+      drawArrow(waveCtx, px, baseY, px2, py2, 'rgba(237,232,221,0.85)');
+    }
   }
 
-  if (showEnvelope) {
-    surfaceCtx.strokeStyle = 'rgba(94,200,224,0.45)';
-    surfaceCtx.lineWidth = 1.4;
-    surfaceCtx.beginPath();
-    for (let i = 0; i <= cols; i++) {
-      const px = (i / cols) * surfaceW, py = midY - envs[i] * ampScale;
-      if (i === 0) surfaceCtx.moveTo(px, py); else surfaceCtx.lineTo(px, py);
-    }
-    for (let i = cols; i >= 0; i--) {
-      const px = (i / cols) * surfaceW, py = midY + envs[i] * ampScale;
-      surfaceCtx.lineTo(px, py);
-    }
-    surfaceCtx.closePath();
-    surfaceCtx.stroke();
-  }
-
-  surfaceCtx.strokeStyle = 'rgba(237,232,221,0.85)';
-  surfaceCtx.lineWidth = 2;
-  surfaceCtx.beginPath();
-  for (let i = 0; i <= cols; i++) {
-    const px = (i / cols) * surfaceW, py = midY - etas[i] * ampScale;
-    if (i === 0) surfaceCtx.moveTo(px, py); else surfaceCtx.lineTo(px, py);
-  }
-  surfaceCtx.stroke();
-
-  if (showTracers) {
-    const xs = centerCrestXs(t, width);
-    surfaceCtx.fillStyle = '#5EC8E0';
-    for (const x of xs) {
-      const { eta } = evalGroup(x, t);
-      const px = xToPx(x), py = midY - eta * ampScale;
-      surfaceCtx.beginPath();
-      surfaceCtx.arc(px, py, 3.5, 0, Math.PI * 2);
-      surfaceCtx.fill();
-    }
+  if (exaggerationHintEl) {
+    exaggerationHintEl.textContent = 'wave height ×' + exaggeration.toFixed(1) + ' for visibility';
   }
 }
 
@@ -322,7 +460,7 @@ function drawCompare(t) {
   compareCtx.fillStyle = DEEP;
   compareCtx.fillRect(0, 0, compareW, compareH);
 
-  const width = carrier.lambda0; // one wavelength of the carrier
+  const width = carrier.lambda0; // one wavelength
   if (!isFinite(width) || width <= 0) return;
   const midY = compareH * 0.55;
   const ampScale = (compareH * 0.36) / Math.max(params.H, 0.05);
@@ -336,20 +474,31 @@ function drawCompare(t) {
   compareCtx.stroke();
 
   const theories = [
-    { on: showLinear, fn: linearProfile, color: '#5EC8E0' },
-    { on: showStokes, fn: stokesProfile, color: '#E0A23D' },
-    { on: showCnoidal, fn: cnoidalProfile, color: '#E0708A' }
+    { on: compareLinear, theory: 'linear' },
+    { on: compareStokes2, theory: 'stokes2' },
+    { on: compareStokes5, theory: 'stokes5' },
+    { on: compareCnoidal, theory: 'cnoidal' },
+    { on: compareSolitary, theory: 'solitary' },
+    { on: compareTrochoidal, theory: 'trochoidal' }
   ];
 
   for (const th of theories) {
     if (!th.on) continue;
-    compareCtx.strokeStyle = th.color;
+    compareCtx.strokeStyle = THEORY_COLORS[th.theory];
     compareCtx.lineWidth = 2.2;
     compareCtx.beginPath();
     for (let i = 0; i <= cols; i++) {
-      const x = (i / cols) * width;
-      const eta = th.fn(x, t);
-      const px = (i / cols) * compareW, py = midY - eta * ampScale;
+      let x, eta;
+      if (th.theory === 'trochoidal') {
+        const x0 = (i / cols) * width;
+        const p = gerstnerPosition(x0, t);
+        x = p.x; eta = p.z;
+      } else {
+        x = (i / cols) * width;
+        eta = sampleSurface(th.theory, x, t);
+      }
+      const px = (((x % width) + width) % width) / width * compareW;
+      const py = midY - eta * ampScale;
       if (i === 0) compareCtx.moveTo(px, py); else compareCtx.lineTo(px, py);
     }
     compareCtx.stroke();
@@ -380,33 +529,35 @@ function bindCheck(id, after) {
 }
 
 const one = (v) => v.toFixed(1);
-const two = (v) => v.toFixed(2);
 const intFmt = (v) => String(Math.round(v));
 
 function updateReadouts() {
   const kh = carrier.k0 * params.depth;
   const regimeEl = $('regimeOut');
   const cEl = $('cOut');
-  const cgEl = $('cgOut');
   const lambdaEl = $('lambdaOut');
   if (regimeEl) regimeEl.textContent = khRegime(kh);
   if (cEl) cEl.textContent = carrier.c.toFixed(2) + ' m/s';
-  if (cgEl) cgEl.textContent = carrier.cg.toFixed(2) + ' m/s';
   if (lambdaEl) lambdaEl.textContent = carrier.lambda0.toFixed(1) + ' m';
 }
 
-bindRange('numComponents', intFmt, (v) => { params.N = Math.round(v); updateCarrier(); });
 bindRange('period0', one, (v) => { params.T0 = v; updateCarrier(); });
-bindRange('spreadFrac', two, (v) => { params.spreadFrac = v; updateCarrier(); });
 bindRange('waveHeight', one, (v) => { params.H = v; updateCarrier(); });
 bindRange('depth', intFmt, (v) => { params.depth = v; updateCarrier(); });
 
 bindRange('speed', one, (v) => { speedMul = v; });
-bindCheck('showEnvelope', (v) => { showEnvelope = v; });
-bindCheck('showTracers', (v) => { showTracers = v; });
-bindCheck('showLinear', (v) => { showLinear = v; });
-bindCheck('showStokes', (v) => { showStokes = v; });
-bindCheck('showCnoidal', (v) => { showCnoidal = v; });
+bindCheck('showArrows', (v) => { showArrows = v; });
+
+document.querySelectorAll('input[name="theory"]').forEach((el) => {
+  el.addEventListener('change', () => { if (el.checked) activeTheory = el.value; });
+});
+
+bindCheck('compareLinear', (v) => { compareLinear = v; });
+bindCheck('compareStokes2', (v) => { compareStokes2 = v; });
+bindCheck('compareStokes5', (v) => { compareStokes5 = v; });
+bindCheck('compareCnoidal', (v) => { compareCnoidal = v; });
+bindCheck('compareSolitary', (v) => { compareSolitary = v; });
+bindCheck('compareTrochoidal', (v) => { compareTrochoidal = v; });
 
 const pauseBtn = $('pauseBtn');
 pauseBtn.addEventListener('click', () => {

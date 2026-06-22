@@ -9,7 +9,8 @@
   /* the render stage is a dark, deep-water backdrop for the wave curves */
   --deep:#04141C; --deep-2:#0A232F;
   /* one accent color per wave theory, readable against --deep */
-  --linear:#5EC8E0; --stokes:#E0A23D; --cnoidal:#E0708A;
+  --linear:#5EC8E0; --stokes:#E0A23D; --stokes5:#E0653D;
+  --cnoidal:#E0708A; --solitary:#4FB286; --trochoidal:#9B7EE0;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
@@ -48,8 +49,8 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .stage.stage-waves{display:flex;flex-direction:column;aspect-ratio:16/13;}
 @media(max-width:640px){.stage.stage-waves{aspect-ratio:4/6.4;}}
 .substage{position:relative;flex:1 1 0;min-height:0;}
-.substage-surface{flex-grow:0.85;border-bottom:1.5px solid var(--line);}
-.substage-compare{flex-grow:1.15;}
+.substage-wave{flex-grow:1.1;border-bottom:1.5px solid var(--line);}
+.substage-compare{flex-grow:0.9;}
 .substage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;}
 #rig{color:var(--ink-4);font-size:13px;}
 .stage-hint{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:rgba(237,232,221,0.62);background:rgba(4,20,28,0.5);backdrop-filter:blur(4px);padding:5px 10px;border-radius:999px;pointer-events:none;transition:opacity .5s;z-index:2;}
@@ -99,7 +100,16 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border:2px solid var(
 .legend-item input[type=checkbox]{width:16px;height:16px;flex-shrink:0;cursor:pointer;}
 .legend-swatch.legend-linear{background:var(--linear);}
 .legend-swatch.legend-stokes{background:var(--stokes);}
+.legend-swatch.legend-stokes5{background:var(--stokes5);}
 .legend-swatch.legend-cnoidal{background:var(--cnoidal);}
+.legend-swatch.legend-solitary{background:var(--solitary);}
+.legend-swatch.legend-trochoidal{background:var(--trochoidal);}
+
+/* ---------- theory radio group (drives the single-wave + arrow view) ---------- */
+.radio-group{display:flex;flex-direction:column;gap:10px;}
+.radio-item{display:flex;align-items:center;gap:10px;}
+.radio-item label{margin-bottom:0;font-size:13px;color:var(--ink);font-weight:600;cursor:pointer;}
+.radio-item input[type=radio]{width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);}
 
 /* ---------- buttons (Randomize / Reset / Pause) ---------- */
 .btn{font-family:'Plus Jakarta Sans',sans-serif;font-size:12.5px;font-weight:700;letter-spacing:0.01em;color:var(--ink);background:var(--bg);border:1.5px solid var(--line-soft);border-radius:999px;padding:8px 16px;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
