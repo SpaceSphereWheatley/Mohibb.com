@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Perfect Stop — a relaxing F1 pit-stop puzzle. Plan the pit crew's jobs, respect the dependencies, and nail the perfect stop. Plays in your browser, nothing uploaded.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/pitstop/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Perfect Stop — F1 Pit-Stop Puzzle | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Perfect Stop — F1 Pit-Stop Puzzle">
+<meta property="og:description" content="A relaxing pit-stop puzzle. Plan the crew's jobs, respect the dependencies, and nail the perfect stop.">
+<meta property="og:url" content="https://mohibb.com/pitstop/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Perfect Stop — F1 Pit-Stop Puzzle">
+<meta name="twitter:description" content="A relaxing pit-stop puzzle. Plan the crew's jobs, respect the dependencies, and nail the perfect stop.">
+
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Perfect Stop",
+  "url": "https://mohibb.com/pitstop/",
+  "description": "A relaxing F1 pit-stop puzzle. Plan the crew's jobs, respect the dependencies, and nail the perfect stop.",
+  "applicationCategory": "Game",
+  "genre": "Puzzle",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<script type="importmap">
+{ "imports": { "three": "./three.module.min.js" } }
+</script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <a class="back" href="/">&larr; All projects</a>
+</div>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">F1 &middot; Puzzle</div>
+    <h1>Perfect Stop</h1>
+    <p class="lede">Plan the pit stop. Hand the crew's jobs to the lanes, mind the order, and bring the car back out in record time.</p>
+  </div>
+
+  <!-- ===== Pit box (3D) ===== -->
+  <section class="stage" aria-labelledby="stage-h">
+    <h2 id="stage-h" class="visually-hidden">The pit box</h2>
+    <canvas id="scene" role="img" aria-label="A 3D illustration of an F1 car in its pit box. The car's current state during a stop is also described in text in the plan below."></canvas>
+    <div class="hud">
+      <div class="hud-mode" id="hudMode">Level 1</div>
+      <div class="hud-times">
+        <span class="hud-readout" id="hudTime">Planned —</span>
+        <span class="hud-par">Target <span id="hudPar">—</span></span>
+        <span class="hud-par hud-gap">Gap <span id="hudLimit">—</span></span>
+        <span class="stars" id="hudStars" role="img" aria-label="Projected stars">&#9734;&#9734;&#9734;</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Controls ===== -->
+  <section class="panel" aria-labelledby="plan-h">
+    <div class="panel-head">
+      <h2 id="plan-h">Plan the stop</h2>
+      <p class="panel-sub" id="planSub">Assign every job to a crew member who can actually do it — each mechanic only handles certain jobs and reaches certain corners — then order them. Mind the rules (a wheel can't go on before the old one is off; the car can't be released until both jacks are down) and the air-lines (only so many wheel-guns run at once). Beat the <strong>target</strong>; finish past the <strong>gap</strong> and the chasing car gets by.</p>
+    </div>
+
+    <div class="toolbar" role="toolbar" aria-label="Game controls">
+      <button class="btn btn-primary" id="runBtn" type="button">Run stop</button>
+      <button class="btn" id="resetBtn" type="button">Reset</button>
+      <button class="btn" id="hintBtn" type="button" aria-pressed="false">Engineer</button>
+      <span class="toolbar-gap"></span>
+      <button class="btn btn-icon" id="prevBtn" type="button" aria-label="Previous level">&larr;</button>
+      <button class="btn" id="dailyBtn" type="button" aria-pressed="false">Daily</button>
+      <button class="btn" id="endlessBtn" type="button" aria-pressed="false">Endless</button>
+      <button class="btn btn-icon" id="nextBtn" type="button" aria-label="Next level">&rarr;</button>
+      <button class="btn" id="helpBtn" type="button">How to play</button>
+    </div>
+
+    <!-- Engineer's read (tips) -->
+    <section class="tips" id="tips" aria-label="Race engineer's notes" hidden></section>
+
+    <!-- Unplaced jobs -->
+    <div class="tray-wrap">
+      <h3 class="block-label">Jobs to assign</h3>
+      <div class="tray" id="tray" role="group" aria-label="Unassigned jobs"></div>
+      <p class="empty-hint" id="trayEmpty">All jobs assigned. Hit “Run stop”.</p>
+    </div>
+
+    <!-- Crew lanes / timeline -->
+    <div class="lanes-wrap">
+      <h3 class="block-label">Crew <span class="block-note">(each row is one mechanic; left to right = time)</span></h3>
+      <div class="timeaxis" id="timeaxis" aria-hidden="true"></div>
+      <div class="lanes" id="lanes"></div>
+    </div>
+
+    <!-- Accessible text schedule -->
+    <details class="schedule">
+      <summary>Schedule as text</summary>
+      <ol id="scheduleText" class="schedule-list" aria-live="polite"></ol>
+    </details>
+  </section>
+
+  <footer>
+    <span>&copy; <span id="year"></span> Mohibb Malik</span>
+    <span><a href="/pitwall/">Pit Wall</a> &middot; <a href="/">mohibb.com</a></span>
+  </footer>
+
+</div>
+
+<!-- ===== How-to overlay ===== -->
+<div class="overlay" id="helpOverlay" hidden>
+  <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <h2 id="help-title">How to play</h2>
+    <p>You're the pit-stop strategist. Each <strong>crew member</strong> works one job at a time, in the order you give them — but they're specialists.</p>
+    <ul>
+      <li><strong>Assign every job to someone who can do it.</strong> Select a job, then press <em>Add here</em> on a crew member. If a row can't take that job (wrong role or can't reach that corner), its button is greyed out.</li>
+      <li><strong>Respect the rules.</strong> A wheel only goes on after the old one's off; tyres only come off once that end is jacked up; the car is only released once both jacks are down (and any wing change is finished).</li>
+      <li><strong>Watch the air-lines.</strong> Only a limited number of wheel-guns can run at once, so you can't fire every corner simultaneously — sequence them.</li>
+      <li><strong>Mind complications.</strong> Sticky nuts, wrong-compound deliveries and front-wing changes show up procedurally and reshape the plan.</li>
+      <li><strong>Beat the target, hold the gap.</strong> Match the <strong>target</strong> for a perfect stop (★★★). Finish past the <strong>gap</strong> to the chasing car and you lose the position.</li>
+      <li><strong>Stuck?</strong> <em>Engineer</em> gives you the constraints and the target to aim for — it won't solve it for you.</li>
+    </ul>
+    <p class="overlay-note">Modes: numbered levels (tutorials → career), a date-seeded <em>Daily</em>, and an <em>Endless</em> run that keeps getting harder. Keyboard friendly: Tab to move, Enter to activate; on a placed job use arrow keys to move it and Delete to remove. Nothing is uploaded; progress is saved on this device.</p>
+    <button class="btn btn-primary" id="helpClose" type="button">Got it</button>
+  </div>
+</div>
+
+<!-- ===== Result overlay ===== -->
+<div class="overlay" id="winOverlay" hidden>
+  <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="win-title">
+    <div class="win-stars" id="winStars" aria-hidden="true">&#9733;&#9733;&#9733;</div>
+    <h2 id="win-title">Stop complete</h2>
+    <p class="win-time" id="winTime">—</p>
+    <p class="win-msg" id="winMsg"></p>
+    <div class="overlay-actions">
+      <button class="btn" id="winRetry" type="button">Try again</button>
+      <button class="btn btn-primary" id="winNext" type="button">Next level</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./script.js"></script>
+</body>
+</html>
