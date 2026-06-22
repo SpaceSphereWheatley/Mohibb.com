@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="A swarm of double pendulums released from nearly identical starting angles, each tracing a colored fading trail — deterministic chaos and the butterfly effect, live in your browser, with a built-in primer on the physics.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/pendulum/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Double Pendulum — Chaos Swarm | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Double Pendulum — Chaos Swarm">
+<meta property="og:description" content="A swarm of double pendulums released from nearly identical angles, each tracing a colored fading trail — watch deterministic chaos and the butterfly effect unfold in real time.">
+<meta property="og:url" content="https://mohibb.com/pendulum/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Double Pendulum — Chaos Swarm">
+<meta name="twitter:description" content="A swarm of double pendulums released from nearly identical angles, each tracing a colored fading trail — watch deterministic chaos and the butterfly effect unfold in real time.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Double Pendulum",
+  "url": "https://mohibb.com/pendulum/",
+  "description": "A swarm of double pendulums released from nearly identical starting angles, each tracing a colored fading trail — deterministic chaos and the butterfly effect, live in your browser, with a built-in primer on the physics.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <button class="learn-cta" id="learnBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="learnPanel" title="Open the physics primer">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>
+      Learn the physics<span class="arr" aria-hidden="true">&rarr;</span>
+    </button>
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<main class="wrap">
+
+  <section class="intro">
+    <p class="eyebrow">deterministic chaos, in your browser</p>
+    <h1>Double Pendulum</h1>
+    <p class="lede">A swarm of double pendulums, each released a hair's
+      breadth apart in starting angle, integrated with the exact same
+      equations of motion. Watch nearly identical starts fan out into wildly
+      different paths within seconds — the butterfly effect, made visible.
+      Tune the swarm and the physics below.</p>
+  </section>
+
+  <!-- ---------- the render stage ---------- -->
+  <section class="stage" aria-label="Double pendulum swarm render">
+    <canvas id="trails" aria-hidden="true"></canvas>
+    <canvas id="rig" role="img" aria-label="A swarm of double pendulums swinging from a fixed pivot, each tracing a colored fading trail behind its lower bob as the paths diverge from nearly identical starting angles.">
+      Your browser does not support canvas, which is required to display this
+      simulation.
+    </canvas>
+    <div class="stage-hint" id="stageHint" aria-hidden="true">runs on its own · tune the swarm below</div>
+    <div class="stage-readout" id="fpsReadout" aria-hidden="true">– fps</div>
+  </section>
+
+  <!-- ---------- controls ---------- -->
+  <section class="controls" aria-label="Controls">
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">01</span> Swarm</h2>
+      <div class="field">
+        <label for="swarmSize">Swarm size</label>
+        <div class="field-row">
+          <input type="range" id="swarmSize" min="1" max="40" step="1" value="12">
+          <output for="swarmSize" id="swarmSizeOut">12</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="spread">Initial spread <span class="unit">(deg)</span></label>
+        <div class="field-row">
+          <input type="range" id="spread" min="0.001" max="5" step="0.001" value="0.05">
+          <output for="spread" id="spreadOut">0.050</output>
+        </div>
+      </div>
+      <div class="field-row btn-row">
+        <button type="button" class="btn" id="randomizeBtn">Randomize</button>
+        <button type="button" class="btn" id="resetBtn">Reset</button>
+      </div>
+      <p class="panel-note">Every pendulum starts at the same angle as its
+        neighbor, plus this tiny offset — small enough that they all look
+        identical at first.</p>
+    </div>
+
+    <div class="panel panel-physics">
+      <h2 class="panel-head"><span class="idx">02</span> Physics</h2>
+      <div class="field">
+        <label for="gravity">Gravity <span class="unit">(m/s&sup2;)</span></label>
+        <div class="field-row">
+          <input type="range" id="gravity" min="1" max="25" step="0.5" value="9.8">
+          <output for="gravity" id="gravityOut">9.8</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="length1">Rod 1 length <span class="unit">(m)</span></label>
+        <div class="field-row">
+          <input type="range" id="length1" min="0.3" max="2" step="0.05" value="1">
+          <output for="length1" id="length1Out">1.00</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="length2">Rod 2 length <span class="unit">(m)</span></label>
+        <div class="field-row">
+          <input type="range" id="length2" min="0.3" max="2" step="0.05" value="1">
+          <output for="length2" id="length2Out">1.00</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="mass1">Bob 1 mass <span class="unit">(kg)</span></label>
+        <div class="field-row">
+          <input type="range" id="mass1" min="0.2" max="5" step="0.1" value="1">
+          <output for="mass1" id="mass1Out">1.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="mass2">Bob 2 mass <span class="unit">(kg)</span></label>
+        <div class="field-row">
+          <input type="range" id="mass2" min="0.2" max="5" step="0.1" value="1">
+          <output for="mass2" id="mass2Out">1.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="damping">Damping <span class="unit">(0 = energy-conserving chaos)</span></label>
+        <div class="field-row">
+          <input type="range" id="damping" min="0" max="1" step="0.01" value="0">
+          <output for="damping" id="dampingOut">0.00</output>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">03</span> Trails &amp; playback</h2>
+      <div class="field">
+        <label for="trailLength">Trail length</label>
+        <div class="field-row">
+          <input type="range" id="trailLength" min="1" max="100" step="1" value="60">
+          <output for="trailLength" id="trailLengthOut">60</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="speed">Simulation speed <span class="unit">(&times;)</span></label>
+        <div class="field-row">
+          <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
+          <output for="speed" id="speedOut">1.0</output>
+        </div>
+      </div>
+      <div class="field-row btn-row btn-row-tight">
+        <button type="button" class="btn" id="pauseBtn">Pause</button>
+      </div>
+      <div class="field check check-spaced">
+        <input type="checkbox" id="showRig" checked>
+        <label for="showRig">Show rods &amp; bobs</label>
+      </div>
+    </div>
+
+  </section>
+
+  <p class="footnote">A swarm of idealized double pendulums — massless rigid
+    rods, point-mass bobs — integrated with 4th-order Runge-Kutta. For the
+    equations behind every term, open
+    <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
+
+</main>
+
+<!-- ---------- Learn / physics primer overlay ---------- -->
+<div class="learn-overlay" id="learnOverlay" hidden>
+  <div class="learn-panel" id="learnPanel" role="dialog" aria-modal="true" aria-labelledby="learnTitle" tabindex="-1">
+    <header class="learn-top">
+      <h2 id="learnTitle">The physics, end to end</h2>
+      <button type="button" class="learn-close" id="learnClose" aria-label="Close the primer">&times;</button>
+    </header>
+    <div class="learn-body" id="learnBody">
+
+      <p class="learn-lede">Everything this simulator computes, term by
+        term — with the equation behind each and where it shows up on
+        screen. Angles \(\theta_1\), \(\theta_2\) are measured from
+        vertical; rods have length \(L_1\), \(L_2\); bobs have mass
+        \(m_1\), \(m_2\); \(g\) is gravity.</p>
+
+      <article>
+        <h3>Two pendulums, one chaotic system</h3>
+        <p>A double pendulum is just a pendulum hanging off another
+          pendulum: a bob on a rod, with a second bob on a second rod hinged
+          to the first. Its state is fully described by two angles and
+          their rates of change, \((\theta_1,\dot\theta_1,\theta_2,\dot\theta_2)\).
+          The bob positions follow directly:</p>
+        <p>$$x_1=L_1\sin\theta_1,\quad y_1=-L_1\cos\theta_1$$</p>
+        <p>$$x_2=x_1+L_2\sin\theta_2,\quad y_2=y_1-L_2\cos\theta_2$$</p>
+        <p>Simple to describe, yet this is one of the simplest mechanical
+          systems known to behave chaotically — which is exactly why it's
+          worth simulating a swarm of them at once.</p>
+      </article>
+
+      <article>
+        <h3>The Lagrangian</h3>
+        <p>Rather than juggle tension forces in two rods, it's far cleaner
+          to write the system's kinetic and potential energy and let the
+          Euler&ndash;Lagrange equations produce the dynamics automatically:</p>
+        <p>$$T=\tfrac12(m_1+m_2)L_1^2\dot\theta_1^2+\tfrac12 m_2L_2^2\dot\theta_2^2+m_2L_1L_2\dot\theta_1\dot\theta_2\cos(\theta_1-\theta_2)$$</p>
+        <p>$$V=-(m_1+m_2)gL_1\cos\theta_1-m_2gL_2\cos\theta_2$$</p>
+        <p>With \(\mathcal{L}=T-V\), the equations of motion fall out of:</p>
+        <p>$$\frac{d}{dt}\frac{\partial \mathcal{L}}{\partial \dot\theta_i} - \frac{\partial \mathcal{L}}{\partial \theta_i} = 0$$</p>
+      </article>
+
+      <article>
+        <h3>The equations of motion</h3>
+        <p>Working through that recipe gives the closed-form angular
+          accelerations this simulator evaluates every substep
+          (\(\Delta=\theta_1-\theta_2\)):</p>
+        <p>$$\ddot\theta_1=\frac{-g(2m_1+m_2)\sin\theta_1-m_2g\sin(\theta_1-2\theta_2)-2\sin\Delta\,m_2(\dot\theta_2^2L_2+\dot\theta_1^2L_1\cos\Delta)}{L_1(2m_1+m_2-m_2\cos2\Delta)}$$</p>
+        <p>$$\ddot\theta_2=\frac{2\sin\Delta\,(\dot\theta_1^2L_1(m_1+m_2)+g(m_1+m_2)\cos\theta_1+\dot\theta_2^2L_2m_2\cos\Delta)}{L_2(2m_1+m_2-m_2\cos2\Delta)}$$</p>
+        <p>The \(\cos\Delta\) coupling terms are what make the two arms'
+          motion inseparable — neither pendulum moves independently of the
+          other, which is the root of the chaos.</p>
+      </article>
+
+      <article>
+        <h3>Why tiny differences explode: Lyapunov exponents</h3>
+        <p>Two trajectories that start a tiny distance \(\delta_0\) apart in
+          state space typically diverge exponentially fast, at a rate set by
+          the system's <strong>Lyapunov exponent</strong> \(\lambda\):</p>
+        <p>$$|\delta(t)|\approx|\delta_0|\,e^{\lambda t}$$</p>
+        <p>Every pendulum in the swarm starts within the <em>spread</em>
+          control's angle of its neighbor — sometimes thousandths of a
+          degree apart. The rainbow fan you watch spreading apart over a few
+          seconds <em>is</em> this equation, made visible. It's not
+          randomness: every pendulum runs the exact same deterministic
+          equations above, with only the tiniest difference in starting
+          condition.</p>
+      </article>
+
+      <article class="learn-caveat">
+        <h3>What's simplified</h3>
+        <p>The simulator integrates with 4th-order Runge&ndash;Kutta at a
+          small fixed timestep — extremely accurate, but not exact;
+          floating-point error itself becomes a (tiny) extra source of the
+          same sensitivity being demonstrated, which is fitting here but
+          worth noting.</p>
+        <p>No air resistance is physically modeled. The <em>damping</em>
+          control is a simple linear drag on each joint's angular velocity,
+          not a first-principles aerodynamic model — useful for taming the
+          chaos, not for matching a real pendulum's friction.</p>
+        <p>Rods are treated as massless and perfectly rigid, bobs as point
+          masses. A real double pendulum (two coupled rigid bodies with
+          distributed mass) has different moments of inertia and needs a
+          fuller Lagrangian. And once damping &gt; 0, the system is no
+          longer energy-conserving — it settles toward hanging straight
+          down.</p>
+      </article>
+
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./script.js"></script>
+</body>
+</html>
