@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="An interactive, physically-based black hole renderer — real-time gravitational lensing, accretion disk, relativistic beaming and redshift around a Schwarzschild black hole, with a built-in primer on the physics.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/blackhole/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Black Hole — Relativistic Raytracer | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Black Hole — Relativistic Raytracer">
+<meta property="og:description" content="Orbit a Schwarzschild black hole in real time. Gravitational lensing, accretion disk, Doppler beaming and redshift — with an in-page primer on the physics.">
+<meta property="og:url" content="https://mohibb.com/blackhole/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Black Hole — Relativistic Raytracer">
+<meta name="twitter:description" content="Orbit a Schwarzschild black hole in real time. Gravitational lensing, accretion disk, Doppler beaming and redshift — with an in-page primer on the physics.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Black Hole",
+  "url": "https://mohibb.com/blackhole/",
+  "description": "An interactive, physically-based black hole renderer — real-time gravitational lensing, accretion disk, relativistic beaming and redshift around a Schwarzschild black hole, with a built-in primer on the physics.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <button class="learn-cta" id="learnBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="learnPanel" title="Open the physics primer">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>
+      Learn the physics<span class="arr" aria-hidden="true">&rarr;</span>
+    </button>
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<main class="wrap">
+
+  <section class="intro">
+    <p class="eyebrow">general relativity, in your browser</p>
+    <h1>Black Hole</h1>
+    <p class="lede">A real-time, physically-based render of a non-rotating
+      (Schwarzschild) black hole. Every pixel traces a light ray as it bends
+      through curved spacetime — so what you see is the genuine article:
+      gravitational lensing, a warped accretion disk, the photon ring, and
+      relativistic colour shifts. Drag to orbit; tune the physics below.</p>
+  </section>
+
+  <!-- ---------- the render stage ---------- -->
+  <section class="stage" aria-label="Black hole render">
+    <canvas id="gl" role="img" aria-label="Real-time 3D render of a Schwarzschild black hole: a dark circular shadow ringed by a bright photon ring, surrounded by a glowing accretion disk whose far side is lensed up and over the shadow, against a starfield.">
+      Your browser does not support WebGL, which is required to display the
+      black hole render.
+    </canvas>
+    <div class="stage-hint" id="stageHint" aria-hidden="true">drag to orbit · scroll to zoom</div>
+    <div class="stage-readout" id="fpsReadout" aria-hidden="true">– fps</div>
+    <div class="stage-fallback" id="glError" role="alert" hidden>
+      <strong>WebGL unavailable.</strong>
+      <span>This renderer needs a WebGL2-capable browser. Try a recent desktop
+      Chrome, Firefox, Edge or Safari with hardware acceleration enabled.</span>
+    </div>
+  </section>
+
+  <!-- ---------- controls ---------- -->
+  <section class="controls" aria-label="Controls">
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">01</span> View</h2>
+      <div class="field">
+        <label for="distance">Orbit distance <span class="unit">(r<sub>s</sub>)</span></label>
+        <div class="field-row">
+          <input type="range" id="distance" min="3" max="60" step="0.5" value="14">
+          <output for="distance" id="distanceOut">14</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="fov">Field of view <span class="unit">(deg)</span></label>
+        <div class="field-row">
+          <input type="range" id="fov" min="25" max="100" step="1" value="55">
+          <output for="fov" id="fovOut">55</output>
+        </div>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="autorotate">
+        <label for="autorotate">Auto-rotate</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">02</span> Accretion disk</h2>
+      <div class="field check">
+        <input type="checkbox" id="diskOn" checked>
+        <label for="diskOn">Show accretion disk</label>
+      </div>
+      <div class="field">
+        <label for="diskInner">Inner radius <span class="unit">(r<sub>s</sub>, ISCO = 3)</span></label>
+        <div class="field-row">
+          <input type="range" id="diskInner" min="1.5" max="10" step="0.1" value="3">
+          <output for="diskInner" id="diskInnerOut">3.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="diskOuter">Outer radius <span class="unit">(r<sub>s</sub>)</span></label>
+        <div class="field-row">
+          <input type="range" id="diskOuter" min="6" max="30" step="0.5" value="16">
+          <output for="diskOuter" id="diskOuterOut">16</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="diskBright">Brightness</label>
+        <div class="field-row">
+          <input type="range" id="diskBright" min="0.2" max="3" step="0.05" value="1.2">
+          <output for="diskBright" id="diskBrightOut">1.20</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="mdot">Accretion rate Ṁ <span class="unit">(sets temperature)</span></label>
+        <div class="field-row">
+          <input type="range" id="mdot" min="0.1" max="3" step="0.05" value="1">
+          <output for="mdot" id="mdotOut">1.00</output>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">03</span> Relativistic effects</h2>
+      <div class="field check">
+        <input type="checkbox" id="lensing" checked>
+        <label for="lensing">Gravitational lensing</label>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="beaming" checked>
+        <label for="beaming">Doppler beaming &amp; shift</label>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="redshift" checked>
+        <label for="redshift">Gravitational redshift</label>
+      </div>
+      <p class="panel-note">Toggle these to see each effect's contribution in
+        isolation — turning off lensing renders flat (Newtonian) light paths.</p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">04</span> Background &amp; quality</h2>
+      <div class="field check">
+        <input type="checkbox" id="starsOn" checked>
+        <label for="starsOn">Starfield</label>
+      </div>
+      <div class="field">
+        <label for="starDensity">Star density</label>
+        <div class="field-row">
+          <input type="range" id="starDensity" min="0.2" max="2" step="0.05" value="1">
+          <output for="starDensity" id="starDensityOut">1.00</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="steps">Integration steps <span class="unit">(quality ↔ speed)</span></label>
+        <div class="field-row">
+          <input type="range" id="steps" min="80" max="500" step="10" value="240">
+          <output for="steps" id="stepsOut">240</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="exposure">Exposure</label>
+        <div class="field-row">
+          <input type="range" id="exposure" min="0.4" max="2.5" step="0.05" value="1">
+          <output for="exposure" id="exposureOut">1.00</output>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel panel-physics">
+      <h2 class="panel-head"><span class="idx">05</span> Physical parameters</h2>
+      <div class="field">
+        <label for="mass">Mass <span class="unit">(solar masses, M<sub>☉</sub>)</span></label>
+        <div class="field-row">
+          <input type="range" id="mass" min="0" max="9" step="0.05" value="6.6">
+          <output for="mass" id="massOut">4.0×10⁶</output>
+        </div>
+      </div>
+      <p class="panel-note">Mass is a logarithmic slider from a stellar-mass
+        black hole to a supermassive one (Sgr A* ≈ 4×10⁶ M<sub>☉</sub>). It sets
+        the physical scale and, with Ṁ, the disk's peak temperature.</p>
+      <dl class="readouts">
+        <div><dt>Schwarzschild radius r<sub>s</sub></dt><dd id="roRs">–</dd></div>
+        <div><dt>Photon sphere (1.5 r<sub>s</sub>)</dt><dd id="roPhoton">–</dd></div>
+        <div><dt>ISCO (3 r<sub>s</sub>)</dt><dd id="roIsco">–</dd></div>
+        <div><dt>Shadow diameter (√27 r<sub>s</sub>)</dt><dd id="roShadow">–</dd></div>
+        <div><dt>Disk peak temperature</dt><dd id="roTemp">–</dd></div>
+        <div><dt>Hawking temperature</dt><dd id="roHawking">–</dd></div>
+      </dl>
+    </div>
+
+  </section>
+
+  <p class="footnote">A non-rotating (Schwarzschild) model with an optically
+    thin, geometrically thin disk. Light paths are integrated as null geodesics;
+    the disk is rendered at the optics level (no full radiative transfer). For
+    the physics behind every term, open
+    <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
+
+</main>
+
+<!-- ---------- Learn / physics primer overlay ---------- -->
+<div class="learn-overlay" id="learnOverlay" hidden>
+  <div class="learn-panel" id="learnPanel" role="dialog" aria-modal="true" aria-labelledby="learnTitle" tabindex="-1">
+    <header class="learn-top">
+      <h2 id="learnTitle">The physics, end to end</h2>
+      <button type="button" class="learn-close" id="learnClose" aria-label="Close the primer">&times;</button>
+    </header>
+    <div class="learn-body" id="learnBody">
+
+      <p class="learn-lede">Everything this renderer simulates, term by term —
+        with the equation behind each and where it shows up on screen. Units use
+        \(G\) (gravitation), \(c\) (light speed), \(M\) (black hole mass).</p>
+
+      <article>
+        <h3>Spacetime curvature &amp; the Schwarzschild metric</h3>
+        <p>General relativity says mass curves spacetime, and objects (including
+          light) follow the straightest possible paths — <em>geodesics</em> —
+          through that curved geometry. For a non-rotating, uncharged mass, the
+          exact solution is the <strong>Schwarzschild metric</strong>, which
+          gives the spacetime "interval" \(ds\) between nearby events:</p>
+        <p>$$ds^2 = -\left(1-\frac{r_s}{r}\right)c^2\,dt^2 + \left(1-\frac{r_s}{r}\right)^{-1}dr^2 + r^2\,d\Omega^2$$</p>
+        <p>The whole render is, in effect, this metric evaluated millions of
+          times a frame: each ray is a <em>null</em> geodesic (\(ds^2 = 0\),
+          the condition for light) traced backwards from your eye.</p>
+      </article>
+
+      <article>
+        <h3>Schwarzschild radius &amp; the event horizon</h3>
+        <p>The factor \((1-r_s/r)\) hits zero at \(r = r_s\), the
+          <strong>event horizon</strong>: the radius inside which no path —
+          not even light's — leads back out. It depends only on mass:</p>
+        <p>$$r_s = \frac{2GM}{c^2}$$</p>
+        <p>On screen this is the boundary of the black disk, and the
+          <em>Schwarzschild radius</em> read-out. For the Sun it's ~3&nbsp;km;
+          for Sgr A*, ~12&nbsp;million&nbsp;km. Everything else (ISCO, photon
+          sphere, shadow) is measured in multiples of \(r_s\).</p>
+      </article>
+
+      <article>
+        <h3>Light bending &amp; the geodesic equation</h3>
+        <p>Tracing a photon reduces (in the orbital plane) to a single
+          second-order equation for \(u = 1/r\) versus angle \(\varphi\):</p>
+        <p>$$\frac{d^2u}{d\varphi^2} + u = \frac{3GM}{c^2}\,u^2$$</p>
+        <p>The left side alone is a straight line; the right-hand
+          \(\tfrac{3GM}{c^2}u^2\) term is pure relativity — the same correction
+          that explains Mercury's perihelion precession and the 1919 eclipse
+          light-bending measurement. The renderer integrates this per ray (the
+          <em>integration steps</em> control sets how finely). Toggling
+          <em>gravitational lensing</em> off drops this term, giving flat,
+          Newtonian-looking light.</p>
+      </article>
+
+      <article>
+        <h3>Photon sphere &amp; the photon ring</h3>
+        <p>At exactly \(r = \tfrac{3}{2}r_s\) gravity can bend light into a
+          (highly unstable) circular orbit — the <strong>photon sphere</strong>:</p>
+        <p>$$r_\text{ph} = \frac{3}{2}\,r_s = \frac{3GM}{c^2}$$</p>
+        <p>Rays that graze this radius loop around the hole one or more times
+          before escaping, piling up into the razor-thin bright
+          <em>photon ring</em> that traces the shadow's edge.</p>
+      </article>
+
+      <article>
+        <h3>The black hole shadow</h3>
+        <p>Crucially, the dark silhouette you see is <em>not</em> the horizon —
+          lensing magnifies it. A distant observer sees a shadow of apparent
+          radius \(b_\text{crit}\) (the critical impact parameter):</p>
+        <p>$$b_\text{crit} = \frac{3\sqrt{3}}{2}\,r_s \;\Rightarrow\; d_\text{shadow} = \sqrt{27}\,r_s \approx 5.2\,r_s$$</p>
+        <p>So the shadow looks ~2.6× wider than the horizon itself — this is the
+          number the Event Horizon Telescope's images of M87* and Sgr A* are
+          built around, and the <em>shadow diameter</em> read-out here.</p>
+      </article>
+
+      <article>
+        <h3>Accretion disk &amp; the ISCO</h3>
+        <p>Infalling gas can't orbit arbitrarily close: below the
+          <strong>innermost stable circular orbit (ISCO)</strong> any orbit
+          spirals in. For Schwarzschild:</p>
+        <p>$$r_\text{ISCO} = \frac{6GM}{c^2} = 3\,r_s$$</p>
+        <p>That sets the disk's default inner edge. Viscous friction heats the
+          gas; a Shakura–Sunyaev thin disk has a temperature profile that falls
+          off with radius,</p>
+        <p>$$T(r) \propto \left(\frac{\dot{M}\,M}{r^3}\right)^{1/4}$$</p>
+        <p>which the renderer maps through a blackbody colour ramp — hotter,
+          bluer-white near the ISCO, cooler and oranger outward. The
+          <em>accretion rate</em> \(\dot{M}\) and <em>mass</em> controls feed
+          straight into this.</p>
+      </article>
+
+      <article>
+        <h3>Relativistic beaming &amp; Doppler shift</h3>
+        <p>The disk orbits at a large fraction of \(c\). The side rotating
+          toward you is Doppler-boosted — brighter and bluer; the receding side
+          dims and reddens. Specific intensity isn't invariant, but
+          \(I_\nu/\nu^3\) is, so the observed brightness scales as the Doppler
+          factor cubed (times a photon-energy factor):</p>
+        <p>$$\delta = \frac{1}{\gamma\,(1-\boldsymbol{\beta}\cdot\hat{n})}, \qquad \frac{I_\nu^\text{obs}}{I_\nu^\text{emit}} = \delta^{3}$$</p>
+        <p>This is why a real black hole disk looks lopsided — one side blazing,
+          the other muted. The <em>Doppler beaming</em> toggle controls it.</p>
+      </article>
+
+      <article>
+        <h3>Gravitational redshift</h3>
+        <p>Light climbing out of the gravity well loses energy, shifting redder.
+          A photon emitted at radius \(r\) and seen far away is stretched by:</p>
+        <p>$$1 + z = \left(1 - \frac{r_s}{r}\right)^{-1/2}$$</p>
+        <p>which diverges at the horizon (infinite redshift). Combined with the
+          Doppler term above, it tints and dims disk light near the inner edge.
+          Controlled by the <em>gravitational redshift</em> toggle.</p>
+      </article>
+
+      <article>
+        <h3>Hawking temperature (and why we don't render it)</h3>
+        <p>Quantum field theory near the horizon predicts a faint thermal glow
+          with temperature inversely proportional to mass:</p>
+        <p>$$T_H = \frac{\hbar c^3}{8\pi G M k_B}$$</p>
+        <p>For any astrophysical black hole this is absurdly cold — nanokelvin
+          for stellar-mass, far below the 2.7&nbsp;K microwave background — so it
+          contributes nothing visible. It's in the read-outs for scale only.</p>
+      </article>
+
+      <article class="learn-caveat">
+        <h3>What's simplified</h3>
+        <p>This is a <strong>Schwarzschild</strong> (non-rotating, uncharged)
+          model — no Kerr spin or frame-dragging, which would skew the shadow
+          and disk. The disk is rendered at the optics level (geometry, Doppler,
+          redshift, blackbody colour) rather than via full radiative transfer,
+          and the starfield is procedural. The goal is a faithful <em>look</em>
+          and feel for the real geometry, fast enough to spin in real time.</p>
+      </article>
+
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./script.js"></script>
+</body>
+</html>

@@ -11,6 +11,7 @@
     "http://localhost:8123/pitwall/analyse/",
     "http://localhost:8123/pdf/",
     "http://localhost:8123/spotkick/",
-    "http://localhost:8123/pitstop/"
+    "http://localhost:8123/pitstop/",
+    "http://localhost:8123/blackhole/"
   ]
 }
