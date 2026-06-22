@@ -91,13 +91,16 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border:2px solid var(
 .inline-link:hover{color:var(--accent-ink);}
 
 /* ---------- Learn overlay ---------- */
+/* the [hidden] guards must outrank the display rules below, or the HTML hidden
+   attribute is ignored and these overlays show on load */
+.learn-overlay[hidden],.stage-fallback[hidden]{display:none;}
 .learn-overlay{position:fixed;inset:0;z-index:100;display:flex;justify-content:flex-end;background:rgba(11,13,22,0.5);backdrop-filter:blur(3px);animation:fade .2s ease;}
 @keyframes fade{from{opacity:0;}to{opacity:1;}}
 .learn-panel{width:min(560px,100%);height:100%;background:var(--bg);border-left:1.5px solid var(--line);overflow-y:auto;box-shadow:-20px 0 60px -30px rgba(0,0,0,0.6);animation:slidein .25s cubic-bezier(.2,.7,.2,1);}
 @keyframes slidein{from{transform:translateX(24px);opacity:0.4;}to{transform:translateX(0);opacity:1;}}
 .learn-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 26px;background:rgba(237,232,221,0.92);backdrop-filter:blur(8px);border-bottom:1.5px solid var(--line);}
 .learn-top h2{font-size:18px;font-weight:800;letter-spacing:-0.02em;}
-.learn-close{font-size:26px;line-height:1;color:var(--ink-2);background:none;border:none;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;}
+.learn-close{font-size:28px;line-height:1;color:var(--ink-2);background:var(--card);border:1.5px solid var(--line-soft);cursor:pointer;width:44px;height:44px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:background .15s,color .15s,border-color .15s;}
 .learn-close:hover{background:var(--card-2);color:var(--accent);}
 .learn-body{padding:24px 26px 64px;}
 .learn-lede{font-family:'Newsreader',serif;font-size:16px;line-height:1.55;color:var(--ink-2);margin-bottom:8px;}

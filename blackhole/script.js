@@ -454,14 +454,19 @@ if (renderer) {
       mathRendered = true;
     }
   }
+  // Render the equations eagerly so they're typeset whether or not the panel is
+  // ever opened. KaTeX is loaded with `defer`, so poll briefly until it's ready.
+  function renderMathWhenReady() {
+    if (mathRendered) return;
+    renderMath();
+    if (!mathRendered) { let n = 0; const t = setInterval(() => { renderMath(); if (mathRendered || ++n > 40) clearInterval(t); }, 100); }
+  }
 
   function open() {
     lastFocus = document.activeElement;
     overlay.hidden = false;
     if (trigger) trigger.setAttribute('aria-expanded', 'true');
-    // KaTeX scripts are deferred; retry briefly if not ready at first open
-    renderMath();
-    if (!mathRendered) { let n = 0; const t = setInterval(() => { renderMath(); if (mathRendered || ++n > 20) clearInterval(t); }, 100); }
+    renderMathWhenReady();
     panel.focus();
     document.addEventListener('keydown', onKey);
   }
@@ -485,6 +490,8 @@ if (renderer) {
   openers.forEach((b) => b && b.addEventListener('click', open));
   if (closeBtn) closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  renderMathWhenReady(); // pre-typeset on load, not just on first open
 })();
 
 function showGlError() {
