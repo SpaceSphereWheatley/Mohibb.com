@@ -84,7 +84,7 @@
           "category": "WebGL · relativistic raytracer",
           "description": "Orbit a Schwarzschild black hole in real time — gravitational lensing, a warped accretion disk, Doppler beaming and redshift, with an in-page primer on the physics.",
           "url": "/blackhole/",
-          "status": "wip"
+          "status": "live"
         }
       ]
     }
