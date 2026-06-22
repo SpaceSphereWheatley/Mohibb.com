@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Compare how Linear (Airy), Stokes 2nd-order, and cnoidal wave theory each shape an ocean wave at the same height, period, and depth, alongside a live dispersion and superposition demo of a wave group's crests racing through its envelope — with a built-in primer on the physics.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/waves/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Ocean Waves — Theory Comparison | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Ocean Waves — Theory Comparison">
+<meta property="og:description" content="Compare how Linear, Stokes 2nd-order, and cnoidal wave theory shape an ocean wave at the same height, period, and depth, alongside a live dispersion/superposition demo.">
+<meta property="og:url" content="https://mohibb.com/waves/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Ocean Waves — Theory Comparison">
+<meta name="twitter:description" content="Compare how Linear, Stokes 2nd-order, and cnoidal wave theory shape an ocean wave at the same height, period, and depth, alongside a live dispersion/superposition demo.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Ocean Waves",
+  "url": "https://mohibb.com/waves/",
+  "description": "Compare how Linear (Airy), Stokes 2nd-order, and cnoidal wave theory each shape an ocean wave at the same height, period, and depth, alongside a live dispersion and superposition demo of a wave group's crests racing through its envelope — with a built-in primer on the physics.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <button class="learn-cta" id="learnBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="learnPanel" title="Open the physics primer">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>
+      Learn the physics<span class="arr" aria-hidden="true">&rarr;</span>
+    </button>
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<main class="wrap">
+
+  <section class="intro">
+    <p class="eyebrow">three theories, one ocean</p>
+    <h1>Ocean Waves</h1>
+    <p class="lede">A wave group's crests racing through its own envelope —
+      the dispersion relation and the gap between phase and group speed,
+      made visible. Below it, the same wave's height, period, and depth fed
+      into three different theories at once: Linear (Airy), Stokes
+      2nd-order, and cnoidal — watch the crest sharpen and the trough flatten
+      as the theories diverge. Tune the wave and the depth below.</p>
+  </section>
+
+  <!-- ---------- the render stage ---------- -->
+  <section class="stage stage-waves" aria-label="Wave group and wave-theory comparison render">
+    <div class="substage substage-surface">
+      <canvas id="surface" role="img" aria-label="A live cross-section of the ocean surface showing a wave group's envelope, with individual crests born at the trailing edge, racing through, and dying at the leading edge."></canvas>
+    </div>
+    <div class="substage substage-compare">
+      <canvas id="compare" role="img" aria-label="One wavelength of a single wave, drawn three times under Linear, Stokes second-order, and cnoidal wave theory, showing how the predicted crest and trough shape diverges between theories."></canvas>
+    </div>
+    <div class="stage-hint" id="stageHint" aria-hidden="true">runs on its own &middot; tune the wave below</div>
+    <div class="stage-readout" id="fpsReadout" aria-hidden="true">&ndash; fps</div>
+  </section>
+
+  <!-- ---------- controls ---------- -->
+  <section class="controls" aria-label="Controls">
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">01</span> Wave group</h2>
+      <div class="field">
+        <label for="numComponents">Components in the group</label>
+        <div class="field-row">
+          <input type="range" id="numComponents" min="3" max="9" step="2" value="5">
+          <output for="numComponents" id="numComponentsOut">5</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="period0">Wave period <span class="unit">(s)</span></label>
+        <div class="field-row">
+          <input type="range" id="period0" min="2" max="14" step="0.5" value="8">
+          <output for="period0" id="period0Out">8.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="spreadFrac">Frequency spread <span class="unit">(&Delta;&omega;/&omega;&#8320;)</span></label>
+        <div class="field-row">
+          <input type="range" id="spreadFrac" min="0.05" max="0.6" step="0.01" value="0.18">
+          <output for="spreadFrac" id="spreadFracOut">0.18</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="waveHeight">Wave height <span class="unit">(m)</span></label>
+        <div class="field-row">
+          <input type="range" id="waveHeight" min="0.2" max="3" step="0.1" value="1">
+          <output for="waveHeight" id="waveHeightOut">1.0</output>
+        </div>
+      </div>
+      <p class="panel-note">Components spread around the carrier period,
+        amplitude-tapered into one wave group. Height and period also drive
+        the single-wave comparison below.</p>
+    </div>
+
+    <div class="panel panel-depth">
+      <h2 class="panel-head"><span class="idx">02</span> Water depth</h2>
+      <div class="field">
+        <label for="depth">Depth <span class="unit">(m)</span></label>
+        <div class="field-row">
+          <input type="range" id="depth" min="1" max="250" step="1" value="40">
+          <output for="depth" id="depthOut">40</output>
+        </div>
+      </div>
+      <div class="readout-grid">
+        <div class="readout-item">
+          <span class="readout-label">Regime</span>
+          <span class="readout-value" id="regimeOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Phase speed c</span>
+          <span class="readout-value" id="cOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Group speed c<sub>g</sub></span>
+          <span class="readout-value" id="cgOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Wavelength &lambda;</span>
+          <span class="readout-value" id="lambdaOut">&ndash;</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">03</span> Theory comparison</h2>
+      <div class="legend">
+        <div class="legend-item">
+          <input type="checkbox" id="showLinear" checked>
+          <span class="legend-swatch legend-linear" aria-hidden="true"></span>
+          <label for="showLinear">Linear (Airy)</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="showStokes" checked>
+          <span class="legend-swatch legend-stokes" aria-hidden="true"></span>
+          <label for="showStokes">Stokes 2nd-order</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="showCnoidal" checked>
+          <span class="legend-swatch legend-cnoidal" aria-hidden="true"></span>
+          <label for="showCnoidal">Cnoidal (shallow water)</label>
+        </div>
+      </div>
+      <p class="panel-note">All three theories use the same height, period,
+        and depth from the panels above — only the shape they predict
+        differs.</p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">04</span> Playback &amp; view</h2>
+      <div class="field">
+        <label for="speed">Simulation speed <span class="unit">(&times;)</span></label>
+        <div class="field-row">
+          <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
+          <output for="speed" id="speedOut">1.0</output>
+        </div>
+      </div>
+      <div class="field-row btn-row btn-row-tight">
+        <button type="button" class="btn" id="pauseBtn">Pause</button>
+      </div>
+      <div class="field check check-spaced">
+        <input type="checkbox" id="showEnvelope" checked>
+        <label for="showEnvelope">Show envelope</label>
+      </div>
+      <div class="field check check-spaced">
+        <input type="checkbox" id="showTracers" checked>
+        <label for="showTracers">Show crest tracers</label>
+      </div>
+    </div>
+
+  </section>
+
+  <p class="footnote">A linear wave group (superposition of sinusoids,
+    integrated from the dispersion relation) above; the same wave's height,
+    period and depth re-evaluated under three different theories below. For
+    the equations behind every term, open
+    <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
+
+</main>
+
+<!-- ---------- Learn / physics primer overlay ---------- -->
+<div class="learn-overlay" id="learnOverlay" hidden>
+  <div class="learn-panel" id="learnPanel" role="dialog" aria-modal="true" aria-labelledby="learnTitle" tabindex="-1">
+    <header class="learn-top">
+      <h2 id="learnTitle">The physics, end to end</h2>
+      <button type="button" class="learn-close" id="learnClose" aria-label="Close the primer">&times;</button>
+    </header>
+    <div class="learn-body" id="learnBody">
+
+      <p class="learn-lede">Everything this page computes, term by term —
+        with the equation behind each and where it shows up on screen.
+        Surface elevation is \(\eta\), wavenumber \(k\), angular frequency
+        \(\omega\), water depth \(h\), gravity \(g\), wave height \(H\),
+        phase speed \(c\), group speed \(c_g\).</p>
+
+      <article>
+        <h3>Linear (Airy) wave theory</h3>
+        <p>Linear theory assumes the wave height is small compared to both
+          the wavelength and the depth, which lets the free-surface boundary
+          conditions be linearized. The payoff is that any sum of sinusoidal
+          solutions is itself a solution &mdash; <em>superposition</em>
+          holds. A single linear wave is simply:</p>
+        <p>$$\eta(x,t) = A\cos(kx - \omega t)$$</p>
+        <p>The wave group in the top panel is built from several of these,
+          each with a slightly different \(\omega_i\) (and matching
+          \(k_i\)), summed together.</p>
+      </article>
+
+      <article>
+        <h3>The dispersion relation</h3>
+        <p>Linear theory's boundary-value problem reduces to one equation
+          linking frequency, wavenumber, and depth &mdash; the dispersion
+          relation:</p>
+        <p>$$\omega^2 = gk\tanh(kh)$$</p>
+        <p>In deep water (\(kh\gg1\), \(\tanh\to1\)) this simplifies to
+          \(\omega^2\approx gk\); in shallow water (\(kh\ll1\),
+          \(\tanh(kh)\approx kh\)) it becomes \(\omega^2\approx ghk^2\),
+          i.e. waves of every frequency travel at the same speed
+          \(\sqrt{gh}\). In between there's no closed form for \(k(\omega)\)
+          &mdash; this page solves it numerically with Newton&ndash;Raphson,
+          every time the period or depth slider moves.</p>
+      </article>
+
+      <article>
+        <h3>Phase speed vs. group speed</h3>
+        <p>A single crest travels at the <em>phase speed</em>
+          \(c=\omega/k\). A wave <em>group</em>'s envelope travels at the
+          <em>group speed</em>, the derivative of the dispersion relation:</p>
+        <p>$$c_g=\frac{d\omega}{dk}=\frac{c}{2}\left(1+\frac{2kh}{\sinh(2kh)}\right)$$</p>
+        <p>In deep water this gives the famous \(c_g=c/2\): individual
+          crests are born at the back of the group, race forward through it,
+          and vanish at the front &mdash; exactly what the tracers in the top
+          panel do. In shallow water \(c_g\to c\): every crest and the
+          envelope move together, non-dispersively.</p>
+      </article>
+
+      <article>
+        <h3>Beyond linear: Stokes second-order</h3>
+        <p>Real waves aren't perfectly sinusoidal: crests are sharper and
+          troughs are flatter than \(\cos\) allows. Stokes expansion adds a
+          second-order correction at twice the wavenumber and frequency:</p>
+        <p>$$\eta_{\text{Stokes}}=\frac{H}{2}\cos\theta+\frac{\pi H}{8}\cdot\frac{H}{\lambda}\coth(kh)\left[3\coth^2(kh)-1\right]\cos(2\theta)$$</p>
+        <p>with \(\theta=kx-\omega t\). The correction term scales with
+          steepness \(H/\lambda\) &mdash; turn up the wave height in the
+          panels above and watch the Stokes curve in the comparison plot
+          peel away from the Linear curve.</p>
+      </article>
+
+      <article>
+        <h3>Shallow water: cnoidal waves</h3>
+        <p>In shallow water, nonlinearity reshapes a wave into tall, narrow
+          crests separated by long, flat troughs &mdash; the cnoidal wave,
+          built from the Jacobi elliptic function \(\mathrm{cn}\):</p>
+        <p>$$\eta(x,t)=\eta_{\text{trough}}+H\,\mathrm{cn}^2\!\left(\frac{2K(m)}{\lambda}(x-ct),\,m\right)$$</p>
+        <p>where \(K(m)\) is the complete elliptic integral of the first
+          kind and \(m\) (computed here from the wave's Ursell number, a
+          steepness-over-depth measure) controls the shape: \(m\to0\)
+          recovers a plain sinusoid, \(m\to1\) approaches an isolated
+          solitary wave. <em>This page maps Ursell number to \(m\) with a
+          simple monotonic approximation tuned for the right qualitative
+          shape, not the full cnoidal/KdV dispersion closure</em> &mdash;
+          see the caveats below.</p>
+      </article>
+
+      <article class="learn-caveat">
+        <h3>What's simplified</h3>
+        <p>The dispersion solver, Stokes correction, and group-velocity
+          formula are exact linear-theory results. The cnoidal curve's
+          elliptic parameter \(m\) is fit with an approximate Ursell-number
+          mapping rather than solved from the full KdV dispersion relation
+          &mdash; good for showing the right trend (sinusoid &rarr; peaked
+          crest &rarr; solitary wave as steepness/shallowness increases),
+          not for engineering-grade prediction.</p>
+        <p>Stokes and cnoidal theory each describe a single monochromatic
+          wave train; neither one is valid to simply add together the way
+          linear waves are, which is why the wave-group/superposition demo
+          above stays strictly linear, while the comparison plot below shows
+          all three theories as single waves rather than groups.</p>
+        <p>The seabed is assumed flat and uniform, the sea is unidirectional
+          (no directional spreading), and there's no wave breaking, wind
+          input, or dissipation modeled anywhere on this page.</p>
+      </article>
+
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./script.js"></script>
+</body>
+</html>
