@@ -11,6 +11,7 @@
   /* one accent color per wave theory, readable against --deep */
   --linear:#5EC8E0; --stokes:#E0A23D; --stokes5:#E0653D;
   --cnoidal:#E0708A; --solitary:#4FB286; --trochoidal:#9B7EE0;
+  --irregular:#7FD9C4;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
@@ -46,11 +47,12 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 
 /* ---------- the render stage ---------- */
 .stage{position:relative;margin:34px 0 30px;border:1.5px solid var(--line);border-radius:6px;overflow:hidden;background:var(--deep);box-shadow:0 20px 50px -28px rgba(33,29,23,0.6);}
-.stage.stage-waves{display:flex;flex-direction:column;aspect-ratio:16/13;}
-@media(max-width:640px){.stage.stage-waves{aspect-ratio:4/6.4;}}
+.stage.stage-waves{display:flex;flex-direction:column;aspect-ratio:16/18;}
+@media(max-width:640px){.stage.stage-waves{aspect-ratio:4/8.6;}}
 .substage{position:relative;flex:1 1 0;min-height:0;}
-.substage-wave{flex-grow:1.1;border-bottom:1.5px solid var(--line);}
-.substage-compare{flex-grow:0.9;}
+.substage-wave{flex-grow:1.15;border-bottom:1.5px solid var(--line);}
+.substage-compare{flex-grow:0.85;border-bottom:1.5px solid var(--line);}
+.substage-irregular{flex-grow:1;}
 .substage canvas{position:absolute;inset:0;display:block;width:100%;height:100%;}
 #rig{color:var(--ink-4);font-size:13px;}
 .stage-hint{position:absolute;left:14px;bottom:12px;font-family:var(--mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:rgba(237,232,221,0.62);background:rgba(4,20,28,0.5);backdrop-filter:blur(4px);padding:5px 10px;border-radius:999px;pointer-events:none;transition:opacity .5s;z-index:2;}

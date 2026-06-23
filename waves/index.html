@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Mohibb Malik">
-<meta name="description" content="A single propagating ocean wave with particle-velocity arrows at depth, showing orbital motion fade out toward the seabed — plus a six-theory comparison: Linear (Airy), Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) waves, with a built-in primer on the physics.">
+<meta name="description" content="A single propagating ocean wave with particle-velocity arrows at depth, a six-theory comparison (Linear, Stokes 2nd/5th-order, cnoidal, solitary, trochoidal), and an irregular sea built live from a JONSWAP spectrum — with a built-in primer on the physics.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://mohibb.com/waves/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -13,13 +13,13 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Mohibb Malik">
 <meta property="og:title" content="Ocean Waves — Particle Velocities &amp; Theory Comparison">
-<meta property="og:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, then compare Linear, Stokes, cnoidal, solitary, and trochoidal wave theory side by side.">
+<meta property="og:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, compare six wave theories side by side, and build a real irregular sea from a JONSWAP spectrum.">
 <meta property="og:url" content="https://mohibb.com/waves/">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Ocean Waves — Particle Velocities &amp; Theory Comparison">
-<meta name="twitter:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, then compare Linear, Stokes, cnoidal, solitary, and trochoidal wave theory side by side.">
+<meta name="twitter:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, compare six wave theories side by side, and build a real irregular sea from a JONSWAP spectrum.">
 
 <script type="application/ld+json">
 {
@@ -27,7 +27,7 @@
   "@type": "WebApplication",
   "name": "Ocean Waves",
   "url": "https://mohibb.com/waves/",
-  "description": "A single propagating ocean wave with particle-velocity arrows at depth, showing orbital motion fade out toward the seabed — plus a six-theory comparison: Linear (Airy), Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) waves, with a built-in primer on the physics.",
+  "description": "A single propagating ocean wave with particle-velocity arrows at depth, a six-theory comparison (Linear, Stokes 2nd/5th-order, cnoidal, solitary, trochoidal), and an irregular sea built live from a JONSWAP spectrum, with a built-in primer on the physics.",
   "applicationCategory": "EducationalApplication",
   "operatingSystem": "Any",
   "offers": {
@@ -74,18 +74,24 @@
       arrows showing each water particle's instantaneous velocity at several
       depths &mdash; watch the orbital motion fade out toward the seabed.
       Pick a theory to drive that wave: Linear (Airy), Stokes 2nd- or
-      5th-order, cnoidal, solitary, or trochoidal (Gerstner). Below, the same
-      height/period/depth re-evaluated under all six at once, overlaid.</p>
+      5th-order, cnoidal, solitary, or trochoidal (Gerstner). Below that, the
+      same height/period/depth re-evaluated under all six at once, overlaid
+      &mdash; and below that, a real irregular sea built from a JONSWAP
+      spectrum of randomly-phased components.</p>
   </section>
 
   <!-- ---------- the render stage ---------- -->
-  <section class="stage stage-waves" aria-label="Single wave with particle-velocity arrows, and a six-theory comparison render">
+  <section class="stage stage-waves" aria-label="Single wave with particle-velocity arrows, a six-theory comparison render, and an irregular sea built from a wave spectrum">
     <div class="substage substage-wave">
       <canvas id="wave" role="img" aria-label="A single propagating ocean wave above a still-water reference line, with arrows showing particle velocity at several depths down to the seabed, shrinking with depth."></canvas>
       <div class="stage-hint" id="exaggerationHint" aria-hidden="true"></div>
     </div>
     <div class="substage substage-compare">
       <canvas id="compare" role="img" aria-label="One wavelength of a single wave, drawn under up to six wave theories at once, showing how the predicted crest and trough shape diverges between theories."></canvas>
+    </div>
+    <div class="substage substage-irregular">
+      <canvas id="irregular" role="img" aria-label="An irregular sea surface built from many randomly-phased wave components drawn from a JONSWAP spectrum, animated over time."></canvas>
+      <div class="stage-hint" id="irregularHint" aria-hidden="true"></div>
     </div>
     <div class="stage-readout" id="fpsReadout" aria-hidden="true">&ndash; fps</div>
   </section>
@@ -225,13 +231,46 @@
       </div>
     </div>
 
+    <div class="panel panel-depth">
+      <h2 class="panel-head"><span class="idx">06</span> Irregular sea</h2>
+      <div class="field">
+        <label for="sigHeight">Significant height H<sub>s</sub> <span class="unit">(m)</span></label>
+        <div class="field-row">
+          <input type="range" id="sigHeight" min="0.5" max="6" step="0.1" value="1.5">
+          <output for="sigHeight" id="sigHeightOut">1.5</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="peakPeriod">Peak period T<sub>p</sub> <span class="unit">(s)</span></label>
+        <div class="field-row">
+          <input type="range" id="peakPeriod" min="4" max="16" step="0.5" value="8">
+          <output for="peakPeriod" id="peakPeriodOut">8.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="peakedness">Peakedness &gamma;</label>
+        <div class="field-row">
+          <input type="range" id="peakedness" min="1" max="7" step="0.1" value="3.3">
+          <output for="peakedness" id="peakednessOut">3.3</output>
+        </div>
+      </div>
+      <div class="field-row btn-row btn-row-tight">
+        <button type="button" class="btn" id="randomizeSeaBtn">Randomize sea</button>
+      </div>
+      <p class="panel-note">&gamma;=1 is the Pierson-Moskowitz spectrum (a
+        fully developed sea); &gamma;&approx;3.3 is the more peaked JONSWAP
+        default for a developing sea. Uses its own depth from panel 02.</p>
+    </div>
+
   </section>
 
   <p class="footnote">A single wave above a still-water line, with arrows
     showing how far each theory thinks particle motion reaches below the
     surface; the same wave's height, period, and depth re-evaluated under
-    all six theories at once below. For the equations behind every term,
-    open <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
+    all six theories at once below that; and below that, an irregular sea
+    built from many randomly-phased components drawn from a JONSWAP
+    spectrum. For the equations behind every term, open
+    <button type="button" class="inline-link" id="learnBtn2">the primer</button>.</p>
 
 </main>
 
@@ -351,6 +390,37 @@
           whatever depth is set on the slider, even though the solution is
           strictly valid only for deep water; accuracy degrades as \(kh\)
           drops into the shallow/intermediate regime.</p>
+      </article>
+
+      <article>
+        <h3>Irregular seas and the JONSWAP spectrum</h3>
+        <p>Every theory above is a <em>regular</em> sea: one wave height and
+          period. Real seas are <em>irregular</em> &mdash; many frequencies
+          superposed with random phases. The JONSWAP spectrum describes how
+          much energy sits at each frequency \(f\), peaking at \(f_p=1/T_p\):</p>
+        <p>$$S_0(f)=\frac{\alpha g^2}{(2\pi)^4f^5}\exp\!\left[-1.25\left(\frac{f_p}{f}\right)^4\right]\gamma^{\,r(f)},\qquad
+          r(f)=\exp\!\left[-\frac{(f-f_p)^2}{2\sigma^2f_p^2}\right]</p>
+        <p>with \(\sigma=0.07\) below \(f_p\) and \(0.09\) above it. The
+          peakedness \(\gamma\) sharpens the spectrum around \(f_p\) for a
+          developing sea; \(\gamma=1\) flattens it back into the
+          Pierson-Moskowitz spectrum for a fully developed sea. Rather than
+          transcribe the usual approximate formula relating \(\alpha\) to
+          \(H_s\) and \(T_p\), this page numerically integrates \(S_0(f)\)
+          and rescales it so the resulting significant height comes out
+          exactly \(H_s\) by construction &mdash; shown live in the corner of
+          the panel as a cross-check.</p>
+        <p>The sea below is built from \(N\!\approx\!56\) frequency bins,
+          each a tiny linear wave with amplitude
+          \(a_i=\sqrt{2S(f_i)\Delta f}\), wavenumber \(k_i\) solved from
+          \(\omega_i\) by the same dispersion solver used everywhere else on
+          this page, and a fixed random phase \(\varphi_i\):</p>
+        <p>$$\eta(x,t)=\sum_i a_i\cos(k_ix-\omega_it+\varphi_i)$$</p>
+        <p>"Randomize sea" redraws a fresh set of phases; moving the
+          \(H_s\)/\(T_p\)/\(\gamma\) sliders reuses the same phases so the
+          sea reshapes smoothly instead of jumping. This is a single,
+          one-directional snapshot &mdash; no directional spreading, a finite
+          (not continuous) set of components, and phases that are
+          pseudo-random rather than statistically faithful over long runs.</p>
       </article>
 
       <article class="learn-caveat">

@@ -108,6 +108,7 @@ function updateCarrier() {
   cnoidalState.Km = ellipticK(cnoidalState.m);
   cnoidalState.mean = meanCn2(cnoidalState.m, cnoidalState.Km);
 
+  updateIrregular();
   updateReadouts();
 }
 
@@ -257,18 +258,85 @@ function velocityField(theory, x, z, t) {
 }
 
 /* ============================================================
+   Irregular sea — JONSWAP spectrum, random-phase superposition.
+   ============================================================ */
+const irregular = { Hs: 1.5, Tp: 8, gamma: 3.3 };
+let irregularComponents = []; // [{ omega, k, amp }], rebuilt on Hs/Tp/gamma/depth change
+let irregularPhases = [];     // fixed per component, only reseeded on demand
+const IRREGULAR_N = 56;
+
+// Raw (unnormalized) JONSWAP spectral density at frequency f (Hz).
+function jonswapSpectrum(f, fp, gamma) {
+  if (f <= 0) return 0;
+  const sigma = f <= fp ? 0.07 : 0.09;
+  const r = Math.exp(-((f - fp) * (f - fp)) / (2 * sigma * sigma * fp * fp));
+  const peak = Math.exp(-1.25 * Math.pow(fp / f, 4));
+  return ((G * G) / (Math.pow(2 * Math.PI, 4) * Math.pow(f, 5))) * peak * Math.pow(gamma, r);
+}
+
+// Builds N frequency-bin components spanning the energetic part of the
+// spectrum, then rescales every bin so the resulting significant height
+// (4*sqrt(m0)) equals Hs exactly — sidesteps transcribing the usual
+// approximate alpha(Hs,Tp) closed form (see the primer).
+function buildIrregularComponents(Hs, Tp, gamma, depth) {
+  const fp = 1 / Tp;
+  const fMin = 0.4 * fp, fMax = 3 * fp;
+  const df = (fMax - fMin) / IRREGULAR_N;
+  const raw = [];
+  let m0raw = 0;
+  for (let i = 0; i < IRREGULAR_N; i++) {
+    const f = fMin + (i + 0.5) * df;
+    const S0 = jonswapSpectrum(f, fp, gamma);
+    raw.push({ f, S0 });
+    m0raw += S0 * df;
+  }
+  const targetM0 = (Hs / 4) * (Hs / 4);
+  const scale = m0raw > 0 ? targetM0 / m0raw : 0;
+  const next = [];
+  for (const { f, S0 } of raw) {
+    const S = S0 * scale;
+    const omega = 2 * Math.PI * f;
+    const k = solveK(omega, depth);
+    const amp = Math.sqrt(2 * S * df);
+    next.push({ omega, k, amp });
+  }
+  return next;
+}
+
+function randomizeIrregularPhases() {
+  irregularPhases = irregularComponents.map(() => Math.random() * 2 * Math.PI);
+}
+
+function updateIrregular() {
+  irregularComponents = buildIrregularComponents(irregular.Hs, irregular.Tp, irregular.gamma, params.depth);
+  if (irregularPhases.length !== irregularComponents.length) randomizeIrregularPhases();
+}
+
+function evalIrregular(x, t) {
+  let eta = 0;
+  for (let i = 0; i < irregularComponents.length; i++) {
+    const { omega, k, amp } = irregularComponents[i];
+    eta += amp * Math.cos(k * x - omega * t + irregularPhases[i]);
+  }
+  return eta;
+}
+
+/* ============================================================
    Canvas setup
    ============================================================ */
 const waveCv = document.getElementById('wave');
 const compareCv = document.getElementById('compare');
+const irregularCv = document.getElementById('irregular');
 const waveSub = document.querySelector('.substage-wave');
 const compareSub = document.querySelector('.substage-compare');
+const irregularSub = document.querySelector('.substage-irregular');
 const waveCtx = waveCv.getContext('2d');
 const compareCtx = compareCv.getContext('2d');
+const irregularCtx = irregularCv.getContext('2d');
 const DEEP = '#04141C';
 
 let dpr = 1;
-let waveW = 1, waveH = 1, compareW = 1, compareH = 1;
+let waveW = 1, waveH = 1, compareW = 1, compareH = 1, irregularW = 1, irregularH = 1;
 
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -276,6 +344,8 @@ function resize() {
   waveH = waveSub.clientHeight || 1;
   compareW = compareSub.clientWidth || 1;
   compareH = compareSub.clientHeight || 1;
+  irregularW = irregularSub.clientWidth || 1;
+  irregularH = irregularSub.clientHeight || 1;
 
   waveCv.width = Math.round(waveW * dpr);
   waveCv.height = Math.round(waveH * dpr);
@@ -284,11 +354,16 @@ function resize() {
   compareCv.width = Math.round(compareW * dpr);
   compareCv.height = Math.round(compareH * dpr);
   compareCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  irregularCv.width = Math.round(irregularW * dpr);
+  irregularCv.height = Math.round(irregularH * dpr);
+  irregularCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener('resize', resize);
 if (window.ResizeObserver) {
   new ResizeObserver(resize).observe(waveSub);
   new ResizeObserver(resize).observe(compareSub);
+  new ResizeObserver(resize).observe(irregularSub);
 }
 
 /* ============================================================
@@ -305,6 +380,7 @@ let compareLinear = true, compareStokes2 = true, compareStokes5 = false;
 let compareCnoidal = true, compareSolitary = false, compareTrochoidal = false;
 const fpsEl = document.getElementById('fpsReadout');
 const exaggerationHintEl = document.getElementById('exaggerationHint');
+const irregularHintEl = document.getElementById('irregularHint');
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -324,6 +400,7 @@ function frame(now) {
 
   drawWave(simTime);
   drawCompare(simTime);
+  drawIrregular(simTime);
 
   fpsAcc += dt; fpsFrames++;
   if (fpsAcc >= 0.5 && fpsEl) { fpsEl.textContent = Math.round(fpsFrames / fpsAcc) + ' fps'; fpsAcc = 0; fpsFrames = 0; }
@@ -505,6 +582,63 @@ function drawCompare(t) {
   }
 }
 
+function drawIrregular(t) {
+  irregularCtx.fillStyle = DEEP;
+  irregularCtx.fillRect(0, 0, irregularW, irregularH);
+
+  const fp = 1 / irregular.Tp;
+  const kp = solveK(2 * Math.PI * fp, params.depth);
+  const lambdaP = kp > 0 ? (2 * Math.PI) / kp : irregular.Tp * irregular.Tp; // fallback if kp ~ 0
+  const width = Math.max(lambdaP * 4, 1e-3); // a few peak wavelengths visible at once
+
+  const midY = irregularH * 0.5;
+  const ampScale = (irregularH * 0.3) / Math.max(irregular.Hs, 0.1);
+  const cols = Math.max(2, Math.min(irregularW, 420));
+
+  // still-water line
+  irregularCtx.setLineDash([5, 5]);
+  irregularCtx.strokeStyle = 'rgba(237,232,221,0.55)';
+  irregularCtx.lineWidth = 1.4;
+  irregularCtx.beginPath();
+  irregularCtx.moveTo(0, midY);
+  irregularCtx.lineTo(irregularW, midY);
+  irregularCtx.stroke();
+  irregularCtx.setLineDash([]);
+
+  // irregular surface, filled below the curve for a "water" look
+  const pts = [];
+  let sumSq = 0;
+  for (let i = 0; i <= cols; i++) {
+    const x = (i / cols) * width;
+    const eta = evalIrregular(x, t);
+    sumSq += eta * eta;
+    const px = (i / cols) * irregularW;
+    const py = midY - eta * ampScale;
+    pts.push({ px, py });
+  }
+
+  irregularCtx.beginPath();
+  irregularCtx.moveTo(pts[0].px, pts[0].py);
+  for (let i = 1; i < pts.length; i++) irregularCtx.lineTo(pts[i].px, pts[i].py);
+  irregularCtx.lineTo(irregularW, irregularH);
+  irregularCtx.lineTo(0, irregularH);
+  irregularCtx.closePath();
+  irregularCtx.fillStyle = 'rgba(127,217,196,0.16)';
+  irregularCtx.fill();
+
+  irregularCtx.strokeStyle = 'rgba(127,217,196,0.9)';
+  irregularCtx.lineWidth = 2.2;
+  irregularCtx.beginPath();
+  irregularCtx.moveTo(pts[0].px, pts[0].py);
+  for (let i = 1; i < pts.length; i++) irregularCtx.lineTo(pts[i].px, pts[i].py);
+  irregularCtx.stroke();
+
+  if (irregularHintEl) {
+    const computedHs = 4 * Math.sqrt(sumSq / (cols + 1));
+    irregularHintEl.textContent = 'Hs ≈ ' + computedHs.toFixed(2) + ' m (target ' + irregular.Hs.toFixed(2) + ' m)';
+  }
+}
+
 /* ============================================================
    Control wiring
    ============================================================ */
@@ -565,6 +699,13 @@ pauseBtn.addEventListener('click', () => {
   pauseBtn.textContent = paused ? 'Resume' : 'Pause';
   pauseBtn.setAttribute('aria-pressed', String(paused));
 });
+
+bindRange('sigHeight', one, (v) => { irregular.Hs = v; updateIrregular(); });
+bindRange('peakPeriod', one, (v) => { irregular.Tp = v; updateIrregular(); });
+bindRange('peakedness', one, (v) => { irregular.gamma = v; updateIrregular(); });
+
+const randomizeSeaBtn = $('randomizeSeaBtn');
+if (randomizeSeaBtn) randomizeSeaBtn.addEventListener('click', () => { randomizeIrregularPhases(); });
 
 /* ============================================================
    Learn / physics primer overlay (identical pattern to /blackhole/,
