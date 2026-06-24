@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Mohibb Malik">
-<meta name="description" content="A single propagating ocean wave with particle-velocity arrows at depth, a six-theory comparison (Linear, Stokes 2nd/5th-order, cnoidal, solitary, trochoidal), and an irregular sea built live from a JONSWAP spectrum — with a built-in primer on the physics.">
+<meta name="description" content="A single propagating ocean wave with particle-velocity arrows at depth, a six-theory comparison (Linear, Stokes 2nd/5th-order, cnoidal, solitary, trochoidal), an irregular sea built live from a JONSWAP spectrum, and Morison/MacCamy-Fuchs wave-force calculations on a monopile — with a built-in primer on the physics.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://mohibb.com/waves/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -13,13 +13,13 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Mohibb Malik">
 <meta property="og:title" content="Ocean Waves — Particle Velocities &amp; Theory Comparison">
-<meta property="og:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, compare six wave theories side by side, and build a real irregular sea from a JONSWAP spectrum.">
+<meta property="og:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, compare six wave theories side by side, build a real irregular sea from a JONSWAP spectrum, and calculate Morison/MacCamy-Fuchs wave forces on a monopile.">
 <meta property="og:url" content="https://mohibb.com/waves/">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Ocean Waves — Particle Velocities &amp; Theory Comparison">
-<meta name="twitter:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, compare six wave theories side by side, and build a real irregular sea from a JONSWAP spectrum.">
+<meta name="twitter:description" content="Watch particle-velocity arrows fade out with depth under a propagating wave, compare six wave theories side by side, build a real irregular sea from a JONSWAP spectrum, and calculate Morison/MacCamy-Fuchs wave forces on a monopile.">
 
 <script type="application/ld+json">
 {
@@ -27,7 +27,7 @@
   "@type": "WebApplication",
   "name": "Ocean Waves",
   "url": "https://mohibb.com/waves/",
-  "description": "A single propagating ocean wave with particle-velocity arrows at depth, a six-theory comparison (Linear, Stokes 2nd/5th-order, cnoidal, solitary, trochoidal), and an irregular sea built live from a JONSWAP spectrum, with a built-in primer on the physics.",
+  "description": "A single propagating ocean wave with particle-velocity arrows at depth, a six-theory comparison (Linear, Stokes 2nd/5th-order, cnoidal, solitary, trochoidal), an irregular sea built live from a JONSWAP spectrum, and Morison/MacCamy-Fuchs wave-force calculations on a monopile, with a built-in primer on the physics.",
   "applicationCategory": "EducationalApplication",
   "operatingSystem": "Any",
   "offers": {
@@ -94,6 +94,17 @@
       <div class="stage-hint" id="irregularHint" aria-hidden="true"></div>
     </div>
     <div class="stage-readout" id="fpsReadout" aria-hidden="true">&ndash; fps</div>
+  </section>
+
+  <!-- ---------- monopile wave-force stage ---------- -->
+  <section class="stage stage-pile" aria-label="Monopile cross-section showing wave-force loading, and a base-shear/overturning-moment time history">
+    <div class="substage substage-pile-section">
+      <canvas id="pile" role="img" aria-label="A vertical pile cross-section from the seabed to the instantaneous water surface, with arrows showing the local Morison wave force at each depth."></canvas>
+      <div class="stage-hint" id="pileHint" aria-hidden="true"></div>
+    </div>
+    <div class="substage substage-force">
+      <canvas id="forceChart" role="img" aria-label="A line chart of total base shear and overturning moment on the pile over one wave period, comparing Morison's equation with and without the MacCamy-Fuchs diffraction correction."></canvas>
+    </div>
   </section>
 
   <!-- ---------- controls ---------- -->
@@ -270,6 +281,122 @@
         default for a developing sea. Uses its own depth from panel 02.</p>
     </div>
 
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">07</span> Pile</h2>
+      <div class="field">
+        <label for="pileDiameter">Diameter <span class="unit">(m)</span></label>
+        <div class="field-row">
+          <input type="range" id="pileDiameter" min="3" max="12" step="0.1" value="6">
+          <output for="pileDiameter" id="pileDiameterOut">6.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pileCd">Drag coefficient C<sub>d</sub></label>
+        <div class="field-row">
+          <input type="range" id="pileCd" min="0.4" max="1.3" step="0.05" value="1.0">
+          <output for="pileCd" id="pileCdOut">1.00</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pileCm">Inertia coefficient C<sub>m</sub></label>
+        <div class="field-row">
+          <input type="range" id="pileCm" min="1.0" max="2.2" step="0.05" value="2.0">
+          <output for="pileCm" id="pileCmOut">2.00</output>
+        </div>
+      </div>
+      <p class="panel-note">Illustrative defaults (C<sub>m</sub>=2.0 is the
+        potential-flow / long-wave value) &mdash; not a substitute for a
+        project-specific DNV-RP-C205 lookup.</p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">08</span> Force options</h2>
+      <div class="radio-group">
+        <div class="radio-item">
+          <input type="radio" name="forceTheory" id="forceTheoryLinear" value="linear" checked>
+          <label for="forceTheoryLinear">Linear (Airy)</label>
+        </div>
+        <div class="radio-item">
+          <input type="radio" name="forceTheory" id="forceTheoryStokes2" value="stokes2">
+          <label for="forceTheoryStokes2">Stokes 2nd-order</label>
+        </div>
+      </div>
+      <div class="field check check-spaced">
+        <input type="checkbox" id="wheelerOn" checked>
+        <label for="wheelerOn">Wheeler stretching</label>
+      </div>
+      <div class="legend legend-spaced">
+        <div class="legend-item">
+          <input type="checkbox" id="showMorison" checked>
+          <span class="legend-swatch legend-morison" aria-hidden="true"></span>
+          <label for="showMorison">Morison only</label>
+        </div>
+        <div class="legend-item">
+          <input type="checkbox" id="showMF" checked>
+          <span class="legend-swatch legend-mf" aria-hidden="true"></span>
+          <label for="showMF">Morison + MacCamy-Fuchs</label>
+        </div>
+      </div>
+      <p class="panel-note">The force calculator only offers Linear and
+        Stokes 2nd-order &mdash; the harmonic-decomposed theories the
+        acceleration/diffraction math below is built on.</p>
+    </div>
+
+    <div class="panel panel-depth">
+      <h2 class="panel-head"><span class="idx">09</span> Regime &amp; peaks</h2>
+      <div class="readout-grid">
+        <div class="readout-item" id="kcItem">
+          <span class="readout-label">KC number</span>
+          <span class="readout-value" id="kcOut">&ndash;</span>
+        </div>
+        <div class="readout-item" id="dlItem">
+          <span class="readout-label">D / &lambda;</span>
+          <span class="readout-value" id="dlOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Peak shear F</span>
+          <span class="readout-value" id="peakFOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Peak moment M</span>
+          <span class="readout-value" id="peakMOut">&ndash;</span>
+        </div>
+      </div>
+      <p class="panel-note">D/&lambda;&nbsp;&ge;&nbsp;0.2 is the DNV-RP-C205
+        rule-of-thumb threshold above which diffraction (MacCamy-Fuchs)
+        meaningfully corrects plain Morison &mdash; shown in amber below.
+        Peaks are over one wave period, including MacCamy-Fuchs if its
+        checkbox above is on.</p>
+    </div>
+
+    <div class="panel panel-depth">
+      <h2 class="panel-head"><span class="idx">10</span> Irregular-sea loads</h2>
+      <div class="readout-grid">
+        <div class="readout-item">
+          <span class="readout-label">RMS base shear</span>
+          <span class="readout-value" id="rmsFOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">RMS moment</span>
+          <span class="readout-value" id="rmsMOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Observed max shear</span>
+          <span class="readout-value" id="maxFOut">&ndash;</span>
+        </div>
+        <div class="readout-item">
+          <span class="readout-label">Observed max moment</span>
+          <span class="readout-value" id="maxMOut">&ndash;</span>
+        </div>
+      </div>
+      <p class="panel-note">Morison forces from the JONSWAP sea above (panel
+        06), using this pile's diameter/C<sub>d</sub>/C<sub>m</sub>. RMS and
+        max are sampled over a multi-period window each time the sea or pile
+        settings change &mdash; an empirical statistic, not a distributional
+        extreme-value estimate. Summing forces across components is exact
+        for inertia, an engineering approximation for (nonlinear) drag.</p>
+    </div>
+
   </section>
 
   <p class="footnote">A single wave above a still-water line, with arrows
@@ -431,6 +558,92 @@
           pseudo-random rather than statistically faithful over long runs.</p>
       </article>
 
+      <article>
+        <h3>Morison's equation: wave force on a slender pile</h3>
+        <p>Morison's equation (1950) models the horizontal force per unit
+          length of a cylinder small enough not to disturb the incident
+          wave, as the sum of a drag term and an inertia term:</p>
+        <p>$$f(z,t)=\underbrace{\tfrac12\rho C_dD\,|u|u}_{\text{drag}}+
+          \underbrace{\rho C_m\dfrac{\pi D^2}{4}\,\dot u}_{\text{inertia}}$$</p>
+        <p>with \(D\) the pile diameter, \(\rho\) seawater density, \(C_d\)
+          and \(C_m\) empirical drag/inertia coefficients, and \(\dot u\) the
+          horizontal particle acceleration. Drag dominates for high-velocity,
+          low-period motion (high Keulegan-Carpenter number, below); inertia
+          dominates for long, slow waves. Integrating \(f(z,t)\) from the
+          seabed to the surface gives the total base shear \(F(t)\); weighting
+          by \((z+h)\) before integrating gives the overturning moment about
+          the seabed \(M(t)\) &mdash; both shown live in the chart above.</p>
+      </article>
+
+      <article>
+        <h3>From velocity to acceleration</h3>
+        <p>The inertia term needs \(\dot u=\partial u/\partial t\), found by
+          differentiating the particle-velocity sum from earlier term by
+          term &mdash; each harmonic's \(\cos\theta\) becomes
+          \(n\omega\sin\theta\):</p>
+        <p>$$\dot u(x,z,t)=\sum_n a_n(n\omega)^2\cdot
+          \frac{\cosh(nk(z+h))}{\sinh(nkh)}\sin(n\theta)$$</p>
+        <p>using the same depth-attenuation shape as velocity itself. This
+          page checks that closed form against a numerical
+          finite-difference derivative of velocity before trusting it.</p>
+      </article>
+
+      <article>
+        <h3>Wheeler stretching</h3>
+        <p>The velocity/acceleration formulas above are only strictly valid
+          between the seabed and the still-water line, \(z\in[-h,0]\)
+          &mdash; but the force integral needs to run up to the
+          <em>instantaneous</em> surface \(\eta(t)\), which is above \(z=0\)
+          under a crest. Wheeler (1970) stretching fixes this by remapping
+          the depth coordinate before evaluating the attenuation functions:</p>
+        <p>$$z'=\frac{h(z-\eta)}{h+\eta}$$</p>
+        <p>which always keeps \(z'\) inside \([-h,0]\) regardless of where
+          the real surface sits. It's an engineering approximation (DNV-RP-C205),
+          not an exact solution to the free-surface boundary condition &mdash;
+          turning it off instead simply clamps the kinematics flat above
+          \(z=0\).</p>
+      </article>
+
+      <article>
+        <h3>Keulegan-Carpenter number and D/&lambda;</h3>
+        <p>Two dimensionless numbers decide which force model is
+          appropriate. The Keulegan-Carpenter number compares orbital
+          excursion to pile diameter:</p>
+        <p>$$KC=\frac{u_{\max}T}{D}$$</p>
+        <p>high KC means drag-dominated, separated flow; low KC means
+          inertia-dominated, attached flow &mdash; the regime Morison's
+          equation (and MacCamy-Fuchs, below) assume. Separately, the ratio
+          of pile diameter to wavelength, \(D/\lambda\), measures how much
+          the pile itself disturbs the incident wave: the DNV-RP-C205 rule
+          of thumb is that plain Morison is adequate below
+          \(D/\lambda\approx0.2\), and diffraction starts to matter above
+          it &mdash; shown live in panel 09.</p>
+      </article>
+
+      <article>
+        <h3>MacCamy-Fuchs diffraction correction</h3>
+        <p>Morison's equation assumes the pile is slender enough not to
+          scatter the incident wave. MacCamy &amp; Fuchs (1954) solved the
+          full linear diffraction problem for a rigid vertical cylinder
+          instead, giving a closed-form correction in terms of Bessel
+          functions of the first and second kind, order 1 (\(J_1\), \(Y_1\)),
+          with \(ka=kD/2\):</p>
+        <p>$$A(ka)=\frac{1}{\sqrt{J_1'(ka)^2+Y_1'(ka)^2}},\qquad
+          \alpha(ka)=\operatorname{atan2}\!\big(J_1'(ka),\,Y_1'(ka)\big)$$</p>
+        <p>$$F_{MF}(t)=\rho g H\tanh(kh)\cdot\frac{2}{k^2}\cdot A(ka)\cdot
+          \cos(\omega t-\alpha)$$</p>
+        <p>with the overturning moment using the same \(\cosh(k(z+h))\)
+          depth profile as linear theory (diffraction only rescales and
+          phase-shifts the force, not its vertical distribution):
+          \(M_{MF}(t)=F_{MF}(t)\cdot\big[h/\tanh(kh)-(\cosh(kh)-1)/(k\sinh(kh))\big]\).
+          As \(ka\to0\) (a slender pile) this reduces exactly to Morison's
+          inertia term with \(C_m=2.0\) &mdash; checked numerically during
+          implementation rather than taken on faith, since the commonly
+          quoted version of this formula online has a transcription error
+          in the leading constant. See Sarpkaya &amp; Isaacson (1981) and
+          DNV-RP-C205 for the underlying derivation.</p>
+      </article>
+
       <article class="learn-caveat">
         <h3>What's simplified</h3>
         <p>The dispersion solver and the Linear/Stokes-2nd-order/cnoidal
@@ -456,6 +669,23 @@
           vertical scale in the top panel is exaggerated relative to the
           depth axis for visibility &mdash; the exaggeration factor in use
           is shown in the corner of that panel.</p>
+        <p>The monopile force calculator adds its own simplifications: the
+          Bessel functions behind MacCamy-Fuchs use a rational-polynomial
+          approximation rather than exact series, accurate to roughly nine
+          decimal places over the realistic \(ka\) range here. MacCamy-Fuchs
+          assumes an isolated, rigid cylinder on a flat seabed &mdash; no
+          group effects, scour, or marine growth. The pile cross-section's
+          MacCamy-Fuchs overlay reuses the diffraction-corrected total
+          force's amplitude and phase against linear theory's depth shape as
+          a visualization convenience, not an independently derived local
+          force density. \(C_d\)/\(C_m\) are illustrative sliders, not a
+          substitute for a project-specific DNV-RP-C205 lookup. The
+          irregular-sea force estimate sums each component's contribution,
+          which is exact for the (linear) inertia term but only an
+          engineering approximation for the (nonlinear) drag term. Only
+          Linear and Stokes 2nd-order are offered for the force calculator
+          (the theories this page already decomposes into harmonics); no
+          current or dynamic structural response is modeled.</p>
       </article>
 
     </div>
