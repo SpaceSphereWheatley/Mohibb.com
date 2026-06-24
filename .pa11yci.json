@@ -13,6 +13,7 @@
     "http://localhost:8123/spotkick/",
     "http://localhost:8123/pitstop/",
     "http://localhost:8123/blackhole/",
-    "http://localhost:8123/pendulum/"
+    "http://localhost:8123/pendulum/",
+    "http://localhost:8123/waves/"
   ]
 }
