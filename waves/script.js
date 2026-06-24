@@ -665,14 +665,32 @@ function bindCheck(id, after) {
 const one = (v) => v.toFixed(1);
 const intFmt = (v) => String(Math.round(v));
 
+// Miche (1944) breaking-height criterion: smoothly spans the deep-water
+// limit Hb/lambda=0.142 (kh -> large) and the shallow-water limit
+// Hb/depth ~ 0.89 (kh -> small, tanh(kh) ~ kh) in a single formula.
+function micheBreakingHeight(lambda, kh) {
+  return 0.142 * lambda * Math.tanh(kh);
+}
+
 function updateReadouts() {
   const kh = carrier.k0 * params.depth;
   const regimeEl = $('regimeOut');
   const cEl = $('cOut');
   const lambdaEl = $('lambdaOut');
+  const breakingEl = $('breakingOut');
+  const breakingItemEl = $('breakingItem');
   if (regimeEl) regimeEl.textContent = khRegime(kh);
   if (cEl) cEl.textContent = carrier.c.toFixed(2) + ' m/s';
   if (lambdaEl) lambdaEl.textContent = carrier.lambda0.toFixed(1) + ' m';
+  if (breakingEl || breakingItemEl) {
+    const Hb = micheBreakingHeight(carrier.lambda0, kh);
+    const pct = Hb > 0 ? (params.H / Hb) * 100 : 0;
+    if (breakingEl) breakingEl.textContent = pct.toFixed(0) + '% of Hb (' + Hb.toFixed(2) + ' m)';
+    if (breakingItemEl) {
+      breakingItemEl.classList.toggle('breaking', pct >= 100);
+      breakingItemEl.classList.toggle('near-breaking', pct >= 80 && pct < 100);
+    }
+  }
 }
 
 bindRange('period0', one, (v) => { params.T0 = v; updateCarrier(); });
