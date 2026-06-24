@@ -11,6 +11,11 @@ const TZ = 'Europe/Oslo';
 const FIRST_YEAR = 2023;                 // OpenF1 history starts in 2023
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PACE_WINDOW = 1.07;                // long-run "clean lap" filter: within 107% of the stint's quickest lap
+// Tyre-deg modelling: a car quickens through a stint as its fuel load burns off, which masks tyre wear.
+// We add this back to each stint's observed lap-time slope to isolate the tyre component. It's an
+// approximation (~0.055s/lap, from ~1.6kg/lap burn × ~0.035s/lap/kg) — the main source of error in the
+// deg figures, so it's surfaced in the panel note. A documented magic number, like PACE_WINDOW above.
+const FUEL_S_PER_LAP = 0.055;
 
 // car-performance ratings: corner-speed buckets, acceleration window, Top-N choices
 const CORNER_SLOW_MAX = 120;             // km/h — below this, a corner counts as "slow"
@@ -25,7 +30,7 @@ const state = {
   sessions: [],          // for the selected meeting
   session: null,         // the selected session object
   drivers: {},           // number -> {acr, name, team, colour}
-  charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null, carperf: null, carstrength: null },
+  charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null, carperf: null, carstrength: null, tyredeg: null },
   history: null,         // cached cumulative-time data for the race-history chart
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
   raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
@@ -67,6 +72,17 @@ function median(arr){
   if (!arr.length) return null;
   const s = [...arr].sort((a,b)=> a-b), m = Math.floor(s.length/2);
   return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+}
+// ordinary least-squares fit of points [{x,y}] -> { slope, intercept }; null if degenerate (no x spread)
+function linFit(points){
+  const n = points.length;
+  if (n < 2) return null;
+  let sx=0, sy=0, sxx=0, sxy=0;
+  for (const p of points){ sx+=p.x; sy+=p.y; sxx+=p.x*p.x; sxy+=p.x*p.y; }
+  const denom = n*sxx - sx*sx;
+  if (denom === 0) return null;                  // every point at the same x
+  const slope = (n*sxy - sx*sy) / denom;
+  return { slope, intercept: (sy - slope*sx) / n };
 }
 
 /* ---------- fetch helpers ---------- */
@@ -299,34 +315,77 @@ function stintsLookComplete(byDrv, lastLapOf){
   return complete / dn.length >= 0.6;
 }
 
-// long-run pace per driver: each stint of >=5 clean laps -> median of laps within 107% of the stint's quickest.
-// returns { byDriver: {n: {best:{compound,laps,median}, runs:[...]}}}
-function longRunPace(laps, stints){
+// Per-stint clean-lap series, the shared basis for long-run pace and tyre-deg modelling.
+// For each driver's stint of >=5 clean laps (not out-laps, within 107% of the stint's quickest),
+// returns one run with its lap-in-stint series: [{ driver, compound, startLap, points:[{x:lapInStint, t}] }].
+// x is 1-based laps into the stint, so a fit's slope is the lap-time trend per lap of tyre life.
+function stintRuns(laps, stints){
   const lapsByDrv = groupByDriver(laps);
   const stintsByDrv = groupByDriver(stints);
-  const byDriver = {};
+  const runs = [];
   Object.keys(stintsByDrv).map(Number).forEach(n => {
     const dl = lapsByDrv[n] || [];
-    const runs = [];
     stintsByDrv[n].forEach(st => {
       const ls = num(st.lap_start), le = num(st.lap_end);
       if (ls==null || le==null) return;
       const inStint = dl.filter(l => {
         const ln = num(l.lap_number);
         return ln!=null && ln>=ls && ln<=le && !l.is_pit_out_lap && num(l.lap_duration)!=null && num(l.lap_duration)>0;
-      }).map(l => num(l.lap_duration));
+      }).map(l => ({ x: num(l.lap_number) - ls + 1, t: num(l.lap_duration) }));
       if (inStint.length < 5) return;
-      const fastest = Math.min(...inStint);
-      const clean = inStint.filter(t => t <= fastest * PACE_WINDOW);
-      if (clean.length < 5) return;                 // not enough representative green-flag laps
-      runs.push({ compound: normCompound(st.compound), laps: clean.length, median: median(clean) });
+      const fastest = Math.min(...inStint.map(p => p.t));
+      const points = inStint.filter(p => p.t <= fastest * PACE_WINDOW);
+      if (points.length < 5) return;                // not enough representative green-flag laps
+      runs.push({ driver: n, compound: normCompound(st.compound), startLap: ls, points });
     });
-    if (!runs.length) return;
-    const best = runs.slice().sort((a,b)=> a.median - b.median)[0];
-    byDriver[n] = { best, runs };
+  });
+  return runs;
+}
+
+// long-run pace per driver: each clean stint -> median lap time. returns { n: {best:{compound,laps,median}, runs:[...]} }
+function longRunPace(laps, stints){
+  const byDriver = {};
+  stintRuns(laps, stints).forEach(r => {
+    const run = { compound: r.compound, laps: r.points.length, median: median(r.points.map(p => p.t)) };
+    (byDriver[r.driver] = byDriver[r.driver] || { runs: [] }).runs.push(run);
+  });
+  Object.keys(byDriver).map(Number).forEach(n => {
+    byDriver[n].best = byDriver[n].runs.slice().sort((a,b)=> a.median - b.median)[0];
   });
   return byDriver;
 }
+
+// Tyre-degradation model from a set of stint runs. Each run is fitted (lap time vs lap-in-stint);
+// the slope is the observed lap-time trend, which blends tyre wear with the fuel-burn gain. Adding
+// FUEL_S_PER_LAP back isolates the tyre component. Runs are aggregated per compound by median (robust
+// to a single scrappy stint). Returns COMPOUND_ORDER-sorted entries:
+//   { compound, degRate, observedSlope, basePace, intercept, stints, runs:[{driver,points,slope,intercept}] }
+function tyreDegModel(runs){
+  const byCmp = {};
+  for (const r of runs){
+    if (r.compound === 'UNKNOWN') continue;            // can't attribute deg to an unknown compound
+    const fit = linFit(r.points.map(p => ({ x: p.x, y: p.t }))); if (!fit) continue;
+    (byCmp[r.compound] = byCmp[r.compound] || []).push({
+      driver: r.driver, points: r.points, slope: fit.slope, intercept: fit.intercept,
+      median: median(r.points.map(p => p.t)),
+    });
+  }
+  return COMPOUND_ORDER.map(cmp => {
+    const rs = byCmp[cmp]; if (!rs || !rs.length) return null;
+    const observedSlope = median(rs.map(r => r.slope));
+    return {
+      compound: cmp,
+      observedSlope,
+      degRate: observedSlope + FUEL_S_PER_LAP,
+      basePace: median(rs.map(r => r.median)),
+      intercept: median(rs.map(r => r.intercept)),
+      stints: rs.length,
+      runs: rs,
+    };
+  }).filter(Boolean);
+}
+// signed deg rate, e.g. +0.043 / −0.012 (s/lap)
+function fmtDeg(v){ const n = num(v); if (n==null) return '—'; return (n>=0?'+':'−') + Math.abs(n).toFixed(3); }
 
 /* ---------- car performance: telemetry analysis ---------- */
 // a driver's fastest clean lap, with date_start (needed to bound the car_data fetch)
@@ -418,6 +477,12 @@ function compoundTag(cmp){
   const label = cmp.charAt(0) + cmp.slice(1).toLowerCase();
   return `<span class="cmp-tag"><i style="background:${fill}"></i>${esc(label)}</span>`;
 }
+// chart line/point colour per compound — darker than the swatch fills so they read on the cream chart
+// background (the swatch HARD/MEDIUM are pale by design); falls back to ink-grey for unknowns.
+function compoundColour(cmp){
+  return { SOFT:'#E8443B', MEDIUM:'#D49A1E', HARD:'#8C8475', INTERMEDIATE:'#2E9E57', WET:'#3E82F7' }[cmp] || '#B8AE9C';
+}
+const COMPOUND_ORDER = ['SOFT','MEDIUM','HARD','INTERMEDIATE','WET','UNKNOWN'];
 
 /* ============================================================
    SESSION CLASSIFICATION + VIEW SWITCHING
@@ -433,10 +498,10 @@ function sessionKind(s){
   if (n.includes('qualifying') || n.includes('shootout')) return 'qualifying';
   return 'race';
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
-  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-carperf','sec-pitloss'],
+  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-carperf','sec-pitloss'],
   race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
 function showView(kind){
@@ -557,6 +622,7 @@ async function loadSession(session_key){
     renderQualiPace(session_key);
     renderQualiTheo(s);
     renderRPI(s);
+    renderTyreDeg(s);
     renderCarPerformance(session_key, 'qualifying', s);
     renderPitLoss();
   } else {
@@ -799,6 +865,86 @@ async function renderRPI(qSession, attempt=0){
 function rankMap(entries){
   const sorted = entries.filter(e => e.v!=null).sort((a,b)=> a.v-b.v);
   const m = {}; sorted.forEach((e,i)=> m[e.n] = i+1); return m;
+}
+
+/* ---------- QUALIFYING: tyre-degradation model ---------- */
+// the practice session teams run race sims in: FP2, then FP3, then FP1 (mirrors the Race Pace Indicator)
+function longRunSource(){
+  const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
+  const byName = (frag) => practice.find(s => (s.session_name||'').toLowerCase().includes(frag));
+  return byName('practice 2') || byName('practice 3') || byName('practice 1') || practice[practice.length-1] || null;
+}
+async function renderTyreDeg(qSession, attempt=0){
+  const body = $('tyredegBody'); if (!body) return;
+  body.innerHTML = loadingBox('Modelling tyre degradation from practice long runs…');
+  try {
+    const src = longRunSource();
+    if (!src){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from (common for sprint weekends).'); return; }
+    const [laps, stints] = await Promise.all([ fetchLaps(src.session_key), fetchStints(src.session_key) ]);
+    const model = tyreDegModel(stintRuns(laps, stints));
+    if (!model.length){ body.innerHTML = stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found in practice, so degradation can’t be modelled for this weekend.'); return; }
+
+    const lrLabel = esc(src.session_name || 'practice');
+    body.innerHTML = `${tyreDegTable(model)}<div class="chart-box" style="height:340px"><canvas id="tyredegCanvas"></canvas></div>
+      <div class="panel-note"><b>Informational, not a prediction.</b> Each compound’s lap-time trend through a stint, fitted from race-sim long runs in ${lrLabel} and corrected for fuel burn (assumed ${FUEL_S_PER_LAP.toFixed(3)}s/lap), to isolate tyre wear. <b>Deg</b> is the resulting pace loss per lap; <b>base pace</b> is a typical long-run lap. Pooled across drivers, so the vertical scatter mixes car pace — it’s the slope that matters. Practice fuel loads, track evolution and traffic all add noise, so read it as a guide to which tyres drop off fastest, not a stopwatch.</div>`;
+    drawTyreDegChart(model);
+  } catch (e){ panelRetry('tyre-deg', e, body, attempt, () => renderTyreDeg(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t model tyre degradation. Tap Reload to retry.', 'error')); }
+}
+function tyreDegTable(model){
+  const ordered = model.slice().sort((a,b)=> a.degRate - b.degRate);   // gentlest deg first
+  return `<div class="tbl-scroll"><table class="tbl">
+    <thead><tr><th>Tyre</th><th class="tar">Deg</th><th class="tar">Base pace</th><th class="tar">Stints</th></tr></thead>
+    <tbody>${ordered.map((m,i)=> `<tr class="${i===0?'best':''}" style="--team:${compoundColour(m.compound)}">
+      <td>${compoundTag(m.compound)}</td>
+      <td class="num tar"><b>${fmtDeg(m.degRate)}</b><span class="muted"> s/lap</span></td>
+      <td class="num tar muted">${fmtLap(m.basePace)}</td>
+      <td class="num tar muted">${m.stints}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function drawTyreDegChart(model){
+  destroyChart('tyredeg');
+  if (!window.Chart) return;                       // table still renders; chart is progressive enhancement
+  const ctx = $('tyredegCanvas'); if (!ctx) return;
+  const allT = model.flatMap(m => m.runs.flatMap(r => r.points.map(p => p.t)));
+  if (!allT.length) return;
+  const yMin = Math.min(...allT) - 0.4, yMax = Math.max(...allT) + 0.4;
+  const datasets = [];
+  model.forEach(m => {
+    const colour = compoundColour(m.compound);
+    // raw clean laps (faint), then the fitted deg line on top
+    datasets.push({
+      data: m.runs.flatMap(r => r.points.map(p => ({ x: p.x, y: p.t }))),
+      backgroundColor: colour+'66', borderColor: 'transparent', pointRadius: 2.4, pointHoverRadius: 4, showLine: false,
+      _cmp: m.compound,
+    });
+    const maxX = Math.max(...m.runs.flatMap(r => r.points.map(p => p.x)));
+    datasets.push({
+      label: m.compound.charAt(0)+m.compound.slice(1).toLowerCase(),
+      data: [{ x:1, y: m.intercept + m.observedSlope*1 }, { x:maxX, y: m.intercept + m.observedSlope*maxX }],
+      borderColor: colour, backgroundColor: colour, borderWidth: 2.5, pointRadius: 0, showLine: true, fill: false,
+    });
+  });
+  state.charts.tyredeg = new Chart(ctx, {
+    type:'scatter',
+    data:{ datasets },
+    options: Object.assign(chartBase({}), {
+      plugins:{
+        legend:{ display:true, position:'top', labels:{ filter:(it)=> !!it.text, color:'#5C554A', boxWidth:10, boxHeight:10, font:{size:11} } },
+        tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
+          filter:(it)=> it.dataset.showLine === false,
+          callbacks:{ title:(it)=> { const cmp = it[0].dataset._cmp; return cmp ? cmp.charAt(0)+cmp.slice(1).toLowerCase() : ''; },
+            label:(it)=> [`Lap in stint  ${it.parsed.x}`, `Lap time  ${fmtLap(it.parsed.y)}`] } },
+      },
+      scales:{
+        x:{ type:'linear', beginAtZero:false, grid:{ color:'#C9C0AE' },
+            ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, precision:0 },
+            title:{ display:true, text:'Lap in stint', color:'#8C8475', font:{size:10} } },
+        y:{ min:yMin, max:yMax, grid:{ color:'#C9C0AE' },
+            ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback:(v)=> fmtLap(v) },
+            title:{ display:true, text:'Lap time', color:'#8C8475', font:{size:10} } },
+      }
+    })
+  });
 }
 
 /* ---------- QUALIFYING / RACE: car performance (acceleration, top speed, cornering, strength) ---------- */
