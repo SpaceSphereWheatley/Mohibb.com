@@ -103,7 +103,7 @@
         {
           "name": "Ocean Waves",
           "category": "Canvas · particle velocities & wave theory",
-          "description": "A single propagating wave with particle-velocity arrows that fade out with depth, driven by any of six wave theories — Linear, Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) — plus a six-theory comparison overlay, with an in-page primer on the physics.",
+          "description": "A single propagating wave with particle-velocity arrows that fade out with depth, driven by any of six wave theories — Linear, Stokes 2nd- and 5th-order, cnoidal, solitary, and trochoidal (Gerstner) — plus a six-theory comparison overlay and Morison/MacCamy-Fuchs wave-force calculations on a monopile, with an in-page primer on the physics.",
           "url": "/waves/",
           "status": "live"
         }
