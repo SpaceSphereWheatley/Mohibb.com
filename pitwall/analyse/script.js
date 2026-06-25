@@ -39,6 +39,7 @@ const state = {
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
   pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
   degModel: null,        // {meeting, model, practiceCount} pooled-practice tyre-deg model, memoised per meeting
+  raceLaps: null,        // {meeting, laps, src} estimated race distance for the strategy optimiser, memoised per meeting
   carPerf: { mode: 'driver', topN: 5, trim: 'race' },  // car-performance panel controls
   carPerfCtx: null,      // computed traits/strengths for the current session, redrawn on toggle
 };
@@ -177,6 +178,10 @@ function stateBox(badge, msg, kind){
   return `<div class="state ${kind||''}"><span class="badge">${esc(badge)}</span><span class="msg">${esc(msg)}</span></div>`;
 }
 function loadingBox(msg){ return stateBox('Loading', msg || 'Fetching session data…'); }
+// shown by the practice-based qualifying panels when thin data is explained by the sprint format
+function sprintWeekendBox(){
+  return stateBox('Sprint weekend', 'Sprint weekends run only one practice hour, and teams spend it on qualifying prep rather than long runs — so there usually isn’t enough green-flag practice data for this analysis. Try a regular (non-sprint) weekend.');
+}
 
 /* ---------- panel auto-retry ----------
    A panel that fails (usually OpenF1 rate-limiting a burst of concurrent
@@ -502,10 +507,14 @@ function sessionKind(s){
   if (n.includes('qualifying') || n.includes('shootout')) return 'qualifying';
   return 'race';
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
+// a weekend is "sprint" if any of its sessions is a sprint race / sprint qualifying / shootout
+function isSprintWeekend(){
+  return state.sessions.some(s => /sprint/i.test(`${s?.session_name || ''} ${s?.session_type || ''}`));
+}
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
-  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-carperf','sec-pitloss'],
+  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-carperf','sec-pitloss'],
   race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
 function showView(kind){
@@ -627,6 +636,7 @@ async function loadSession(session_key){
     renderQualiTheo(s);
     renderRPI(s);
     renderTyreDeg(s);
+    renderStrategySim(s);
     renderCarPerformance(session_key, 'qualifying', s);
     renderPitLoss();
   } else {
@@ -750,7 +760,7 @@ async function renderQualiTheo(qSession, attempt=0){
   const body = $('qtheoBody'); body.innerHTML = loadingBox('Comparing quali laps to practice potential…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
-    if (!practice.length){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no practice benchmark to compare against (common for sprint weekends).'); return; }
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no practice benchmark to compare against.'); return; }
     // combine every practice lap per driver, then take their theoretical best across all of practice
     const practiceLaps = (await Promise.all(practice.map(s => fetchLaps(s.session_key).catch(()=>[]))))
       .flat();
@@ -894,9 +904,9 @@ async function renderTyreDeg(qSession, attempt=0){
   body.innerHTML = loadingBox('Modelling tyre degradation from practice long runs…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
-    if (!practice.length){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from (common for sprint weekends).'); return; }
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from.'); return; }
     const { model } = await practiceDegModel();
-    if (!model.length){ body.innerHTML = stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found across this weekend’s practice sessions, so degradation can’t be modelled — common on sprint weekends or when practice was wet or red-flagged.'); return; }
+    if (!model.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found across this weekend’s practice sessions, so degradation can’t be modelled — practice may have been wet or red-flagged.'); return; }
 
     body.innerHTML = `${tyreDegTable(model)}<div class="chart-box" style="height:340px"><canvas id="tyredegCanvas"></canvas></div>
       <div class="panel-note"><b>Informational, not a prediction.</b> Each compound’s lap-time trend through a stint, fitted from race-sim long runs across all of this weekend’s practice sessions and corrected for fuel burn (assumed ${FUEL_S_PER_LAP.toFixed(3)}s/lap), to isolate tyre wear. <b>Deg</b> is the resulting pace loss per lap; <b>base pace</b> is a typical long-run lap. Pooled across drivers and sessions, so the vertical scatter mixes car pace and track evolution — it’s the slope that matters. Practice fuel loads and traffic add noise, so read it as a guide to which tyres drop off fastest, not a stopwatch.</div>`;
@@ -958,6 +968,119 @@ function drawTyreDegChart(model){
       }
     })
   });
+}
+
+/* ---------- QUALIFYING: stint / stop-count strategy optimiser ---------- */
+const DRY_COMPOUNDS = ['SOFT','MEDIUM','HARD'];
+// race-lap counts for circuits where we may have to guess (no race session and no prior-year race);
+// keyed by lowercased circuit_short_name / location, with common aliases. A last-ditch fallback only.
+const CIRCUIT_LAPS = {
+  'sakhir':57,'jeddah':50,'melbourne':58,'albert park':58,'suzuka':53,'shanghai':56,'miami':57,
+  'imola':63,'monaco':78,'montreal':70,'montréal':70,'gilles villeneuve':70,'catalunya':66,'barcelona':66,
+  'spielberg':71,'red bull ring':71,'silverstone':52,'hungaroring':70,'budapest':70,'spa-francorchamps':44,'spa':44,
+  'zandvoort':72,'monza':53,'baku':51,'marina bay':62,'singapore':62,'austin':56,'americas':56,
+  'mexico city':71,'interlagos':71,'são paulo':71,'sao paulo':71,'las vegas':50,'lusail':57,'losail':57,
+  'qatar':57,'yas marina':58,'abu dhabi':58,
+};
+function maxLapNumber(laps){ let m=0; for (const l of (laps||[])){ const v=num(l.lap_number); if (v!=null && v>m) m=v; } return m || null; }
+// Approximate green-flag race laps for the meeting. Primary: the meeting's own race once it has run.
+// Fallbacks: the same circuit's race a season earlier, then a static table. Memoised per meeting.
+async function raceLapCount(){
+  const mk = state.session?.meeting_key ?? null;
+  if (state.raceLaps && state.raceLaps.meeting === mk) return state.raceLaps;
+  let laps = null, src = null;
+  const race = state.sessions.find(s => sessionKind(s) === 'race');
+  if (race && new Date(race.date_end).getTime() < Date.now()){
+    try { laps = maxLapNumber(await fetchLaps(race.session_key)); if (laps!=null) src = 'this race'; } catch (e){ logError('race laps', e); }
+  }
+  const circuit = state.session?.circuit_short_name || null;
+  if (laps == null && circuit && state.year && state.year - 1 >= FIRST_YEAR){
+    try {
+      const py = state.year - 1;
+      const meetings = await cachedJSON(`pwa.meetings.${py}`, `${OPENF1}meetings?year=${py}`);
+      const m = (Array.isArray(meetings)?meetings:[]).find(x => x.circuit_short_name === circuit);
+      if (m){
+        const ses = await cachedJSON(`pwa.sessions.${m.meeting_key}`, `${OPENF1}sessions?meeting_key=${m.meeting_key}`);
+        const r = (Array.isArray(ses)?ses:[]).find(s => sessionKind(s) === 'race');
+        if (r){ laps = maxLapNumber(await fetchLaps(r.session_key)); if (laps!=null) src = `${py} race`; }
+      }
+    } catch (e){ logError('prior-year race laps', e); }
+  }
+  if (laps == null){
+    const key = (circuit || state.session?.location || '').toLowerCase();
+    if (CIRCUIT_LAPS[key] != null){ laps = CIRCUIT_LAPS[key]; src = 'typical for this circuit'; }
+  }
+  state.raceLaps = { meeting: mk, laps, src };
+  return state.raceLaps;
+}
+
+// projected total race time (s) for a list of [compound, laps] stints, with a pit loss per change.
+// Lap time at tyre-lap i (0-based) = basePace + degRate*i; fuel burn is omitted because total laps are
+// fixed, so it shifts every strategy equally and cancels for comparison.
+function strategyTime(stints, byCmp, pitLoss){
+  let t = 0;
+  for (const [c, L] of stints){ const m = byCmp[c]; t += L*m.basePace + m.degRate*(L*(L-1)/2); }
+  return t + (stints.length - 1) * pitLoss;
+}
+function bestOneStop(byCmp, pitLoss, L){
+  const cmps = Object.keys(byCmp); let best = null;
+  for (const A of cmps) for (const B of cmps){
+    if (A === B) continue;                                   // two-compound rule
+    for (let k=1; k<=L-1; k++){
+      const t = strategyTime([[A,k],[B,L-k]], byCmp, pitLoss);
+      if (!best || t < best.total) best = { kind:'1-stop', total:t, stops:[k], compounds:[A,B] };
+    }
+  }
+  return best;
+}
+function bestTwoStop(byCmp, pitLoss, L){
+  const cmps = Object.keys(byCmp); let best = null;
+  for (const A of cmps) for (const B of cmps) for (const C of cmps){
+    if (new Set([A,B,C]).size < 2) continue;                 // must use >=2 distinct compounds
+    for (let k1=1; k1<=L-2; k1++) for (let k2=k1+1; k2<=L-1; k2++){
+      const t = strategyTime([[A,k1],[B,k2-k1],[C,L-k2]], byCmp, pitLoss);
+      if (!best || t < best.total) best = { kind:'2-stop', total:t, stops:[k1,k2], compounds:[A,B,C] };
+    }
+  }
+  return best;
+}
+// best one- and two-stop plans from the per-compound deg model; null if <2 dry compounds have data
+function optimiseStrategies(model, pitLoss, L){
+  const byCmp = {};
+  model.forEach(m => { if (DRY_COMPOUNDS.includes(m.compound)) byCmp[m.compound] = m; });
+  if (Object.keys(byCmp).length < 2) return null;
+  return { one: bestOneStop(byCmp, pitLoss, L), two: bestTwoStop(byCmp, pitLoss, L) };
+}
+async function renderStrategySim(qSession, attempt=0){
+  const body = $('strategysimBody'); if (!body) return;
+  body.innerHTML = loadingBox('Projecting one-stop vs two-stop strategies…');
+  try {
+    const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no degradation model to base strategy projections on.'); return; }
+    const [deg, pit, race] = await Promise.all([ practiceDegModel(), weekendPitLoss(), raceLapCount() ]);
+    const dryCount = deg.model.filter(m => DRY_COMPOUNDS.includes(m.compound)).length;
+    if (dryCount < 2){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('Not enough data', 'Need a modelled degradation figure for at least two dry compounds to compare strategies — this weekend’s practice didn’t provide that.'); return; }
+    if (pit.seconds == null){ body.innerHTML = stateBox('No pit loss', 'Couldn’t estimate this weekend’s pit-stop time loss from practice, so race-time projections aren’t possible.'); return; }
+    if (race.laps == null){ body.innerHTML = stateBox('Unknown race length', 'Couldn’t determine the race distance for this circuit, so strategy projections aren’t possible.'); return; }
+
+    const opt = optimiseStrategies(deg.model, pit.seconds, race.laps);
+    const rows = [opt.one, opt.two].filter(Boolean).sort((a,b)=> a.total - b.total);
+    const best = rows[0].total;
+    const verdict = rows.length > 1
+      ? `<b>${rows[0].kind}</b> projects fastest, by ${(rows[1].total - best).toFixed(1)}s over the best ${rows[1].kind}.`
+      : `Only a <b>${rows[0].kind}</b> plan could be built from the available compounds.`;
+    const srcNote = race.src && race.src !== 'this race' ? ` (race length from ${esc(race.src)})` : '';
+
+    body.innerHTML = `<div class="tbl-scroll"><table class="tbl">
+      <thead><tr><th>Plan</th><th>Tyres</th><th class="tar">Stop lap(s)</th><th class="tar">Δ</th></tr></thead>
+      <tbody>${rows.map((r,i)=> `<tr class="${i===0?'best':''}">
+        <td><b>${r.kind}</b></td>
+        <td>${r.compounds.map(compoundTag).join('<span class="muted"> → </span>')}</td>
+        <td class="num tar">${r.stops.join(', ')}</td>
+        <td class="num tar ${i===0?'muted':''}">${i===0?'fastest':'+'+(r.total-best).toFixed(1)+'s'}</td>
+      </tr>`).join('')}</tbody></table></div>
+      <div class="panel-note"><b>Informational, not a prediction.</b> ${verdict} A toy what-if over <b>${race.laps} laps</b>${srcNote}: it projects total race time from this weekend’s modelled tyre degradation and a <b>${pit.seconds.toFixed(1)}s</b> pit loss, then searches stop laps for the quickest one- and two-stop plans (dry compounds only, respecting the two-compound rule). It ignores safety cars, traffic, tyre warm-up, fuel saving, track temperature and weather — all of which routinely decide real strategy — and assumes practice pace carries to Sunday. Compound base paces come from practice runs at unknown fuel, so cross-compound gaps are rough. Read it as a sanity check on stop count, not a strategy call.</div>`;
+  } catch (e){ panelRetry('strategy sim', e, body, attempt, () => renderStrategySim(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t project strategies. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- QUALIFYING / RACE: car performance (acceleration, top speed, cornering, strength) ---------- */
@@ -1745,6 +1868,7 @@ async function reload(){
     state.sessions.forEach(s => clearSessionCache(s.session_key));
     state.pitLoss = null;   // recompute the weekend pit-loss estimate from fresh data
     state.degModel = null;  // recompute the pooled-practice tyre-deg model from fresh data
+    state.raceLaps = null;  // recompute the race-distance estimate from fresh data
   } catch {}
   if (state.session) await onSessionChange();
   else await onYearChange();
