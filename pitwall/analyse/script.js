@@ -29,6 +29,8 @@ const state = {
   meetings: [],          // for the selected year
   sessions: [],          // for the selected meeting
   session: null,         // the selected session object
+  view: null,            // active view: 'practice' | 'qualifying' | 'prerace' | 'race'
+  pendingTab: null,      // tab to apply from a shared link once the session loads ('prerace')
   drivers: {},           // number -> {acr, name, team, colour}
   charts: { lap: null, pos: null, hist: null, qpace: null, qtheo: null, carperf: null, carstrength: null, tyredeg: null },
   history: null,         // cached cumulative-time data for the race-history chart
@@ -514,13 +516,26 @@ function isSprintWeekend(){
 const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
-  qualifying: ['sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-carperf','sec-pitloss'],
+  qualifying: ['sec-qpace','sec-qtheo','sec-carperf'],                    // raw quali-session analysis
+  prerace:    ['sec-rpi','sec-tyredeg','sec-strategysim','sec-pitloss'],  // forward-looking race predictors
   race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
+// the qualifying weekend offers two tabs; the rest are single-view
+const QUALI_TABS = [['qualifying','Qualifying'],['prerace','Pre-Race']];
 function showView(kind){
   destroyAllCharts();
   state.raceRedraw = {};        // drop stale redraw closures from the previous session
   ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display = 'none'; });
+  // qualifying weekends split into a "Qualifying" / "Pre-Race" tab pair
+  const tabs = $('viewTabs');
+  if (tabs){
+    if (kind === 'qualifying' || kind === 'prerace'){
+      tabs.innerHTML = `<div class="seg viewtab">${QUALI_TABS.map(([v,l]) =>
+        `<button type="button" data-view="${v}" class="${kind===v?'active':''}">${esc(l)}</button>`).join('')}</div>`;
+      tabs.style.display = '';
+      wireViewTabs(tabs.querySelector('.seg.viewtab'));
+    } else { tabs.style.display = 'none'; tabs.innerHTML = ''; }
+  }
   // one shared Top-N toggle for every race chart (only shown in the race view)
   const bar = $('raceTopBar');
   if (bar){
@@ -539,7 +554,45 @@ function showView(kind){
     const idx = n.querySelector('.idx'); if (idx) idx.textContent = String(i+1).padStart(2,'0');
   });
 }
-function hideAllSections(){ ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display='none'; }); const bar=$('raceTopBar'); if (bar){ bar.style.display='none'; bar.innerHTML=''; } }
+function hideAllSections(){ ALL_SECTIONS.forEach(id => { const n=$(id); if (n) n.style.display='none'; }); const bar=$('raceTopBar'); if (bar){ bar.style.display='none'; bar.innerHTML=''; } const tabs=$('viewTabs'); if (tabs){ tabs.style.display='none'; tabs.innerHTML=''; } }
+
+// switch between the Qualifying / Pre-Race tabs of a qualifying weekend, re-rendering
+// the now-visible sections so charts size correctly (they can't draw while display:none)
+function wireViewTabs(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]'); if (!b) return;
+    const view = b.dataset.view; if (state.view === view) return;
+    state.view = view;
+    showView(view);
+    writeHash();
+    const s = state.session; if (s) dispatchView(view, s, s.session_key);
+  });
+}
+
+// run the render functions belonging to a given view; mirrors the dispatch in loadSession
+function dispatchView(view, s, session_key){
+  if (view === 'practice'){
+    renderTheoretical(session_key);
+    renderLongRun(session_key);
+    renderPitLoss();
+  } else if (view === 'qualifying'){
+    renderQualiPace(session_key);
+    renderQualiTheo(s);
+    renderCarPerformance(session_key, 'qualifying', s);
+  } else if (view === 'prerace'){
+    renderRPI(s);
+    renderTyreDeg(s);
+    renderStrategySim(s);
+    renderPitLoss();
+  } else {
+    renderLapChart(session_key);
+    renderHistory(session_key);
+    renderStrategy(session_key);
+    renderPosition(session_key);
+    renderCarPerformance(session_key, 'race', s);
+  }
+}
 
 function showNotice(eyebrow, title, body){
   $('ntEyebrow').textContent = eyebrow; $('ntTitle').textContent = title; $('ntBody').textContent = body;
@@ -608,7 +661,13 @@ async function loadSession(session_key){
   state.renderGen++;   // invalidate any panel retries still pending from a previous session
   state.session = s;
   setSessionBanner(s);
-  writeHash();   // reflect the selection in the URL so it can be shared/bookmarked
+
+  // qualifying weekends default to the Qualifying tab, but a shared link may pin Pre-Race
+  const kind = sessionKind(s);
+  const view = (kind === 'qualifying' && state.pendingTab === 'prerace') ? 'prerace' : kind;
+  state.pendingTab = null;
+  state.view = view;
+  writeHash();   // reflect the selection (and active tab) in the URL so it can be shared/bookmarked
 
   // guard: session not finished yet — historical endpoints would be empty
   if (new Date(s.date_end).getTime() >= Date.now()){
@@ -619,33 +678,13 @@ async function loadSession(session_key){
     return;
   }
   hideNotice();
-
-  const kind = sessionKind(s);
-  showView(kind);
+  showView(view);
 
   // drivers for the selected session (numbers are stable across the weekend)
   try { state.drivers = loadDriversInto(await fetchDrivers(session_key)); }
   catch (e){ logError('drivers', e); state.drivers = {}; }
 
-  if (kind === 'practice'){
-    renderTheoretical(session_key);
-    renderLongRun(session_key);
-    renderPitLoss();
-  } else if (kind === 'qualifying'){
-    renderQualiPace(session_key);
-    renderQualiTheo(s);
-    renderRPI(s);
-    renderTyreDeg(s);
-    renderStrategySim(s);
-    renderCarPerformance(session_key, 'qualifying', s);
-    renderPitLoss();
-  } else {
-    renderLapChart(session_key);
-    renderHistory(session_key);
-    renderStrategy(session_key);
-    renderPosition(session_key);
-    renderCarPerformance(session_key, 'race', s);
-  }
+  dispatchView(view, s, session_key);
 }
 
 /* ---------- PRACTICE: theoretical best lap ---------- */
@@ -1880,13 +1919,14 @@ function parseHash(){
   const raw = (location.hash || '').replace(/^#/, '');
   if (!raw) return null;
   const p = new URLSearchParams(raw);
-  const year = Number(p.get('y')), mk = p.get('m'), sk = p.get('s');
+  const year = Number(p.get('y')), mk = p.get('m'), sk = p.get('s'), t = p.get('t');
   if (!Number.isFinite(year) || !sk) return null;
-  return { year, mk, sk };
+  return { year, mk, sk, t };
 }
 function writeHash(){
   if (!state.session) return;
-  const h = `#y=${state.year}&m=${state.session.meeting_key}&s=${state.session.session_key}`;
+  const tab = state.view === 'prerace' ? '&t=prerace' : '';   // only the non-default tab is pinned
+  const h = `#y=${state.year}&m=${state.session.meeting_key}&s=${state.session.session_key}${tab}`;
   lastHash = h;
   if (location.hash !== h){
     try { history.replaceState(null, '', h); } catch { location.hash = h; }   // replaceState doesn't fire hashchange
@@ -1903,6 +1943,7 @@ async function restoreFromHash(h){
   await loadSessions(Number($('selMeeting').value));
   if (!state.sessions.length) throw new Error('no sessions');
   if (state.sessions.some(s => String(s.session_key) === String(h.sk))) $('selSession').value = String(h.sk);
+  state.pendingTab = h.t === 'prerace' ? 'prerace' : null;   // honoured by loadSession if the session is qualifying
   await loadSession($('selSession').value);
 }
 // react to back/forward or a pasted/edited link

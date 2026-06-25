@@ -126,6 +126,9 @@ tr.best .code{color:var(--accent-ink);}
 .seg button.active{background:var(--ink);color:var(--bg);}
 .seg button:hover:not(.active){color:var(--accent);}
 
+/* qualifying weekend: Qualifying / Pre-Race tab switch */
+.view-tabs{display:flex;justify-content:flex-start;margin:18px 0 4px;}
+
 /* shared Top-N bar (one filter for every race chart) */
 .race-topbar{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:30px;}
 .race-topbar .topbar-label{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);}
