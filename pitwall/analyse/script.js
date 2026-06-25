@@ -178,6 +178,10 @@ function stateBox(badge, msg, kind){
   return `<div class="state ${kind||''}"><span class="badge">${esc(badge)}</span><span class="msg">${esc(msg)}</span></div>`;
 }
 function loadingBox(msg){ return stateBox('Loading', msg || 'Fetching session data…'); }
+// shown by the practice-based qualifying panels when thin data is explained by the sprint format
+function sprintWeekendBox(){
+  return stateBox('Sprint weekend', 'Sprint weekends run only one practice hour, and teams spend it on qualifying prep rather than long runs — so there usually isn’t enough green-flag practice data for this analysis. Try a regular (non-sprint) weekend.');
+}
 
 /* ---------- panel auto-retry ----------
    A panel that fails (usually OpenF1 rate-limiting a burst of concurrent
@@ -503,6 +507,10 @@ function sessionKind(s){
   if (n.includes('qualifying') || n.includes('shootout')) return 'qualifying';
   return 'race';
 }
+// a weekend is "sprint" if any of its sessions is a sprint race / sprint qualifying / shootout
+function isSprintWeekend(){
+  return state.sessions.some(s => /sprint/i.test(`${s?.session_name || ''} ${s?.session_type || ''}`));
+}
 const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
@@ -752,7 +760,7 @@ async function renderQualiTheo(qSession, attempt=0){
   const body = $('qtheoBody'); body.innerHTML = loadingBox('Comparing quali laps to practice potential…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
-    if (!practice.length){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no practice benchmark to compare against (common for sprint weekends).'); return; }
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no practice benchmark to compare against.'); return; }
     // combine every practice lap per driver, then take their theoretical best across all of practice
     const practiceLaps = (await Promise.all(practice.map(s => fetchLaps(s.session_key).catch(()=>[]))))
       .flat();
@@ -896,9 +904,9 @@ async function renderTyreDeg(qSession, attempt=0){
   body.innerHTML = loadingBox('Modelling tyre degradation from practice long runs…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
-    if (!practice.length){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from (common for sprint weekends).'); return; }
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from.'); return; }
     const { model } = await practiceDegModel();
-    if (!model.length){ body.innerHTML = stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found across this weekend’s practice sessions, so degradation can’t be modelled — common on sprint weekends or when practice was wet or red-flagged.'); return; }
+    if (!model.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found across this weekend’s practice sessions, so degradation can’t be modelled — practice may have been wet or red-flagged.'); return; }
 
     body.innerHTML = `${tyreDegTable(model)}<div class="chart-box" style="height:340px"><canvas id="tyredegCanvas"></canvas></div>
       <div class="panel-note"><b>Informational, not a prediction.</b> Each compound’s lap-time trend through a stint, fitted from race-sim long runs across all of this weekend’s practice sessions and corrected for fuel burn (assumed ${FUEL_S_PER_LAP.toFixed(3)}s/lap), to isolate tyre wear. <b>Deg</b> is the resulting pace loss per lap; <b>base pace</b> is a typical long-run lap. Pooled across drivers and sessions, so the vertical scatter mixes car pace and track evolution — it’s the slope that matters. Practice fuel loads and traffic add noise, so read it as a guide to which tyres drop off fastest, not a stopwatch.</div>`;
@@ -1048,10 +1056,10 @@ async function renderStrategySim(qSession, attempt=0){
   body.innerHTML = loadingBox('Projecting one-stop vs two-stop strategies…');
   try {
     const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
-    if (!practice.length){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no degradation model to base strategy projections on (common for sprint weekends).'); return; }
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no degradation model to base strategy projections on.'); return; }
     const [deg, pit, race] = await Promise.all([ practiceDegModel(), weekendPitLoss(), raceLapCount() ]);
     const dryCount = deg.model.filter(m => DRY_COMPOUNDS.includes(m.compound)).length;
-    if (dryCount < 2){ body.innerHTML = stateBox('Not enough data', 'Need a modelled degradation figure for at least two dry compounds to compare strategies — this weekend’s practice didn’t provide that.'); return; }
+    if (dryCount < 2){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('Not enough data', 'Need a modelled degradation figure for at least two dry compounds to compare strategies — this weekend’s practice didn’t provide that.'); return; }
     if (pit.seconds == null){ body.innerHTML = stateBox('No pit loss', 'Couldn’t estimate this weekend’s pit-stop time loss from practice, so race-time projections aren’t possible.'); return; }
     if (race.laps == null){ body.innerHTML = stateBox('Unknown race length', 'Couldn’t determine the race distance for this circuit, so strategy projections aren’t possible.'); return; }
 
