@@ -22,8 +22,8 @@ index.html              page shell markup, plus a #groups mount point
 style.css, script.js    page shell styles and render logic
 projects.json           the project list (edit this to update the page)
 pdf/                     PDF Merger tool, served at mohibb.com/pdf/
-pitwall/                 Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
-pitwall/analyse/         Pit Wall companion: completed-session analysis, at mohibb.com/pitwall/analyse/
+pitwall/                 Pit Wall · Analyse: completed-session analysis, served at mohibb.com/pitwall/
+pitwall/live/            Pit Wall companion: live F1 dashboard, at mohibb.com/pitwall/live/
 spotkick/                Spotkick penalty analytics, served at mohibb.com/spotkick/
 favicon.svg, robots.txt, sitemap.xml   shared static assets
 .github/workflows/validate.yml         CI checks (see Validation below)
@@ -70,43 +70,48 @@ domain needed.
 
 ## Pit Wall (mohibb.com/pitwall)
 
-`pitwall/` is a self-contained, client-side live F1 dashboard: `index.html`
-(markup) plus sibling `style.css`/`script.js` (Chart.js is the only external
-dependency, loaded from CDN). It shows what's happening in the current/most
-recent F1 session plus current-season
-standings, and an idle countdown to the next race when no session is live. When
-IDLE, it can show the results of the *previous* session behind a spoiler gate
-(hidden by default, with a reveal button; resets automatically when the session
-changes).
+`pitwall/` is a self-contained, client-side F1 session-analysis page:
+`index.html` (markup) plus sibling `style.css`/`script.js` (Chart.js is the
+only external dependency, loaded from CDN). It's the landing experience for
+digging into any *completed* session: theoretical best laps, qualifying
+potential, race lap charts (with an optional toggle to mark pit stops), tyre
+strategy, and long-run race pace, all built on OpenF1's historical data.
+Sections shown depend on the picked session's type (practice / qualifying /
+race) via `showView()`; a qualifying session further splits into a
+**Qualifying** tab (raw one-lap analysis) and a **Pre-Race** tab (the
+forward-looking predictors: race pace indicator, tyre degradation, strategy
+projection, estimated pit loss), toggled by `#viewTabs`.
 
-- Data: **OpenF1** (`api.openf1.org`) for live session data — polled every 3s
-  (`POLL_MS`) only while a session is LIVE, dropping to 15s (`POLL_ENDED_MS`)
-  once the session has ended but is still in its grace window, never while
-  IDLE. **Jolpica** (`api.jolpi.ca`, Ergast successor) for championship
-  standings + schedule: the schedule is fetched once on load / manual refresh,
-  while standings are re-polled every 5 min (`STANDINGS_POLL_MS`) while a
-  session is live. Jolpica is volunteer-run and rate-limited, so it's polled
-  at this slow cadence (not the live 3s cadence) and never faster.
-- Liveness: `sessions?session_key=latest` decides LIVE (now between
-  `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case and
-  is a designed screen (next-race countdown in Europe/Oslo time), not an error.
-- Design: dark "control-room" base, F1-red (`#E10600`) reserved for the live
-  pulse and fastest-stop highlight only. Shares the landing page's typography
-  (Plus Jakarta Sans + Newsreader italic) plus IBM Plex Mono for timing
-  numerals. All times shown in Europe/Oslo.
 - Served at `mohibb.com/pitwall/` as part of this same Pages deployment
   (output directory `/` includes `pitwall/`) — no separate project needed.
-- `pitwall/analyse/` is a companion page (own `index.html` +
-  `style.css`/`script.js`, shares the same design tokens and fonts) for
-  digging into any *completed* session:
-  theoretical best laps, qualifying potential, race lap charts (with an
-  optional toggle to mark pit stops), tyre strategy, and long-run race pace,
-  all built on OpenF1's historical data. Sections shown depend on the picked
-  session's type (practice / qualifying / race) via `showView()`; a qualifying
-  session further splits into a **Qualifying** tab (raw one-lap analysis) and a
-  **Pre-Race** tab (the forward-looking predictors: race pace indicator, tyre
-  degradation, strategy projection, estimated pit loss), toggled by `#viewTabs`.
-  Linked from Pit Wall and served at `mohibb.com/pitwall/analyse/`.
+- A "Live" button in the top nav links to `pitwall/live/`, a companion page
+  (own `index.html` + `style.css`/`script.js`, shares the same design tokens
+  and fonts) for the live F1 control-room dashboard. It shows what's
+  happening in the current/most recent F1 session plus current-season
+  standings, and an idle countdown to the next race when no session is live.
+  When IDLE, it can show the results of the *previous* session behind a
+  spoiler gate (hidden by default, with a reveal button; resets automatically
+  when the session changes).
+  - Data: **OpenF1** (`api.openf1.org`) for live session data — polled every
+    3s (`POLL_MS`) only while a session is LIVE, dropping to 15s
+    (`POLL_ENDED_MS`) once the session has ended but is still in its grace
+    window, never while IDLE. **Jolpica** (`api.jolpi.ca`, Ergast successor)
+    for championship standings + schedule: the schedule is fetched once on
+    load / manual refresh, while standings are re-polled every 5 min
+    (`STANDINGS_POLL_MS`) while a session is live. Jolpica is volunteer-run
+    and rate-limited, so it's polled at this slow cadence (not the live 3s
+    cadence) and never faster.
+  - Liveness: `sessions?session_key=latest` decides LIVE (now between
+    `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case
+    and is a designed screen (next-race countdown in Europe/Oslo time), not
+    an error.
+  - Design: dark "control-room" base, F1-red (`#E10600`) reserved for the
+    live pulse and fastest-stop highlight only. Shares the landing page's
+    typography (Plus Jakarta Sans + Newsreader italic) plus IBM Plex Mono for
+    timing numerals. All times shown in Europe/Oslo.
+  - Served at `mohibb.com/pitwall/live/` as part of this same Pages
+    deployment — no separate project needed. The old `/pitwall/analyse/` URL
+    is kept as a redirect stub to `/pitwall/` for old bookmarks/SEO.
 
 ## Spotkick (mohibb.com/spotkick)
 
@@ -172,7 +177,7 @@ but kept consistent across `index.html`, `pdf/`, and `pitwall/`:
   `--ink-2`/`--ink-3` (muted text), `--line`/`--line-soft` (borders),
   `--accent`/`--accent-ink` (#B4471F rust, used for highlights/links),
   `--live` (#2E6F4F, "Live" status green).
-- `pitwall/` and `pitwall/analyse/` extend this with `--bg-2`, `--card-2`,
+- `pitwall/` and `pitwall/live/` extend this with `--bg-2`, `--card-2`,
   `--ink-4`, status colors `--green`/`--yellow`/`--red`/`--blue`/`--sc`, and
   `--mono` (IBM Plex Mono).
 - Fonts (Google Fonts, loaded per-page): **Plus Jakarta Sans** for body/UI,
@@ -185,7 +190,7 @@ rather than reinventing values.
 ## Adding a new page
 
 Each page (`index.html`, `pdf/index.html`, `pitwall/index.html`,
-`pitwall/analyse/index.html`) repeats the same `<head>` boilerplate:
+`pitwall/live/index.html`) repeats the same `<head>` boilerplate:
 canonical `<link>`, Open Graph + Twitter meta tags, `theme-color`, favicon
 link, and an `application/ld+json` block. When adding a new top-level page:
 
@@ -208,7 +213,7 @@ package.json/lockfile needed — the site itself stays dependency-free):
   `stylelint-config-recommended`) against inline `<style>` blocks in
   `*.html` and all `*.css` files.
 - **accessibility**: `pa11y-ci` (WCAG2A, config in `.pa11yci.json`) against
-  the served site — currently `/`, `/pitwall/`, `/pitwall/analyse/`, `/pdf/`.
+  the served site — currently `/`, `/pitwall/`, `/pitwall/live/`, `/pdf/`.
 
 When adding a new top-level page, add its URL to `.pa11yci.json` so it's
 covered by the accessibility check.

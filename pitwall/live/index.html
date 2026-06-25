@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Pit Wall — a live F1 control-room dashboard. Race control, pit stops, overtakes, tyre strategy, weather, and championship standings in real time.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/pitwall/live/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Pit Wall — Live F1 Dashboard | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Pit Wall — Live F1 Dashboard">
+<meta property="og:description" content="A live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.">
+<meta property="og:url" content="https://mohibb.com/pitwall/live/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Pit Wall — Live F1 Dashboard">
+<meta name="twitter:description" content="A live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Pit Wall",
+  "url": "https://mohibb.com/pitwall/live/",
+  "description": "A live F1 control-room dashboard — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.",
+  "applicationCategory": "SportsApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <a class="back" href="/pitwall/">&larr; Analyse</a>
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<!-- sticky status bar -->
+<div class="statusbar" id="statusbar">
+  <div class="status-inner">
+    <div class="sb-session">
+      <span class="eyebrow" id="sbEyebrow">current session</span>
+      <span class="title" id="sbTitle">Connecting…</span>
+    </div>
+    <span class="sb-spacer"></span>
+    <span class="pill" id="sbState" title="Session status — whether an F1 session is running right now"><span class="dot"></span><span id="sbStateText">…</span></span>
+    <span class="pill flag-pill" id="sbFlag" title="Current track flag (green, yellow, red, safety car)" style="display:none"><span class="swatch"></span><span id="sbFlagText">—</span></span>
+    <div class="sb-meta">
+      <span class="upd">Updated <b id="sbUpdated">—</b> <span class="tz">Oslo</span></span>
+      <button class="refresh" id="refreshBtn" type="button" aria-label="Refresh data"><span class="ico">⟳</span> Refresh</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">A live pit-wall view of Formula 1</div>
+    <h1>Pit Wall.</h1>
+    <p class="lede">Race control, pit stops, overtakes, tyre strategy, weather and the championship &mdash; read straight from the live timing feeds while a session is green, and counting down to the next lights-out when it isn't.</p>
+  </div>
+
+  <!-- idle countdown hero -->
+  <div class="countdown" id="countdown" aria-live="polite">
+    <div class="cd-eyebrow">Next race · lights out in</div>
+    <div class="cd-race" id="cdRace">—</div>
+    <div class="cd-circuit" id="cdCircuit">—</div>
+    <div class="cd-when" id="cdWhen">—</div>
+    <div class="cd-clock" id="cdClock">
+      <div class="cd-unit"><div class="num" id="cdD">--</div><div class="lbl">Days</div></div>
+      <div class="cd-unit"><div class="num" id="cdH">--</div><div class="lbl">Hours</div></div>
+      <div class="cd-unit"><div class="num" id="cdM">--</div><div class="lbl">Mins</div></div>
+      <div class="cd-unit"><div class="num" id="cdS">--</div><div class="lbl">Secs</div></div>
+    </div>
+    <p class="cd-note">Live timing — race control, pit stops, overtakes, tyre strategy and weather — appears here automatically once the session goes green.</p>
+  </div>
+
+  <!-- live-but-locked notice (OpenF1 restricts real-time data to API key holders) -->
+  <div class="countdown" id="lockedNotice" aria-live="polite">
+    <div class="cd-eyebrow">Session live · real-time data restricted</div>
+    <div class="cd-race">A session is live right now.</div>
+    <div class="cd-circuit">OpenF1 restricts real-time access to API key holders while a session is in progress.</div>
+    <p class="cd-note">Race control, pit stops, overtakes, tyre strategy and weather can't be shown here until the session ends and OpenF1's live lock lifts — usually within a few minutes of the chequered flag.</p>
+  </div>
+
+  <!-- PREVIOUS SESSION (spoiler-gated) -->
+  <section class="section" id="sec-prev" style="display:none">
+    <div class="sec-head">
+      <span class="idx">&mdash;</span><span class="label">Previous Session</span>
+      <span class="note" id="prevNote"></span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel">
+      <div id="prevToggleBox" class="state">
+        <span class="badge">Spoiler</span>
+        <span class="msg" id="prevMsg">Results from the previous session are hidden.</span>
+      </div>
+      <div class="prev-toggle-wrap"><button class="refresh" id="prevToggleBtn" type="button">Reveal results</button></div>
+      <div id="prevBody" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- 1. STANDINGS -->
+  <section class="section" id="sec-standings">
+    <div class="sec-head">
+      <span class="idx">01</span><span class="label">Standings</span>
+      <span class="note" id="standingsNote"></span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel">
+      <div class="split" id="standingsBody">
+        <div class="state"><span class="badge">Loading</span><span class="msg">Fetching championship standings…</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. RACE CONTROL -->
+  <section class="section live-only" id="sec-rc" style="display:none">
+    <div class="sec-head">
+      <span class="idx">02</span><span class="label">Race Control</span>
+      <span class="note">official messages</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="rcBody"></div></div>
+  </section>
+
+  <!-- 3. PIT STOPS -->
+  <section class="section live-only" id="sec-pit" style="display:none">
+    <div class="sec-head">
+      <span class="idx">03</span><span class="label">Pit Stops</span>
+      <span class="note">ranked by stationary time</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="pitBody"></div></div>
+  </section>
+
+  <!-- 4. OVERTAKES -->
+  <section class="section live-only" id="sec-ot" style="display:none">
+    <div class="sec-head">
+      <span class="idx">04</span><span class="label">Overtakes</span>
+      <span class="note">on-track passes</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="otBody"></div></div>
+  </section>
+
+  <!-- 5. TYRE STRATEGY -->
+  <section class="section live-only" id="sec-stints" style="display:none">
+    <div class="sec-head">
+      <span class="idx">05</span><span class="label">Tyre Strategy</span>
+      <span class="note">stints by compound</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="stintsBody"></div></div>
+  </section>
+
+  <!-- 6. WEATHER -->
+  <section class="section live-only" id="sec-wx" style="display:none">
+    <div class="sec-head">
+      <span class="idx">06</span><span class="label">Weather</span>
+      <span class="note">trackside conditions</span>
+      <span class="rule"></span>
+    </div>
+    <div class="panel"><div id="wxBody"></div></div>
+  </section>
+
+  <footer>
+    <span class="credit">Pit Wall — built by Mohibb Malik, Oslo · 2026</span>
+    <span>Data: <a href="https://openf1.org" target="_blank" rel="noopener">OpenF1</a> · <a href="https://jolpi.ca" target="_blank" rel="noopener">Jolpica</a> · <a href="/">All projects</a></span>
+  </footer>
+
+</div>
+
+<script src="./script.js"></script>
+</body>
+</html>

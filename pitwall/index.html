@@ -4,42 +4,34 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Mohibb Malik">
-<meta name="description" content="Pit Wall — a live F1 control-room dashboard. Race control, pit stops, overtakes, tyre strategy, weather, and championship standings in real time.">
+<meta name="description" content="Pit Wall Analyse — dig into any completed F1 session: theoretical best laps, qualifying potential, race lap charts, tyre strategy, and a long-run race-pace indicator. Built on OpenF1's free historical data.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://mohibb.com/pitwall/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<title>Pit Wall — Live F1 Dashboard | Mohibb Malik</title>
+<title>Pit Wall · Analyse — F1 Session Analysis | Mohibb Malik</title>
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Mohibb Malik">
-<meta property="og:title" content="Pit Wall — Live F1 Dashboard">
-<meta property="og:description" content="A live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.">
+<meta property="og:title" content="Pit Wall · Analyse — F1 Session Analysis">
+<meta property="og:description" content="Dig into any completed F1 session: theoretical best laps, qualifying potential, race lap charts, tyre strategy, and a long-run race-pace indicator.">
 <meta property="og:url" content="https://mohibb.com/pitwall/">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Pit Wall — Live F1 Dashboard">
-<meta name="twitter:description" content="A live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.">
+<meta name="twitter:title" content="Pit Wall · Analyse — F1 Session Analysis">
+<meta name="twitter:description" content="Theoretical best laps, qualifying potential, race lap charts, tyre strategy and a long-run race-pace indicator — for any completed F1 session.">
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  "name": "Pit Wall",
+  "name": "Pit Wall · Analyse",
   "url": "https://mohibb.com/pitwall/",
-  "description": "A live F1 control-room dashboard — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.",
+  "description": "Analyse any completed F1 session — theoretical best laps, qualifying potential, race lap charts, tyre strategy and a long-run race-pace indicator.",
   "applicationCategory": "SportsApplication",
   "operatingSystem": "Any",
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD"
-  },
-  "author": {
-    "@type": "Person",
-    "name": "Mohibb Malik",
-    "url": "https://mohibb.com/"
-  }
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Mohibb Malik", "url": "https://mohibb.com/" }
 }
 </script>
 <meta name="theme-color" content="#EDE8DD">
@@ -55,146 +47,143 @@
 <div class="toprule">
   <a class="name" href="/">MOHIBB MALIK</a>
   <nav class="toprule-nav">
-    <a class="analyse-cta" href="/pitwall/analyse/" title="Analyse any completed F1 session — theoretical best laps, race history, tyre strategy and more">
-      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 14V9M7 14V3.5M12 14V7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      Analyse<span class="arr" aria-hidden="true">&rarr;</span>
+    <a class="live-cta" href="/pitwall/live/" title="Switch to the live F1 control-room dashboard — race control, pit stops, overtakes, tyre strategy and weather in real time">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="currentColor"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/></svg>
+      Live<span class="arr" aria-hidden="true">&rarr;</span>
     </a>
     <a class="back" href="/">All projects &rarr;</a>
   </nav>
 </div>
 
-<!-- sticky status bar -->
+<!-- sticky control bar: the session picker -->
 <div class="statusbar" id="statusbar">
   <div class="status-inner">
-    <div class="sb-session">
-      <span class="eyebrow" id="sbEyebrow">current session</span>
-      <span class="title" id="sbTitle">Connecting…</span>
+    <div class="controls">
+      <div class="ctrl"><label for="selYear">Season</label><select id="selYear" class="sel sel-year"></select></div>
+      <div class="ctrl"><label for="selMeeting">Grand Prix</label><select id="selMeeting" class="sel sel-meeting" disabled><option>—</option></select></div>
+      <div class="ctrl"><label for="selSession">Session</label><select id="selSession" class="sel sel-session" disabled><option>—</option></select></div>
     </div>
     <span class="sb-spacer"></span>
-    <span class="pill" id="sbState" title="Session status — whether an F1 session is running right now"><span class="dot"></span><span id="sbStateText">…</span></span>
-    <span class="pill flag-pill" id="sbFlag" title="Current track flag (green, yellow, red, safety car)" style="display:none"><span class="swatch"></span><span id="sbFlagText">—</span></span>
-    <div class="sb-meta">
-      <span class="upd">Updated <b id="sbUpdated">—</b> <span class="tz">Oslo</span></span>
-      <button class="refresh" id="refreshBtn" type="button" aria-label="Refresh data"><span class="ico">⟳</span> Refresh</button>
-    </div>
+    <button class="refresh" id="refreshBtn" type="button" aria-label="Reload this session"><span class="ico">⟳</span> Reload</button>
   </div>
 </div>
 
 <div class="wrap">
 
   <div class="intro">
-    <div class="eyebrow">A live pit-wall view of Formula 1</div>
-    <h1>Pit Wall.</h1>
-    <p class="lede">Race control, pit stops, overtakes, tyre strategy, weather and the championship &mdash; read straight from the live timing feeds while a session is green, and counting down to the next lights-out when it isn't.</p>
+    <div class="eyebrow">Pit Wall · the analysis bay</div>
+    <h1>Analyse.</h1>
+    <p class="lede">Pick any completed session from any race weekend and read what the timing data says &mdash; theoretical best laps, qualifying potential, race lap charts, tyre strategy, and a long-run race-pace indicator. All from F1's free historical feeds.</p>
   </div>
 
-  <!-- idle countdown hero -->
-  <div class="countdown" id="countdown" aria-live="polite">
-    <div class="cd-eyebrow">Next race · lights out in</div>
-    <div class="cd-race" id="cdRace">—</div>
-    <div class="cd-circuit" id="cdCircuit">—</div>
-    <div class="cd-when" id="cdWhen">—</div>
-    <div class="cd-clock" id="cdClock">
-      <div class="cd-unit"><div class="num" id="cdD">--</div><div class="lbl">Days</div></div>
-      <div class="cd-unit"><div class="num" id="cdH">--</div><div class="lbl">Hours</div></div>
-      <div class="cd-unit"><div class="num" id="cdM">--</div><div class="lbl">Mins</div></div>
-      <div class="cd-unit"><div class="num" id="cdS">--</div><div class="lbl">Secs</div></div>
+  <!-- selected-session banner -->
+  <div class="sessbar" id="sessbar" style="display:none">
+    <div class="meta">
+      <span class="gp" id="sbGp">—</span>
+      <span class="sub" id="sbSub">—</span>
     </div>
-    <p class="cd-note">Live timing — race control, pit stops, overtakes, tyre strategy and weather — appears here automatically once the session goes green.</p>
+    <button class="copylink" id="copyLink" type="button" title="Copy a shareable link to this exact session">Copy link</button>
+    <span class="typepill" id="sbType">—</span>
   </div>
 
-  <!-- live-but-locked notice (OpenF1 restricts real-time data to API key holders) -->
-  <div class="countdown" id="lockedNotice" aria-live="polite">
-    <div class="cd-eyebrow">Session live · real-time data restricted</div>
-    <div class="cd-race">A session is live right now.</div>
-    <div class="cd-circuit">OpenF1 restricts real-time access to API key holders while a session is in progress.</div>
-    <p class="cd-note">Race control, pit stops, overtakes, tyre strategy and weather can't be shown here until the session ends and OpenF1's live lock lifts — usually within a few minutes of the chequered flag.</p>
+  <!-- global notice (future session / load problems) -->
+  <div class="notice" id="notice" aria-live="polite">
+    <div class="nt-eyebrow" id="ntEyebrow">Heads up</div>
+    <div class="nt-title" id="ntTitle">—</div>
+    <div class="nt-body" id="ntBody">—</div>
   </div>
 
-  <!-- PREVIOUS SESSION (spoiler-gated) -->
-  <section class="section" id="sec-prev" style="display:none">
-    <div class="sec-head">
-      <span class="idx">&mdash;</span><span class="label">Previous Session</span>
-      <span class="note" id="prevNote"></span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel">
-      <div id="prevToggleBox" class="state">
-        <span class="badge">Spoiler</span>
-        <span class="msg" id="prevMsg">Results from the previous session are hidden.</span>
-      </div>
-      <div class="prev-toggle-wrap"><button class="refresh" id="prevToggleBtn" type="button">Reveal results</button></div>
-      <div id="prevBody" style="display:none"></div>
-    </div>
-  </section>
+  <div id="sections">
 
-  <!-- 1. STANDINGS -->
-  <section class="section" id="sec-standings">
-    <div class="sec-head">
-      <span class="idx">01</span><span class="label">Standings</span>
-      <span class="note" id="standingsNote"></span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel">
-      <div class="split" id="standingsBody">
-        <div class="state"><span class="badge">Loading</span><span class="msg">Fetching championship standings…</span></div>
-      </div>
-    </div>
-  </section>
+    <!-- QUALIFYING weekend: tab switch between session analysis and pre-race predictors -->
+    <div id="viewTabs" class="view-tabs" style="display:none"></div>
 
-  <!-- 2. RACE CONTROL -->
-  <section class="section live-only" id="sec-rc" style="display:none">
-    <div class="sec-head">
-      <span class="idx">02</span><span class="label">Race Control</span>
-      <span class="note">official messages</span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel"><div id="rcBody"></div></div>
-  </section>
+    <!-- RACE: shared Top-N driver filter (controls every race chart at once) -->
+    <div id="raceTopBar" class="race-topbar" style="display:none"></div>
 
-  <!-- 3. PIT STOPS -->
-  <section class="section live-only" id="sec-pit" style="display:none">
-    <div class="sec-head">
-      <span class="idx">03</span><span class="label">Pit Stops</span>
-      <span class="note">ranked by stationary time</span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel"><div id="pitBody"></div></div>
-  </section>
+    <!-- PRACTICE: theoretical best lap -->
+    <section class="section view-practice" id="sec-theoretical" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Theoretical Best Lap</span><span class="note">fastest sectors, summed</span><span class="rule"></span></div>
+      <div class="panel"><div id="theoreticalBody"></div></div>
+    </section>
 
-  <!-- 4. OVERTAKES -->
-  <section class="section live-only" id="sec-ot" style="display:none">
-    <div class="sec-head">
-      <span class="idx">04</span><span class="label">Overtakes</span>
-      <span class="note">on-track passes</span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel"><div id="otBody"></div></div>
-  </section>
+    <!-- PRACTICE: long-run pace -->
+    <section class="section view-practice" id="sec-longrun" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Long-Run Pace</span><span class="note">race-sim stints, median lap</span><span class="rule"></span></div>
+      <div class="panel"><div id="longrunBody"></div></div>
+    </section>
 
-  <!-- 5. TYRE STRATEGY -->
-  <section class="section live-only" id="sec-stints" style="display:none">
-    <div class="sec-head">
-      <span class="idx">05</span><span class="label">Tyre Strategy</span>
-      <span class="note">stints by compound</span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel"><div id="stintsBody"></div></div>
-  </section>
+    <!-- QUALIFYING: pace ranking -->
+    <section class="section view-qualifying" id="sec-qpace" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Qualifying Pace</span><span class="note">best lap, ranked</span><span class="rule"></span></div>
+      <div class="panel"><div id="qpaceBody"></div></div>
+    </section>
 
-  <!-- 6. WEATHER -->
-  <section class="section live-only" id="sec-wx" style="display:none">
-    <div class="sec-head">
-      <span class="idx">06</span><span class="label">Weather</span>
-      <span class="note">trackside conditions</span>
-      <span class="rule"></span>
-    </div>
-    <div class="panel"><div id="wxBody"></div></div>
-  </section>
+    <!-- QUALIFYING: vs practice theoretical -->
+    <section class="section view-qualifying" id="sec-qtheo" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Quali vs Practice Potential</span><span class="note">who maximised it?</span><span class="rule"></span></div>
+      <div class="panel"><div id="qtheoBody"></div></div>
+    </section>
+
+    <!-- QUALIFYING: race pace indicator -->
+    <section class="section view-qualifying" id="sec-rpi" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Race Pace Indicator</span><span class="note">informational, not a prediction</span><span class="rule"></span></div>
+      <div class="panel"><div id="rpiBody"></div></div>
+    </section>
+
+    <!-- QUALIFYING: tyre degradation model (from practice long runs) -->
+    <section class="section view-qualifying" id="sec-tyredeg" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Tyre Degradation</span><span class="note">pace loss per lap, by compound</span><span class="rule"></span></div>
+      <div class="panel"><div id="tyredegBody"></div></div>
+    </section>
+
+    <!-- QUALIFYING: stint / stop-count strategy optimiser -->
+    <section class="section view-qualifying" id="sec-strategysim" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Strategy Projection</span><span class="note">one-stop vs two-stop · informational</span><span class="rule"></span></div>
+      <div class="panel"><div id="strategysimBody"></div></div>
+    </section>
+
+    <!-- RACE: race-history trace (gap to a reference car) — the headline race view -->
+    <section class="section view-race" id="sec-history" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Race History</span><span class="note">gap to a reference car · above = ahead</span><span class="rule"></span></div>
+      <div class="panel"><div id="historyBody"></div></div>
+    </section>
+
+    <!-- RACE: tyre strategy + pit stops -->
+    <section class="section view-race" id="sec-strategy" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Tyre Strategy &amp; Pit Stops</span><span class="note">stints by compound</span><span class="rule"></span></div>
+      <div class="panel"><div id="strategyBody"></div></div>
+    </section>
+
+    <!-- RACE: position over time -->
+    <section class="section view-race" id="sec-position" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Position Changes</span><span class="note">race order over time</span><span class="rule"></span></div>
+      <div class="panel"><div id="positionBody"></div></div>
+    </section>
+
+    <!-- QUALIFYING / RACE: car performance ratings -->
+    <section class="section view-qualifying view-race" id="sec-carperf" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Car Performance</span><span class="note">acceleration, top speed, cornering &amp; strength</span><span class="rule"></span></div>
+      <div class="panel"><div id="carperfBody"></div></div>
+    </section>
+
+    <!-- RACE: lap chart (detail view, kept last) -->
+    <section class="section view-race" id="sec-lapchart" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Lap Times</span><span class="note">per lap · pit laps ringed</span><span class="rule"></span></div>
+      <div class="panel"><div id="lapchartBody"></div></div>
+    </section>
+
+    <!-- PRACTICE / QUALIFYING: weekend pit-loss estimate (rendered last in both views) -->
+    <section class="section view-practice view-qualifying" id="sec-pitloss" style="display:none">
+      <div class="sec-head"><span class="idx"></span><span class="label">Estimated Pit Loss</span><span class="note">from practice in/out-laps</span><span class="rule"></span></div>
+      <div class="panel"><div id="pitlossBody"></div></div>
+    </section>
+
+  </div>
 
   <footer>
     <span class="credit">Pit Wall — built by Mohibb Malik, Oslo · 2026</span>
-    <span>Data: <a href="https://openf1.org" target="_blank" rel="noopener">OpenF1</a> · <a href="https://jolpi.ca" target="_blank" rel="noopener">Jolpica</a> · <a href="/">All projects</a></span>
+    <span>Data: <a href="https://openf1.org" target="_blank" rel="noopener">OpenF1</a> · <a href="/pitwall/">Live Pit Wall</a> · <a href="/">All projects</a></span>
   </footer>
 
 </div>
