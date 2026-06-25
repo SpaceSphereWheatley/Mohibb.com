@@ -519,11 +519,11 @@ function sessionKind(s){
 function isSprintWeekend(){
   return state.sessions.some(s => /sprint/i.test(`${s?.session_name || ''} ${s?.session_type || ''}`));
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
   qualifying: ['sec-qpace','sec-qtheo','sec-carperf'],                    // raw quali-session analysis
-  prerace:    ['sec-rpi','sec-tyredeg','sec-strategysim','sec-pitloss'],  // forward-looking race predictors
+  prerace:    ['sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-pitloss'],  // forward-looking race predictors
   race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
 // the qualifying weekend offers two tabs; the rest are single-view
@@ -590,6 +590,7 @@ function dispatchView(view, s, session_key){
     renderRPI(s);
     renderTyreDeg(s);
     renderStrategySim(s);
+    renderUndercut(s);
     renderPitLoss();
   } else {
     renderLapChart(session_key);
@@ -1126,6 +1127,43 @@ async function renderStrategySim(qSession, attempt=0){
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note"><b>Informational, not a prediction.</b> ${verdict} A toy what-if over <b>${race.laps} laps</b>${srcNote}: it projects total race time from this weekend’s modelled tyre degradation and a <b>${pit.seconds.toFixed(1)}s</b> pit loss, then searches stop laps for the quickest one- and two-stop plans (dry compounds only, respecting the two-compound rule). It ignores safety cars, traffic, tyre warm-up, fuel saving, track temperature and weather — all of which routinely decide real strategy — and assumes practice pace carries to Sunday. Compound base paces come from practice runs at unknown fuel, so cross-compound gaps are rough. Read it as a sanity check on stop count, not a strategy call.</div>`;
   } catch (e){ panelRetry('strategy sim', e, body, attempt, () => renderStrategySim(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t project strategies.', 'error')); }
+}
+
+/* ---------- PRE-RACE: undercut / overcut calculator ---------- */
+const OUTLAP_PENALTY_S = 1.2;   // assumed pace lost warming a fresh tyre on the out-lap (cold tyres + pit exit), s
+// Per-compound undercut economics from the deg model. The undercut gains, per lap, the gap between a
+// rival's worn-tyre pace (≈ deg × their tyre age) and your fresh-but-cold out-lap (the out-lap penalty);
+// the overcut is the mirror, favoured while the rival's tyres are younger than the break-even age.
+function undercutModel(model){
+  return model.filter(m => DRY_COMPOUNDS.includes(m.compound))
+    .map(m => ({
+      compound: m.compound,
+      deg: m.degRate,
+      breakeven: m.degRate > 0 ? OUTLAP_PENALTY_S / m.degRate : null,   // rival tyre age (laps) where the undercut turns net-positive
+      swing15: m.degRate * 15 - OUTLAP_PENALTY_S,                       // net seconds gained vs a rival 15 laps into a stint
+    }))
+    .sort((a,b)=> (a.breakeven==null) - (b.breakeven==null) || (a.breakeven - b.breakeven));  // most undercut-friendly first
+}
+async function renderUndercut(qSession, attempt=0){
+  const body = $('undercutBody'); if (!body) return;
+  body.innerHTML = loadingBox('Working out undercut vs overcut economics…');
+  try {
+    const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no degradation model to work undercut economics from.'); return; }
+    const { model } = await practiceDegModel();
+    const rows = undercutModel(model);
+    if (!rows.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No long runs', 'No dry-compound degradation could be modelled from this weekend’s practice long runs, so undercut economics aren’t available.'); return; }
+
+    body.innerHTML = `<div class="tbl-scroll"><table class="tbl">
+      <thead><tr><th>Tyre</th><th class="tar">Deg</th><th class="tar">Undercut from</th><th class="tar">Swing @15 laps</th></tr></thead>
+      <tbody>${rows.map((r,i)=> `<tr class="${i===0?'best':''}" style="--team:${compoundColour(r.compound)}">
+        <td>${compoundTag(r.compound)}</td>
+        <td class="num tar"><b>${fmtDeg(r.deg)}</b><span class="muted"> s/lap</span></td>
+        <td class="num tar">${r.breakeven!=null ? '~'+Math.round(r.breakeven)+'-lap tyre' : '—'}</td>
+        <td class="num tar ${r.swing15>=0?'':'muted'}">${r.swing15>=0?'+':'−'}${Math.abs(r.swing15).toFixed(2)}s</td>
+      </tr>`).join('')}</tbody></table></div>
+      <div class="panel-note"><b>Informational, not a prediction.</b> The <b>undercut</b> — pitting before a rival — gains, each lap, the gap between their worn-tyre pace (about deg × their tyre age) and the pace you give up warming a fresh tyre on the out-lap (assumed ${OUTLAP_PENALTY_S.toFixed(1)}s). <b>Undercut from</b> is the rival tyre age past which it nets time; while their tyres are younger than that, the <b>overcut</b> (staying out as they warm cold tyres) is the better play. <b>Swing @15 laps</b> is the net gain against a rival 15 laps into a stint. A single-lap toy off practice deg: it ignores that a real undercut also banks the rival’s slow in-lap, plus traffic, dirty air and tyre temperature — read it as which compounds make the undercut bite, not a stopwatch.</div>`;
+  } catch (e){ panelRetry('undercut', e, body, attempt, () => renderUndercut(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t work out undercut economics. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- QUALIFYING / RACE: car performance (acceleration, top speed, cornering, strength) ---------- */
