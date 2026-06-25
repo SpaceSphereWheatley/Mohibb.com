@@ -38,6 +38,7 @@ const state = {
   renderGen: 0,          // bumped per session load; a scheduled panel retry aborts if it changed
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
   pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
+  degModel: null,        // {meeting, model, practiceCount} pooled-practice tyre-deg model, memoised per meeting
   carPerf: { mode: 'driver', topN: 5, trim: 'race' },  // car-performance panel controls
   carPerfCtx: null,      // computed traits/strengths for the current session, redrawn on toggle
 };
@@ -316,27 +317,30 @@ function stintsLookComplete(byDrv, lastLapOf){
 }
 
 // Per-stint clean-lap series, the shared basis for long-run pace and tyre-deg modelling.
-// For each driver's stint of >=5 clean laps (not out-laps, within 107% of the stint's quickest),
-// returns one run with its lap-in-stint series: [{ driver, compound, startLap, points:[{x:lapInStint, t}] }].
-// x is 1-based laps into the stint, so a fit's slope is the lap-time trend per lap of tyre life.
+// Stints come from reconstructStints(), so duplicate rows are merged and a final stint with a
+// null lap_end (common in OpenF1's feed, and often exactly where the race-sim long run lives) is
+// closed at the driver's last lap rather than dropped. For each stint of >=5 clean laps (not
+// out-laps, within 107% of the stint's quickest) returns one run with its lap-in-stint series:
+// [{ driver, compound, startLap, points:[{x:lapInStint, t}] }]. x is 1-based laps into the stint,
+// so a fit's slope is the lap-time trend per lap of tyre life.
 function stintRuns(laps, stints){
   const lapsByDrv = groupByDriver(laps);
   const stintsByDrv = groupByDriver(stints);
   const runs = [];
   Object.keys(stintsByDrv).map(Number).forEach(n => {
     const dl = lapsByDrv[n] || [];
-    stintsByDrv[n].forEach(st => {
-      const ls = num(st.lap_start), le = num(st.lap_end);
-      if (ls==null || le==null) return;
+    let lastLap = null;
+    for (const l of dl){ const v = num(l.lap_number); if (v!=null && (lastLap==null || v>lastLap)) lastLap = v; }
+    reconstructStints(stintsByDrv[n], lastLap).forEach(st => {
       const inStint = dl.filter(l => {
         const ln = num(l.lap_number);
-        return ln!=null && ln>=ls && ln<=le && !l.is_pit_out_lap && num(l.lap_duration)!=null && num(l.lap_duration)>0;
-      }).map(l => ({ x: num(l.lap_number) - ls + 1, t: num(l.lap_duration) }));
+        return ln!=null && ln>=st.start && ln<=st.end && !l.is_pit_out_lap && num(l.lap_duration)!=null && num(l.lap_duration)>0;
+      }).map(l => ({ x: num(l.lap_number) - st.start + 1, t: num(l.lap_duration) }));
       if (inStint.length < 5) return;
       const fastest = Math.min(...inStint.map(p => p.t));
       const points = inStint.filter(p => p.t <= fastest * PACE_WINDOW);
       if (points.length < 5) return;                // not enough representative green-flag laps
-      runs.push({ driver: n, compound: normCompound(st.compound), startLap: ls, points });
+      runs.push({ driver: n, compound: st.cmp, startLap: st.start, points });
     });
   });
   return runs;
@@ -868,25 +872,34 @@ function rankMap(entries){
 }
 
 /* ---------- QUALIFYING: tyre-degradation model ---------- */
-// the practice session teams run race sims in: FP2, then FP3, then FP1 (mirrors the Race Pace Indicator)
-function longRunSource(){
+// Pool race-sim long runs from EVERY practice session this weekend and model per-compound tyre deg.
+// Lap and stint numbers reset per session, so runs are built per session and concatenated — laps are
+// never flattened across sessions. Memoised per meeting on state. Also feeds the strategy optimiser.
+async function practiceDegModel(){
+  const mk = state.session?.meeting_key ?? null;
+  if (state.degModel && state.degModel.meeting === mk) return state.degModel;
   const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
-  const byName = (frag) => practice.find(s => (s.session_name||'').toLowerCase().includes(frag));
-  return byName('practice 2') || byName('practice 3') || byName('practice 1') || practice[practice.length-1] || null;
+  const runs = [];
+  for (const s of practice){
+    let laps, stints;
+    try { [laps, stints] = await Promise.all([ fetchLaps(s.session_key), fetchStints(s.session_key) ]); }
+    catch (e){ logError('deg fetch ' + s.session_key, e); continue; }
+    runs.push(...stintRuns(laps, stints));
+  }
+  state.degModel = { meeting: mk, model: tyreDegModel(runs), practiceCount: practice.length };
+  return state.degModel;
 }
 async function renderTyreDeg(qSession, attempt=0){
   const body = $('tyredegBody'); if (!body) return;
   body.innerHTML = loadingBox('Modelling tyre degradation from practice long runs…');
   try {
-    const src = longRunSource();
-    if (!src){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from (common for sprint weekends).'); return; }
-    const [laps, stints] = await Promise.all([ fetchLaps(src.session_key), fetchStints(src.session_key) ]);
-    const model = tyreDegModel(stintRuns(laps, stints));
-    if (!model.length){ body.innerHTML = stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found in practice, so degradation can’t be modelled for this weekend.'); return; }
+    const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
+    if (!practice.length){ body.innerHTML = stateBox('No practice', 'No practice sessions for this weekend in the data, so there are no long runs to model tyre degradation from (common for sprint weekends).'); return; }
+    const { model } = await practiceDegModel();
+    if (!model.length){ body.innerHTML = stateBox('No long runs', 'No stint of 5+ clean laps on a known compound was found across this weekend’s practice sessions, so degradation can’t be modelled — common on sprint weekends or when practice was wet or red-flagged.'); return; }
 
-    const lrLabel = esc(src.session_name || 'practice');
     body.innerHTML = `${tyreDegTable(model)}<div class="chart-box" style="height:340px"><canvas id="tyredegCanvas"></canvas></div>
-      <div class="panel-note"><b>Informational, not a prediction.</b> Each compound’s lap-time trend through a stint, fitted from race-sim long runs in ${lrLabel} and corrected for fuel burn (assumed ${FUEL_S_PER_LAP.toFixed(3)}s/lap), to isolate tyre wear. <b>Deg</b> is the resulting pace loss per lap; <b>base pace</b> is a typical long-run lap. Pooled across drivers, so the vertical scatter mixes car pace — it’s the slope that matters. Practice fuel loads, track evolution and traffic all add noise, so read it as a guide to which tyres drop off fastest, not a stopwatch.</div>`;
+      <div class="panel-note"><b>Informational, not a prediction.</b> Each compound’s lap-time trend through a stint, fitted from race-sim long runs across all of this weekend’s practice sessions and corrected for fuel burn (assumed ${FUEL_S_PER_LAP.toFixed(3)}s/lap), to isolate tyre wear. <b>Deg</b> is the resulting pace loss per lap; <b>base pace</b> is a typical long-run lap. Pooled across drivers and sessions, so the vertical scatter mixes car pace and track evolution — it’s the slope that matters. Practice fuel loads and traffic add noise, so read it as a guide to which tyres drop off fastest, not a stopwatch.</div>`;
     drawTyreDegChart(model);
   } catch (e){ panelRetry('tyre-deg', e, body, attempt, () => renderTyreDeg(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t model tyre degradation. Tap Reload to retry.', 'error')); }
 }
@@ -1731,6 +1744,7 @@ async function reload(){
     // also clear sibling practice/quali caches that the quali views pull in
     state.sessions.forEach(s => clearSessionCache(s.session_key));
     state.pitLoss = null;   // recompute the weekend pit-loss estimate from fresh data
+    state.degModel = null;  // recompute the pooled-practice tyre-deg model from fresh data
   } catch {}
   if (state.session) await onSessionChange();
   else await onYearChange();
