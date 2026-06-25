@@ -5,8 +5,8 @@
       "items": [
         {
           "name": "Pit Wall",
-          "category": "Live timing · lite",
-          "description": "A lightweight, live F1 control-room feed — race control, pit stops, overtakes, tyre strategy, weather, and championship standings, in real time.",
+          "category": "Session analysis · live timing",
+          "description": "Dig into any completed F1 session — theoretical best laps, race history, tyre strategy and more — or switch to the live control-room feed while a session is green.",
           "url": "/pitwall/",
           "status": "live"
         },

@@ -12,8 +12,8 @@
   </url>
   <url>
     <loc>https://mohibb.com/pitwall/</loc>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://mohibb.com/pitstop/</loc>
@@ -21,9 +21,9 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://mohibb.com/pitwall/analyse/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://mohibb.com/pitwall/live/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://mohibb.com/spotkick/</loc>

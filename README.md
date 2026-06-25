@@ -9,8 +9,8 @@ mohibb-home/
   index.html      page shell + render logic
   projects.json   the project list (edit this to update the page)
   pdf/            PDF Merger tool, served at mohibb.com/pdf/
-  pitwall/        Pit Wall live F1 dashboard, served at mohibb.com/pitwall/
-  pitwall/analyse/  Completed-session analysis, at mohibb.com/pitwall/analyse/
+  pitwall/        Pit Wall · Analyse: completed-session analysis, at mohibb.com/pitwall/
+  pitwall/live/   Live F1 dashboard, served at mohibb.com/pitwall/live/
   spotkick/       Spotkick penalty analytics, served at mohibb.com/spotkick/
   README.md
 ```
@@ -71,11 +71,13 @@ the browser.
 Lives in `pitwall/` and is served at `mohibb.com/pitwall/` as part of this
 same Pages deployment — no separate project or domain needed.
 
-A self-contained, client-side live F1 dashboard (Chart.js from CDN is the only
-external dependency). It shows the current/most recent session plus season
-standings, with an idle next-race countdown when no session is live. Data comes
-from OpenF1 (live session data) and Jolpica (standings + schedule). A companion
-"Analyse" page (`pitwall/analyse/`) digs into any completed session.
+A self-contained, client-side session-analysis tool (Chart.js from CDN is the
+only external dependency) for digging into any completed F1 session —
+theoretical best laps, qualifying potential, race lap charts, tyre strategy
+and long-run race pace. A companion live dashboard (`pitwall/live/`) shows the
+current/most recent session plus season standings, with an idle next-race
+countdown when no session is live. Data comes from OpenF1 (live session data
+and historical session data) and Jolpica (standings + schedule).
 
 ### Spotkick (mohibb.com/spotkick)
 

@@ -1,47 +1,83 @@
-# Pit Wall
+# Pit Wall · Analyse
 
-A self-contained, client-side live F1 dashboard, served as part of the
-mohibb.com Cloudflare Pages deployment at `mohibb.com/pitwall/`.
+The Pit Wall landing page — dig into any *completed* F1 session. Served at
+`mohibb.com/pitwall/` as part of the Cloudflare Pages deployment. A "Live"
+button links to the companion [live dashboard](live/README.md) at
+`mohibb.com/pitwall/live/`.
 
 ## How it works
 
-A single `index.html` (Chart.js from CDN is the only external dependency). It
-shows what's happening in the current/most recent session plus current-season
-standings, and an idle countdown to the next race when no session is live.
-When idle, it can show the results of the *previous* session behind a spoiler
-gate (hidden by default, with a reveal button; resets when the session
-changes).
+A single `index.html` (Chart.js from CDN is the only external dependency).
+Pick a season, Grand Prix and session from the sticky picker; the page fetches
+[OpenF1](https://api.openf1.org)'s historical endpoints (`laps`, `stints`,
+`pit`, `position`, `drivers`, `race_control`, `car_data`) for that
+`session_key` and renders the relevant analysis below. Completed sessions
+never change, so every response is cached in `sessionStorage` — switching
+back and forth between sessions doesn't re-fetch. The current selection is
+encoded in the URL hash so it can be bookmarked/shared (Copy link).
 
-- **Live data**: [OpenF1](https://api.openf1.org) (`api.openf1.org`), polled
-  every 3s (`POLL_MS`) while a session is live, dropping to 15s
-  (`POLL_ENDED_MS`) once the session has ended but is still in its grace
-  window, never while idle.
-- **Standings + schedule**: [Jolpica](https://api.jolpi.ca) (Ergast
-  successor) — the schedule is fetched once on load/manual refresh, while
-  standings are re-polled every 5 min (`STANDINGS_POLL_MS`) while a session is
-  live. Jolpica is volunteer-run and rate-limited, so it's polled at this slow
-  cadence and never faster.
-- **Liveness**: `sessions?session_key=latest` decides LIVE (now between
-  `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case and
-  is a designed screen (next-race countdown in Europe/Oslo time), not an
-  error.
+OpenF1's historical data starts in 2023 (`FIRST_YEAR`). Sessions that
+haven't finished yet show a "not finished" notice instead — head to the
+[live dashboard](/pitwall/live/) for those.
 
-## Project layout
+## Sections, by session type
 
-```
-pitwall/
-  index.html        live dashboard (this page)
-  analyse/          companion page for completed-session analysis
-```
+**Practice**
+- **Theoretical Best Lap** — each driver's quickest sector 1/2/3 summed, vs
+  their actual best lap ("left on table").
+- **Long-Run Pace** — best race-sim stint (5+ laps on one compound, median of
+  laps within 107% of the stint's quickest), a directional race-pace guide.
 
-## Design
+**Qualifying**
+- **Qualifying Pace** — best lap per driver, ranked, gap to pole.
+- **Quali vs Practice Potential** — quali best vs theoretical best across all
+  of practice; who found time / left it on the table.
+- **Race Pace Indicator** — blends qualifying rank with long-run pace rank
+  from practice (informational, not a prediction).
+- **Car Performance** — see below.
 
-Dark "control-room" base, F1-red (`#E10600`) reserved for the live pulse and
-fastest-stop highlight only. Shares the landing page's typography (Plus
-Jakarta Sans + Newsreader italic) plus IBM Plex Mono for timing numerals. All
-times shown in Europe/Oslo. `:root` CSS custom properties extend the shared
-landing-page tokens with `--bg-2`, `--card-2`, `--ink-4`, status colors
-(`--green`/`--yellow`/`--red`/`--blue`/`--sc`), and `--mono`.
+**Race**
+- **Race History** — cumulative gap to a reference car (default: the winner),
+  lap by lap, with Safety Car/VSC shading and pit markers.
+- **Tyre Strategy & Pit Stops** — stint bars by compound, pit stops ranked by
+  time.
+- **Position Changes** — track position over elapsed time.
+- **Car Performance** — see below.
+- **Lap Times** — lap time per lap per driver, pit laps ringed.
+
+**Practice + Qualifying**
+- **Estimated Pit Loss** — weekend-level estimate (median of clean practice
+  in/out-lap pairs vs green-lap pace).
+
+A shared **Top-N** filter (Top 3/6/8/All) and **pit-stop marker** toggle apply
+to every race chart at once.
+
+## Car Performance
+
+Acceleration, top speed, and slow/medium/fast cornering speed, plus a
+qualifying/race "strength" ranking — all **0–100 and relative to this
+session's field**, not absolute or cross-circuit numbers.
+
+- **Traits** (acceleration, top speed, cornering) come from one representative
+  lap per driver — their fastest clean lap of the session — via OpenF1's
+  `car_data` telemetry (~3.7Hz speed trace), fetched only for that lap's time
+  window to keep requests small. The speed trace is smoothed, corners are
+  detected as local minima that drop at least `CORNER_DROP_KMH` from the
+  preceding peak, and bucketed by exit speed: under `CORNER_SLOW_MAX` (120
+  km/h) = slow, up to `CORNER_FAST_MIN` (200 km/h) = medium, above = fast.
+  Acceleration is the average speed gained in the `ACCEL_WINDOW_S` (2s) after
+  each corner exit.
+- **Strength** is Qualifying Strength (best lap vs pole) in the qualifying
+  view, or Race Strength (best race-sim stint, i.e. long-run pace) in the race
+  view.
+- **Driver / Team toggle** — Team mode averages each driver's raw values
+  across their team before scaling.
+- **Top-N toggle** (Top 5/10/All) — radar charts get unreadable past a
+  handful of overlapping polygons, so it defaults to the top 5 by strength.
+- **Race / Quali trim toggle** (race view only) — if you've visited
+  qualifying for the same weekend earlier in the browser session, its
+  car-trait traits are cached (`sessionStorage`, keyed by `meeting_key`) so
+  the race view can toggle between "race trim" and "quali trim" telemetry.
 
 ## Run locally
 
@@ -52,10 +88,3 @@ npx serve .
 ```
 
 Then open `/pitwall/`.
-
-## Analyse (mohibb.com/pitwall/analyse)
-
-`analyse/` is a companion page for digging into any *completed* session:
-theoretical best laps, qualifying potential, race lap charts, tyre strategy,
-long-run race pace, and car performance ratings — all built on OpenF1's
-historical data. See `analyse/README.md`.
