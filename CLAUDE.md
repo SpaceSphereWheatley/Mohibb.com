@@ -101,8 +101,12 @@ changes).
   digging into any *completed* session:
   theoretical best laps, qualifying potential, race lap charts (with an
   optional toggle to mark pit stops), tyre strategy, and long-run race pace,
-  all built on OpenF1's historical data. Linked from Pit Wall and served at
-  `mohibb.com/pitwall/analyse/`.
+  all built on OpenF1's historical data. Sections shown depend on the picked
+  session's type (practice / qualifying / race) via `showView()`; a qualifying
+  session further splits into a **Qualifying** tab (raw one-lap analysis) and a
+  **Pre-Race** tab (the forward-looking predictors: race pace indicator, tyre
+  degradation, strategy projection, estimated pit loss), toggled by `#viewTabs`.
+  Linked from Pit Wall and served at `mohibb.com/pitwall/analyse/`.
 
 ## Spotkick (mohibb.com/spotkick)
 

@@ -43,6 +43,10 @@ a{color:inherit;}
 .refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--card-2);}
 .refresh .ico{display:inline-block;transition:transform .5s ease;}
 .refresh.spin .ico{transform:rotate(360deg);}
+/* per-section Retry button, shown inside a panel's failure box */
+.retry-row{padding:0 24px 24px;}
+.sec-retry{display:inline-flex;align-items:center;gap:6px;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--accent);background:var(--card);border:1.5px solid var(--accent);border-radius:999px;padding:6px 13px;cursor:pointer;transition:background .15s,color .15s;}
+.sec-retry:hover{background:var(--accent);color:var(--card);}
 
 /* ---------- hero / intro ---------- */
 .intro{padding:50px 0 8px;max-width:680px;}
@@ -125,6 +129,9 @@ tr.best .code{color:var(--accent-ink);}
 .seg button+button{border-left:1.5px solid var(--line);}
 .seg button.active{background:var(--ink);color:var(--bg);}
 .seg button:hover:not(.active){color:var(--accent);}
+
+/* qualifying weekend: Qualifying / Pre-Race tab switch */
+.view-tabs{display:flex;justify-content:flex-start;margin:18px 0 4px;}
 
 /* shared Top-N bar (one filter for every race chart) */
 .race-topbar{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:30px;}
