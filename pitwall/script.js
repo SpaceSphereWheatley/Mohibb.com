@@ -519,11 +519,11 @@ function sessionKind(s){
 function isSprintWeekend(){
   return state.sessions.some(s => /sprint/i.test(`${s?.session_name || ''} ${s?.session_type || ''}`));
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-scwhatif','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
   qualifying: ['sec-qpace','sec-qtheo','sec-carperf'],                    // raw quali-session analysis
-  prerace:    ['sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-pitloss'],  // forward-looking race predictors
+  prerace:    ['sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-scwhatif','sec-pitloss'],  // forward-looking race predictors
   race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
 // the qualifying weekend offers two tabs; the rest are single-view
@@ -591,6 +591,7 @@ function dispatchView(view, s, session_key){
     renderTyreDeg(s);
     renderStrategySim(s);
     renderUndercut(s);
+    renderSCWhatif(s);
     renderPitLoss();
   } else {
     renderLapChart(session_key);
@@ -1164,6 +1165,79 @@ async function renderUndercut(qSession, attempt=0){
       </tr>`).join('')}</tbody></table></div>
       <div class="panel-note"><b>Informational, not a prediction.</b> The <b>undercut</b> — pitting before a rival — gains, each lap, the gap between their worn-tyre pace (about deg × their tyre age) and the pace you give up warming a fresh tyre on the out-lap (assumed ${OUTLAP_PENALTY_S.toFixed(1)}s). <b>Undercut from</b> is the rival tyre age past which it nets time; while their tyres are younger than that, the <b>overcut</b> (staying out as they warm cold tyres) is the better play. <b>Swing @15 laps</b> is the net gain against a rival 15 laps into a stint. A single-lap toy off practice deg: it ignores that a real undercut also banks the rival’s slow in-lap, plus traffic, dirty air and tyre temperature — read it as which compounds make the undercut bite, not a stopwatch.</div>`;
   } catch (e){ panelRetry('undercut', e, body, attempt, () => renderUndercut(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t work out undercut economics. Tap Reload to retry.', 'error')); }
+}
+
+/* ---------- PRE-RACE: safety-car what-if ---------- */
+const SC_PIT_FACTOR = 0.5;   // a stop made under the safety car costs about half the green-flag time loss
+const SC_WINDOW = 3;         // laps either side of the SC lap that can still catch the cheap stop
+function dryByCompound(model){
+  const b = {}; model.forEach(m => { if (DRY_COMPOUNDS.includes(m.compound)) b[m.compound] = m; }); return b;
+}
+// pit-stop time cost at a given lap: discounted if the stop falls within the safety-car window
+function scPitCost(pitLoss, scLap, lap){
+  return (scLap != null && Math.abs(lap - scLap) <= SC_WINDOW) ? pitLoss * SC_PIT_FACTOR : pitLoss;
+}
+// total race time for a plan, charging each stop the (possibly SC-discounted) pit cost for its lap
+function planTime(stints, byCmp, stops, pitLoss, scLap){
+  let t = 0;
+  for (const [c, Ls] of stints) t += Ls * byCmp[c].basePace + byCmp[c].degRate * (Ls * (Ls - 1) / 2);
+  for (const k of stops) t += scPitCost(pitLoss, scLap, k);
+  return t;
+}
+// best one-/two-stop plan when a safety car at scLap (null = green flag) makes a nearby stop cheaper
+function optimiseStrategiesSC(model, pitLoss, L, scLap){
+  const byCmp = dryByCompound(model);
+  const cmps = Object.keys(byCmp);
+  if (cmps.length < 2) return null;
+  let best = null;
+  const consider = (kind, compounds, stops, stints) => {
+    const t = planTime(stints, byCmp, stops, pitLoss, scLap);
+    if (!best || t < best.total) best = { kind, total: t, stops, compounds, stints };
+  };
+  for (const A of cmps) for (const B of cmps){
+    if (A === B) continue;
+    for (let k=1; k<=L-1; k++) consider('1-stop', [A,B], [k], [[A,k],[B,L-k]]);
+  }
+  for (const A of cmps) for (const B of cmps) for (const C of cmps){
+    if (new Set([A,B,C]).size < 2) continue;
+    for (let k1=1; k1<=L-2; k1++) for (let k2=k1+1; k2<=L-1; k2++) consider('2-stop', [A,B,C], [k1,k2], [[A,k1],[B,k2-k1],[C,L-k2]]);
+  }
+  return best;
+}
+async function renderSCWhatif(qSession, attempt=0){
+  const body = $('scwhatifBody'); if (!body) return;
+  body.innerHTML = loadingBox('Working out safety-car strategy swings…');
+  try {
+    const practice = state.sessions.filter(s => sessionKind(s) === 'practice');
+    if (!practice.length){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('No practice', 'No practice sessions for this weekend in the data, so there’s no degradation model to base a safety-car what-if on.'); return; }
+    const [deg, pit, race] = await Promise.all([ practiceDegModel(), weekendPitLoss(), raceLapCount() ]);
+    const dryCount = deg.model.filter(m => DRY_COMPOUNDS.includes(m.compound)).length;
+    if (dryCount < 2){ body.innerHTML = isSprintWeekend() ? sprintWeekendBox() : stateBox('Not enough data', 'Need a modelled degradation figure for at least two dry compounds to project safety-car strategy — this weekend’s practice didn’t provide that.'); return; }
+    if (pit.seconds == null){ body.innerHTML = stateBox('No pit loss', 'Couldn’t estimate this weekend’s pit-stop time loss from practice, so a safety-car what-if isn’t possible.'); return; }
+    if (race.laps == null){ body.innerHTML = stateBox('Unknown race length', 'Couldn’t determine the race distance for this circuit, so a safety-car what-if isn’t possible.'); return; }
+
+    const L = race.laps, byCmp = dryByCompound(deg.model);
+    const baseline = optimiseStrategiesSC(deg.model, pit.seconds, L, null);   // green-flag optimum
+    const init = Math.max(1, Math.min(L-1, Math.round(L * 0.4)));
+    body.innerHTML = `<div class="sc-controls">
+        <label for="scLap">Safety car around lap <b id="scLapVal">${init}</b> of ${L}</label>
+        <input type="range" id="scLap" min="1" max="${L-1}" value="${init}" step="1">
+      </div>
+      <div id="scOut" class="sc-out"></div>
+      <div class="panel-note"><b>Informational, not a prediction.</b> Drag the lap to drop a safety car into the race. Under it the field circulates slowly, so a pit stop costs about <b>half</b> its green-flag time loss (here ~${(pit.seconds*SC_PIT_FACTOR).toFixed(1)}s vs ${pit.seconds.toFixed(1)}s) — often turning a near-free stop. The figure is how much re-optimising around the safety car beats sticking to the green-flag plan (<b>${baseline.kind}</b>, stopping on lap ${baseline.stops.join(', ')}). A toy built on practice degradation: it ignores where you actually are on track when the SC appears, the pack shuffle, lap-down cars and the luck of the timing — read it as how much a safety car can reshape the call, not a guaranteed gain.</div>`;
+    const slider = body.querySelector('#scLap'), out = body.querySelector('#scOut'), lapVal = body.querySelector('#scLapVal');
+    const renderOut = (lap) => {
+      const reaction = optimiseStrategiesSC(deg.model, pit.seconds, L, lap);
+      const ignoreTotal = planTime(baseline.stints, byCmp, baseline.stops, pit.seconds, lap);
+      const saving = ignoreTotal - reaction.total;
+      const react = saving < 0.1
+        ? `your planned stop already lines up — no real gain from reacting.`
+        : `best response is a <b>${reaction.kind}</b>, stopping on lap ${reaction.stops.join(', ')} — about <b>${saving.toFixed(1)}s</b> better than sticking to the green-flag plan.`;
+      out.innerHTML = `Safety car around lap <b>${lap}</b>: ${react}`;
+    };
+    if (slider){ slider.addEventListener('input', () => { const v = +slider.value; lapVal.textContent = v; renderOut(v); }); }
+    renderOut(init);
+  } catch (e){ panelRetry('sc what-if', e, body, attempt, () => renderSCWhatif(qSession, attempt+1), stateBox('Unavailable', 'Couldn’t run the safety-car what-if. Tap Reload to retry.', 'error')); }
 }
 
 /* ---------- QUALIFYING / RACE: car performance (acceleration, top speed, cornering, strength) ---------- */

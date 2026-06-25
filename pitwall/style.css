@@ -83,6 +83,12 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .panel{margin-top:18px;border:1.5px solid var(--line);background:var(--card);border-radius:4px;overflow:hidden;}
 .panel-note{padding:12px 16px;border-top:1px solid var(--line-soft);font-family:'Newsreader',serif;font-style:italic;font-size:13px;color:var(--ink-3);line-height:1.5;}
 
+/* safety-car what-if controls */
+.sc-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px;}
+.sc-controls label{font-size:13px;color:var(--ink-2);white-space:nowrap;}
+.sc-controls input[type="range"]{flex:1;min-width:180px;accent-color:var(--accent);}
+.sc-out{padding:0 16px 16px;font-size:14px;color:var(--ink-2);line-height:1.5;}
+
 /* generic states */
 .state{padding:26px 24px;display:flex;gap:14px;align-items:flex-start;}
 .state .badge{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);border:1.5px solid var(--line-soft);border-radius:3px;padding:4px 8px;white-space:nowrap;flex-shrink:0;}
