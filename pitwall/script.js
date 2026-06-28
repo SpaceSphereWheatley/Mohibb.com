@@ -2013,7 +2013,7 @@ async function onYearChange(){
     await loadMeetings(year);
     if (!state.meetings.length){ pickerError('No race weekends found for ' + year + '.'); return; }
     await onMeetingChange();
-  } catch (e){ logError('year change', e); pickerError('Couldn’t load the ' + year + ' calendar. Check your connection and tap Reload.'); }
+  } catch (e){ logError('year change', e); pickerError(errMsg(e, 'Couldn’t load the ' + year + ' calendar. Check your connection and tap Reload.')); }
 }
 async function onMeetingChange(){
   const mk = Number($('selMeeting').value);
@@ -2021,12 +2021,18 @@ async function onMeetingChange(){
     await loadSessions(mk);
     if (!state.sessions.length){ pickerError('No sessions found for this weekend.'); return; }
     await onSessionChange();
-  } catch (e){ logError('meeting change', e); pickerError('Couldn’t load sessions for this weekend. Tap Reload to retry.'); }
+  } catch (e){ logError('meeting change', e); pickerError(errMsg(e, 'Couldn’t load sessions for this weekend. Tap Reload to retry.')); }
 }
 async function onSessionChange(){
   const sk = $('selSession').value;
   try { await loadSession(sk); }
-  catch (e){ logError('session change', e); pickerError('Couldn’t analyse this session. Tap Reload to retry.'); }
+  catch (e){ logError('session change', e); pickerError(errMsg(e, 'Couldn’t analyse this session. Tap Reload to retry.')); }
+}
+// surface OpenF1 rate-limiting by name instead of a generic message — it's the most common cause of
+// picker failures, especially right around a session start when every live dashboard is polling it
+function errMsg(e, fallback){
+  if (e && e.status === 429) return 'OpenF1 is rate-limiting requests right now (likely a traffic spike — common right around a session start). Wait a few seconds and tap Reload.';
+  return fallback;
 }
 function pickerError(msg){
   hideAllSections(); $('sessbar').style.display = 'none'; destroyAllCharts();
