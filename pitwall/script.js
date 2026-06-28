@@ -91,7 +91,7 @@ function linFit(points){
 
 /* ---------- fetch helpers ---------- */
 const FETCH_TIMEOUT_MS = 15000;
-async function getJSON(url, retries = 1){
+async function getJSON(url, retries = 1, attempt = 0){
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -102,7 +102,12 @@ async function getJSON(url, retries = 1){
     return await res.json();
   } catch (e) {
     const transient = e.name === 'AbortError' || e.status === 429 || (e.status >= 500 && e.status < 600);
-    if (retries > 0 && transient){ await new Promise(r => setTimeout(r, 1000)); return getJSON(url, retries - 1); }
+    if (retries > 0 && transient){
+      // exponential backoff (1s, 2s, 4s, 8s…) — OpenF1 gets hammered by every live dashboard right
+      // around session start, so the picker's meeting/session calls get a longer runway than the rest.
+      await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+      return getJSON(url, retries - 1, attempt + 1);
+    }
     throw e;
   } finally { clearTimeout(timer); }
 }
@@ -127,11 +132,11 @@ async function mapLimit(items, limit, fn){
    views fetch overlapping endpoints in parallel; without this, OpenF1 sees a
    duplicate burst and rate-limits one of them). */
 const inflight = new Map();
-async function cachedJSON(cacheKey, url, slimmer){
+async function cachedJSON(cacheKey, url, slimmer, retries = 1){
   try { const c = sessionStorage.getItem(cacheKey); if (c) return JSON.parse(c); } catch {}
   if (inflight.has(cacheKey)) return inflight.get(cacheKey);
   const p = (async () => {
-    const data = await getJSON(url);
+    const data = await getJSON(url, retries);
     const out = slimmer ? slimmer(data) : data;
     try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch {}   // quota — fine, just skip
     return out;
@@ -638,26 +643,41 @@ function populateYears(){
   fillSelect($('selYear'), years, { value: y=>y, label: y=>y, selected: cur });
 }
 
+// retried harder than the heavier per-session endpoints below: these two calls are small, infrequent,
+// and gate the whole picker, so it's worth riding out a longer burst of OpenF1 rate-limiting on them —
+// most visible right around a session's start, when every live dashboard out there is hammering the API.
+const PICKER_RETRIES = 4;
+
 async function loadMeetings(year){
   const sel = $('selMeeting');
   sel.innerHTML = '<option>Loading…</option>'; sel.disabled = true;
-  const data = await cachedJSON(`pwa.meetings.${year}`, `${OPENF1}meetings?year=${year}`);
-  // chronological; the picker lists most-recent first
-  state.meetings = (Array.isArray(data)?data:[]).slice().sort((a,b)=> new Date(a.date_start)-new Date(b.date_start));
-  const ordered = state.meetings.slice().reverse();
-  fillSelect(sel, ordered, { value: m=>m.meeting_key, label: m=>m.meeting_name || m.location || ('Meeting '+m.meeting_key) });
+  try {
+    const data = await cachedJSON(`pwa.meetings.${year}`, `${OPENF1}meetings?year=${year}`, undefined, PICKER_RETRIES);
+    // chronological; the picker lists most-recent first
+    state.meetings = (Array.isArray(data)?data:[]).slice().sort((a,b)=> new Date(a.date_start)-new Date(b.date_start));
+    const ordered = state.meetings.slice().reverse();
+    fillSelect(sel, ordered, { value: m=>m.meeting_key, label: m=>m.meeting_name || m.location || ('Meeting '+m.meeting_key) });
+  } catch (e) {
+    sel.innerHTML = '<option>Couldn’t load</option>'; sel.disabled = true;
+    throw e;
+  }
 }
 
 async function loadSessions(meeting_key){
   const sel = $('selSession');
   sel.innerHTML = '<option>Loading…</option>'; sel.disabled = true;
-  const data = await cachedJSON(`pwa.sessions.${meeting_key}`, `${OPENF1}sessions?meeting_key=${meeting_key}`);
-  state.sessions = (Array.isArray(data)?data:[]).slice().sort((a,b)=> new Date(a.date_start)-new Date(b.date_start));
-  // default to the last session that has already finished, else the last one listed
-  const now = Date.now();
-  const finished = state.sessions.filter(s => new Date(s.date_end).getTime() < now);
-  const def = finished.length ? finished[finished.length-1] : state.sessions[state.sessions.length-1];
-  fillSelect(sel, state.sessions, { value: s=>s.session_key, label: s=>s.session_name || s.session_type, selected: def?.session_key });
+  try {
+    const data = await cachedJSON(`pwa.sessions.${meeting_key}`, `${OPENF1}sessions?meeting_key=${meeting_key}`, undefined, PICKER_RETRIES);
+    state.sessions = (Array.isArray(data)?data:[]).slice().sort((a,b)=> new Date(a.date_start)-new Date(b.date_start));
+    // default to the last session that has already finished, else the last one listed
+    const now = Date.now();
+    const finished = state.sessions.filter(s => new Date(s.date_end).getTime() < now);
+    const def = finished.length ? finished[finished.length-1] : state.sessions[state.sessions.length-1];
+    fillSelect(sel, state.sessions, { value: s=>s.session_key, label: s=>s.session_name || s.session_type, selected: def?.session_key });
+  } catch (e) {
+    sel.innerHTML = '<option>Couldn’t load</option>'; sel.disabled = true;
+    throw e;
+  }
 }
 
 /* ============================================================
