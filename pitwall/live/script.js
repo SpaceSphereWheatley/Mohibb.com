@@ -22,6 +22,9 @@ const state = {
   standingsTimer: null,
   cdTimer: null,
   nextRace: null,
+  schedule: [],          // [{name, start, end}] parsed from Jolpica, so we can tell a session is live even when OpenF1 is locked/unreachable
+  scheduleLoadedAt: null,
+  lockedSession: null,   // the scheduled session we believe is live while OpenF1 is locked
   charts: { ot: null, wx: null },
   standingsLoaded: false,
   standingsLoadedAt: null,
@@ -112,7 +115,8 @@ function renderStatusBar(){
   const eb = $('sbEyebrow'), title = $('sbTitle');
   if (locked){
     eb.textContent = 'session';
-    title.textContent = 'Live — real-time data restricted';
+    const ls = state.lockedSession;
+    title.textContent = ls ? (ls.name + ' — live, real-time data restricted') : 'Live — real-time data restricted';
   } else if (state.detectError){
     eb.textContent = 'status'; title.textContent = 'Feed unavailable';
   } else if (live && state.session){
@@ -625,19 +629,56 @@ $('prevToggleBtn').addEventListener('click', async () => {
 });
 
 /* ============================================================
-   IDLE — next race countdown
+   SCHEDULE (Jolpica) — next-race countdown + live-lock cross-check
    ============================================================ */
-async function loadNextRace(){
+/* Session durations aren't in the Ergast/Jolpica feed, so we estimate generous
+   windows. These only gate the "is a session live right now?" check used when
+   OpenF1 is unreachable — overshooting is safe (we re-trust OpenF1 the moment
+   it answers again), undershooting is the bug we're fixing, so we err long. */
+const SESSION_EST_MS = {
+  race: 3.5 * 3600e3, sprint: 1.5 * 3600e3, sprintQualifying: 1.5 * 3600e3,
+  qualifying: 2 * 3600e3, practice: 2 * 3600e3,
+};
+const SCHEDULE_FRESH_MS = 60 * 1000;        // don't re-hit volunteer-run Jolpica more than once a minute
+async function loadSchedule(force){
+  // Jolpica is rate-limited; skip the round-trip if we loaded recently
+  if (!force && state.schedule.length && state.scheduleLoadedAt && (Date.now() - state.scheduleLoadedAt) < SCHEDULE_FRESH_MS) return;
   try {
     const data = await getJSON(JOLPI + 'current.json');
     const races = data?.MRData?.RaceTable?.Races || [];
+    const sessions = [];
+    const add = (gp, label, slot, kind) => {
+      if (!slot || !slot.date) return;
+      const start = Date.parse(`${slot.date}T${slot.time || '00:00:00Z'}`);
+      if (!Number.isFinite(start)) return;
+      sessions.push({ name: `${gp} · ${label}`, start, end: start + (SESSION_EST_MS[kind] || 2 * 3600e3) });
+    };
+    races.forEach(r => {
+      const gp = r.raceName || 'Grand Prix';
+      add(gp, 'Practice 1', r.FirstPractice, 'practice');
+      add(gp, 'Practice 2', r.SecondPractice, 'practice');
+      add(gp, 'Practice 3', r.ThirdPractice, 'practice');
+      add(gp, 'Sprint Qualifying', r.SprintQualifying || r.SprintShootout, 'sprintQualifying');
+      add(gp, 'Sprint', r.Sprint, 'sprint');
+      add(gp, 'Qualifying', r.Qualifying, 'qualifying');
+      add(gp, 'Race', { date: r.date, time: r.time }, 'race');
+    });
+    state.schedule = sessions;
+    state.scheduleLoadedAt = Date.now();
+
+    // next upcoming race for the idle countdown
     const now = Date.now();
     const upcoming = races
       .map(r => ({ r, t: Date.parse(`${r.date}T${r.time || '00:00:00Z'}`) }))
       .filter(x => Number.isFinite(x.t) && x.t > now)
       .sort((a,b)=> a.t - b.t);
     state.nextRace = upcoming.length ? upcoming[0] : null;
-  } catch (e) { logError('next race', e); state.nextRace = null; }
+  } catch (e) { logError('schedule', e); }
+}
+/* whichever scheduled session contains `now`, if any — used to recognise OpenF1's
+   live lock (or any OpenF1 outage during a session) without OpenF1 itself */
+function scheduledLiveSession(now = Date.now()){
+  return state.schedule.find(s => now >= s.start && now <= s.end) || null;
 }
 function showCountdown(){
   const box = $('countdown');
@@ -662,7 +703,12 @@ function tickCountdown(){
   $('cdD').textContent = p(d); $('cdH').textContent = p(h); $('cdM').textContent = p(m); $('cdS').textContent = p(s);
 }
 function hideCountdown(){ $('countdown').classList.remove('show'); if (state.cdTimer){ clearInterval(state.cdTimer); state.cdTimer=null; } }
-function showLocked(){ $('lockedNotice').classList.add('show'); }
+function showLocked(){
+  const ls = state.lockedSession;
+  // name the live session in the notice when we know it from the schedule
+  if (ls){ const h = $('lockedNotice').querySelector('.cd-race'); if (h) h.textContent = ls.name + ' is live right now.'; }
+  $('lockedNotice').classList.add('show');
+}
 function hideLocked(){ $('lockedNotice').classList.remove('show'); }
 
 /* the five live-only sections — shown only while a session is live */
@@ -692,10 +738,28 @@ async function cycle(){
   stopPolling();
   let mode;
   state.detectError = false;
+  state.lockedSession = null;
+  let detectFailed = false;
   try { mode = await detect(); }
   catch (e) {
     logError('session detect', e);
-    if (e && e.liveLocked) mode = 'LOCKED';
+    detectFailed = true;
+    // OpenF1 returned a readable 403 → its live lock. The browser often can't
+    // read that 403 cross-origin though, surfacing it as an opaque network
+    // error instead — so a failure here doesn't yet tell IDLE from LOCKED.
+    mode = (e && e.liveLocked) ? 'LOCKED' : 'IDLE';
+  }
+  // When OpenF1 is unreachable we can't see sessions at all, and the most common
+  // reason during a race weekend is OpenF1's live lock. Cross-check the public
+  // Jolpica schedule: if a session is scheduled to be running now, treat it as
+  // the lock and show the LOCKED notice — never fall through to a countdown that
+  // would point at *next* week's race mid-session. We only do this when OpenF1
+  // actually failed, so once the lock lifts and OpenF1 answers we trust it again.
+  if (detectFailed){
+    await loadSchedule();
+    const liveNow = scheduledLiveSession();
+    if (liveNow){ mode = 'LOCKED'; state.lockedSession = liveNow; state.detectError = false; }
+    else if (mode === 'LOCKED'){ /* trust OpenF1's explicit 403 lock even with no schedule match */ }
     else { mode = 'IDLE'; state.detectError = true; }
   }
   state.mode = mode;
@@ -724,7 +788,7 @@ async function cycle(){
     showLiveSections(false);     // hide live-only sections entirely when nothing is live
     hideLocked();
     showPrevSection(state.session);
-    await loadNextRace();
+    await loadSchedule();
     showCountdown();
     setUpdated();
   }
