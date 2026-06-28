@@ -11,6 +11,13 @@
           "status": "live"
         },
         {
+          "name": "Race Simulator",
+          "category": "Simulation · top-down",
+          "description": "A 2D top-down F1 race simulator — procedurally generated circuits, tyre and fuel models, dynamic pit strategy and overtaking, with a live timing tower.",
+          "url": "/pitwall/sim/",
+          "status": "live"
+        },
+        {
           "name": "Perfect Stop",
           "category": "Puzzle · pit stop",
           "description": "A relaxing F1 pit-stop puzzle — plan the crew's jobs, respect the dependencies, and nail the perfect stop.",

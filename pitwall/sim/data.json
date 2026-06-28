@@ -1,0 +1,41 @@
+{
+  "season": "2026 (illustrative)",
+  "note": "Ratings are hand-authored estimates for simulation, not official data. Edit freely or load your own file with the same shape.",
+  "teams": [
+    { "name": "McLaren",       "colour": "#FF8000", "base_aero": 0.95, "base_chassis": 0.94, "base_engine": 0.91, "pit_stop_efficiency": 0.97 },
+    { "name": "Ferrari",       "colour": "#E8002D", "base_aero": 0.92, "base_chassis": 0.91, "base_engine": 0.93, "pit_stop_efficiency": 0.93 },
+    { "name": "Red Bull",      "colour": "#3671C6", "base_aero": 0.93, "base_chassis": 0.92, "base_engine": 0.90, "pit_stop_efficiency": 0.96 },
+    { "name": "Mercedes",      "colour": "#27F4D2", "base_aero": 0.91, "base_chassis": 0.90, "base_engine": 0.94, "pit_stop_efficiency": 0.94 },
+    { "name": "Aston Martin",  "colour": "#229971", "base_aero": 0.88, "base_chassis": 0.89, "base_engine": 0.94, "pit_stop_efficiency": 0.92 },
+    { "name": "Williams",      "colour": "#64C4FF", "base_aero": 0.87, "base_chassis": 0.86, "base_engine": 0.94, "pit_stop_efficiency": 0.90 },
+    { "name": "Alpine",        "colour": "#0093CC", "base_aero": 0.85, "base_chassis": 0.86, "base_engine": 0.88, "pit_stop_efficiency": 0.90 },
+    { "name": "Racing Bulls",  "colour": "#6692FF", "base_aero": 0.86, "base_chassis": 0.85, "base_engine": 0.90, "pit_stop_efficiency": 0.91 },
+    { "name": "Audi",          "colour": "#009B3A", "base_aero": 0.84, "base_chassis": 0.85, "base_engine": 0.87, "pit_stop_efficiency": 0.89 },
+    { "name": "Haas",          "colour": "#B6BABD", "base_aero": 0.84, "base_chassis": 0.83, "base_engine": 0.93, "pit_stop_efficiency": 0.88 },
+    { "name": "Cadillac",      "colour": "#B89B5E", "base_aero": 0.82, "base_chassis": 0.83, "base_engine": 0.86, "pit_stop_efficiency": 0.87 }
+  ],
+  "drivers": [
+    { "name": "Lando Norris",       "code": "NOR", "team": "McLaren",      "stats": { "pace": 94, "racecraft": 90, "tyre_management": 88, "qualifying_pace": 93, "consistency": 90 } },
+    { "name": "Oscar Piastri",      "code": "PIA", "team": "McLaren",      "stats": { "pace": 93, "racecraft": 91, "tyre_management": 90, "qualifying_pace": 92, "consistency": 92 } },
+    { "name": "Charles Leclerc",    "code": "LEC", "team": "Ferrari",      "stats": { "pace": 94, "racecraft": 89, "tyre_management": 84, "qualifying_pace": 96, "consistency": 86 } },
+    { "name": "Lewis Hamilton",     "code": "HAM", "team": "Ferrari",      "stats": { "pace": 92, "racecraft": 95, "tyre_management": 93, "qualifying_pace": 90, "consistency": 91 } },
+    { "name": "Max Verstappen",     "code": "VER", "team": "Red Bull",     "stats": { "pace": 97, "racecraft": 96, "tyre_management": 91, "qualifying_pace": 95, "consistency": 94 } },
+    { "name": "Yuki Tsunoda",       "code": "TSU", "team": "Red Bull",     "stats": { "pace": 85, "racecraft": 82, "tyre_management": 80, "qualifying_pace": 86, "consistency": 79 } },
+    { "name": "George Russell",     "code": "RUS", "team": "Mercedes",     "stats": { "pace": 92, "racecraft": 88, "tyre_management": 87, "qualifying_pace": 92, "consistency": 90 } },
+    { "name": "Kimi Antonelli",     "code": "ANT", "team": "Mercedes",     "stats": { "pace": 87, "racecraft": 83, "tyre_management": 82, "qualifying_pace": 88, "consistency": 80 } },
+    { "name": "Fernando Alonso",    "code": "ALO", "team": "Aston Martin", "stats": { "pace": 90, "racecraft": 96, "tyre_management": 94, "qualifying_pace": 89, "consistency": 92 } },
+    { "name": "Lance Stroll",       "code": "STR", "team": "Aston Martin", "stats": { "pace": 80, "racecraft": 78, "tyre_management": 79, "qualifying_pace": 79, "consistency": 77 } },
+    { "name": "Alexander Albon",    "code": "ALB", "team": "Williams",     "stats": { "pace": 86, "racecraft": 86, "tyre_management": 88, "qualifying_pace": 85, "consistency": 87 } },
+    { "name": "Carlos Sainz",       "code": "SAI", "team": "Williams",     "stats": { "pace": 90, "racecraft": 89, "tyre_management": 89, "qualifying_pace": 89, "consistency": 89 } },
+    { "name": "Pierre Gasly",       "code": "GAS", "team": "Alpine",       "stats": { "pace": 85, "racecraft": 84, "tyre_management": 83, "qualifying_pace": 85, "consistency": 83 } },
+    { "name": "Franco Colapinto",   "code": "COL", "team": "Alpine",       "stats": { "pace": 81, "racecraft": 80, "tyre_management": 76, "qualifying_pace": 82, "consistency": 75 } },
+    { "name": "Isack Hadjar",       "code": "HAD", "team": "Racing Bulls", "stats": { "pace": 84, "racecraft": 82, "tyre_management": 81, "qualifying_pace": 84, "consistency": 81 } },
+    { "name": "Liam Lawson",        "code": "LAW", "team": "Racing Bulls", "stats": { "pace": 83, "racecraft": 83, "tyre_management": 80, "qualifying_pace": 83, "consistency": 80 } },
+    { "name": "Nico Hulkenberg",    "code": "HUL", "team": "Audi",         "stats": { "pace": 85, "racecraft": 85, "tyre_management": 86, "qualifying_pace": 84, "consistency": 86 } },
+    { "name": "Gabriel Bortoleto",  "code": "BOR", "team": "Audi",         "stats": { "pace": 80, "racecraft": 79, "tyre_management": 77, "qualifying_pace": 81, "consistency": 76 } },
+    { "name": "Esteban Ocon",       "code": "OCO", "team": "Haas",         "stats": { "pace": 84, "racecraft": 82, "tyre_management": 84, "qualifying_pace": 83, "consistency": 84 } },
+    { "name": "Oliver Bearman",     "code": "BEA", "team": "Haas",         "stats": { "pace": 82, "racecraft": 81, "tyre_management": 78, "qualifying_pace": 83, "consistency": 78 } },
+    { "name": "Valtteri Bottas",    "code": "BOT", "team": "Cadillac",     "stats": { "pace": 83, "racecraft": 83, "tyre_management": 85, "qualifying_pace": 82, "consistency": 85 } },
+    { "name": "Sergio Perez",       "code": "PER", "team": "Cadillac",     "stats": { "pace": 84, "racecraft": 86, "tyre_management": 87, "qualifying_pace": 81, "consistency": 82 } }
+  ]
+}
