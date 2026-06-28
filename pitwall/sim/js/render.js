@@ -39,6 +39,8 @@ export class Renderer {
       antialias: true,
       resizeTo: parent,
       autoDensity: true,
+      autoStart: false,          // we drive rendering on demand (no perpetual ticker)
+      sharedTicker: false,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
     });
     this.app.canvas.setAttribute('role', 'img');
@@ -86,6 +88,7 @@ export class Renderer {
       g.y = p.y;
       g.alpha = car.finished ? 0.55 : car.dirtyAir ? 0.85 : 1;
     }
+    this.app.render();           // explicit draw — ticker is off
   }
 
   _drawTrack(track) {
@@ -149,6 +152,7 @@ export class Renderer {
       ch / 2 - ((b.minY + b.maxY) / 2) * scale,
     );
     this._baseScale = scale;
+    if (this.app) this.app.render();
   }
 
   _wireControls(parent) {

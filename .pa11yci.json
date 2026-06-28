@@ -9,11 +9,7 @@
     "http://localhost:8123/",
     "http://localhost:8123/pitwall/",
     "http://localhost:8123/pitwall/live/",
-    {
-      "url": "http://localhost:8123/pitwall/sim/",
-      "timeout": 60000,
-      "waitUntil": "domcontentloaded"
-    },
+    "http://localhost:8123/pitwall/sim/",
     "http://localhost:8123/pdf/",
     "http://localhost:8123/spotkick/",
     "http://localhost:8123/pitstop/",

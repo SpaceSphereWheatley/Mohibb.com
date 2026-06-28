@@ -53,11 +53,11 @@ function prepareGrid(grid) {
 }
 
 function newRace(seed) {
-  cancelAnimationFrame(state.raf);
+  stopLoop();
   state.race = new Race(state.grid, seed);
   renderer.loadTrack(state.race.track);
   renderer.buildCars(state.race.cars);
-  renderer.frame(state.race);
+  renderer.frame(state.race);              // draw the grid on the line, once
   leaderboard.update(state.race);
   analysisSection.hidden = true;
   analysis.destroy();
@@ -66,14 +66,28 @@ function newRace(seed) {
   controls.setSeed(state.race.seed);
   controls.setLap(0, state.race.raceLaps);
   controls.setState('Ready — press play', 'ready');
-  setPlaying(REDUCED ? false : true);
-  loop(performance.now());
+  // Start paused: this keeps the page (and the render loop) quiet on load so
+  // it settles for crawlers/headless checks; the user presses Play to run.
+  setPlaying(false);
 }
 
 function setPlaying(p) {
-  state.playing = p && !state.race.over;
+  state.playing = p && state.race && !state.race.over;
   controls.setPlaying(state.playing);
-  if (state.playing) { state.lastT = performance.now(); }
+  if (state.playing) { startLoop(); }
+  else { stopLoop(); renderer.frame(state.race); }
+}
+
+// the rAF loop runs ONLY while playing — no perpetual spinning when idle
+function startLoop() {
+  if (state.raf) return;
+  state.lastT = performance.now();
+  state.raf = requestAnimationFrame(frame);
+}
+
+function stopLoop() {
+  if (state.raf) cancelAnimationFrame(state.raf);
+  state.raf = 0;
 }
 
 function setSpeed(mult) {
@@ -81,10 +95,8 @@ function setSpeed(mult) {
   controls.setSpeed(mult);
 }
 
-function loop(now) {
-  state.raf = requestAnimationFrame(loop);
+function frame(now) {
   const race = state.race;
-
   if (state.playing && !race.over) {
     const elapsed = Math.min(0.25, (now - state.lastT) / 1000);
     state.lastT = now;
@@ -97,15 +109,18 @@ function loop(now) {
       if (race.over) break;
     }
     controls.setLap(race.order()[0].lap, race.raceLaps);
-    if (race.over) onFinish();
+    state.lbAcc += elapsed;
+    if (state.lbAcc >= 1 / config.view.leaderboardHz) {
+      leaderboard.update(race);
+      state.lbAcc = 0;
+    }
   }
 
   renderer.frame(race);
-  state.lbAcc += 1 / 60;
-  if (state.lbAcc >= 1 / config.view.leaderboardHz) {
-    leaderboard.update(race);
-    state.lbAcc = 0;
-  }
+
+  if (race.over) { onFinish(); return; }
+  if (state.playing) state.raf = requestAnimationFrame(frame);
+  else state.raf = 0;
 }
 
 function onFinish() {
