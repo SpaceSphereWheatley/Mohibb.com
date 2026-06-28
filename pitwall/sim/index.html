@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Pit Wall — a 2D top-down Formula 1 race simulator. Procedurally generated circuits, tyre wear, fuel burn, pit strategy and overtaking, with a live timing tower.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/pitwall/sim/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Pit Wall — Race Simulator | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Pit Wall — Race Simulator">
+<meta property="og:description" content="A 2D top-down F1 race simulator — procedural tracks, tyre and fuel models, pit strategy and overtaking, with a live timing tower.">
+<meta property="og:url" content="https://mohibb.com/pitwall/sim/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Pit Wall — Race Simulator">
+<meta name="twitter:description" content="A 2D top-down F1 race simulator — procedural tracks, tyre and fuel models, pit strategy and overtaking, with a live timing tower.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Pit Wall — Race Simulator",
+  "url": "https://mohibb.com/pitwall/sim/",
+  "description": "A 2D top-down Formula 1 race simulator with procedural tracks, a tyre and fuel model, pit strategy and overtaking.",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script type="importmap">
+{
+  "imports": {
+    "pixi.js": "./vendor/pixi.min.mjs",
+    "simplex-noise": "./vendor/simplex-noise.min.mjs",
+    "tweakpane": "./vendor/tweakpane.min.js"
+  }
+}
+</script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <a class="back" href="/pitwall/">&larr; Analyse</a>
+    <a class="back" href="/pitwall/live/">Live</a>
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<div class="wrap">
+
+  <div class="intro">
+    <div class="eyebrow">A 2D race simulator</div>
+    <h1>Race Simulator.</h1>
+    <p class="lede">Spin up a procedurally generated circuit and watch a full grand prix play out &mdash; car performance from team and driver ratings, tyre wear and fuel burn, dynamic pit strategy and overtaking, all read out on a live timing tower.</p>
+  </div>
+
+  <div class="sim-controls" role="group" aria-label="Simulation controls">
+    <div class="sim-grp">
+      <button class="sim-btn sim-btn--play" id="playBtn" type="button" aria-pressed="false">&#9654; Play</button>
+      <button class="sim-btn" id="restartBtn" type="button">Restart</button>
+    </div>
+
+    <div class="sim-grp" role="group" aria-label="Playback speed">
+      <span class="sim-lbl">Speed</span>
+      <button class="sim-btn sim-speed is-active" data-speed="1" type="button">1&times;</button>
+      <button class="sim-btn sim-speed" data-speed="2" type="button">2&times;</button>
+      <button class="sim-btn sim-speed" data-speed="4" type="button">4&times;</button>
+      <button class="sim-btn sim-speed" data-speed="8" type="button">8&times;</button>
+    </div>
+
+    <div class="sim-grp">
+      <label class="sim-lbl" for="seedInput">Seed</label>
+      <input class="sim-seed" id="seedInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="random">
+      <button class="sim-btn" id="newTrackBtn" type="button">New track</button>
+      <button class="sim-btn" id="resetViewBtn" type="button">Reset view</button>
+    </div>
+
+    <div class="sim-grp">
+      <button class="sim-btn" id="loadBtn" type="button">Load grid&hellip;</button>
+      <input id="loadInput" type="file" accept="application/json,.json" aria-label="Load a teams and drivers JSON file" hidden>
+    </div>
+
+    <div class="sim-grp sim-grp--status">
+      <span class="sim-lap">Lap <b id="lapNow">0</b> / <b id="lapTotal">0</b></span>
+      <span class="sim-state sim-state--ready" id="raceState">Loading&hellip;</span>
+    </div>
+  </div>
+
+  <div class="sim-main">
+    <div class="sim-stage" id="stage" aria-hidden="false"></div>
+    <aside class="sim-tower">
+      <h2 class="sim-h">Timing Tower</h2>
+      <div id="leaderboard"></div>
+      <p class="sim-hint">Scroll to zoom, drag to pan. Add <code>?debug</code> to the URL for the tuning panel.</p>
+    </aside>
+  </div>
+
+  <section class="sim-analysis" id="sec-analysis" hidden>
+    <h2 class="sim-h">Post-race analysis</h2>
+    <div id="analysis" class="sim-charts"></div>
+  </section>
+
+  <footer>
+    <span class="credit">Pit Wall — built by Mohibb Malik, Oslo &middot; 2026</span>
+    <span>A simulation &middot; ratings are illustrative &middot; <a href="/">All projects</a></span>
+  </footer>
+
+</div>
+
+<script src="./vendor/chart.umd.min.js"></script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

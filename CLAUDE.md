@@ -113,6 +113,43 @@ projection, estimated pit loss), toggled by `#viewTabs`.
     deployment — no separate project needed. The old `/pitwall/analyse/` URL
     is kept as a redirect stub to `/pitwall/` for old bookmarks/SEO.
 
+## Race Simulator (mohibb.com/pitwall/sim)
+
+`pitwall/sim/` is a self-contained, client-side **2D top-down F1 race
+simulator** under the Pit Wall umbrella: `index.html` (markup + an import map)
+plus `style.css` and a set of native **ES modules** in `js/`. A seeded
+generator builds a procedural circuit; a *segment-time* model then runs a full
+grand prix and renders team-coloured dots with a live timing tower.
+
+- **Timing core (not force-based):** each metre of track has a base speed from
+  curvature, and a car's per-tick speed is
+  `segment.baseSpeed × carPerf × tyrePace × fuelFactor × traffic`. The realism
+  lives in the multipliers — tyre-deg curves per compound (scaled by driver
+  `tyre_management`), fuel burn (`~0.03 s/lap/kg`), dirty-air/DRS deltas,
+  racecraft-weighted overtaking, and the pit-strategy AI (undercut/overcut +
+  the two-compound rule). Everything tunable lives in `js/config.js`.
+- **Determinism:** `js/rng.js` (mulberry32) seeds both track and race, so a
+  seed reproduces a circuit and result. The seed is shown/editable in the UI.
+- **Modules:** `config`, `rng`, `geometry` (Catmull-Rom + arc-length),
+  `track`, `tyres`, `car`, `overtake`, `strategy`, `race` (the tick loop),
+  `render`, `leaderboard`, `analysis`, `tuning`, `ui`, `main`. `render.js` is
+  the **only** renderer-aware file (eases a future three.js swap).
+- **Data:** `data.json` is a hand-authored, *illustrative* 2026 grid (11
+  teams / 22 drivers) in the documented `teams[]` / `drivers[]` shape; a "Load
+  grid…" file picker overrides it at runtime (`colour`/`code` optional).
+- **Dependencies** are **vendored** into `pitwall/sim/vendor/` (no runtime
+  CDN, like `pdf/pdf-lib.min.js`) and pinned via the import map: **PixiJS**
+  (`pixi.min.mjs`, rendering), **simplex-noise** (`*.min.mjs`, track gen),
+  **Tweakpane** (`tweakpane.min.js`, the `?debug` tuning panel), **Chart.js**
+  (`chart.umd.min.js`, post-race analysis as the global `Chart`).
+- **CI notes:** load the entry module via `<script type="module" src=…>` —
+  never inline a module with `import`, because validate.yml's inline-script
+  check runs `new Function()` on `type="module"` blocks and rejects `import`.
+  Vendored libs are named `*.min.js`/`*.min.mjs` so the JS syntax-check glob
+  skips them.
+- Served at `mohibb.com/pitwall/sim/` as part of this same Pages deployment —
+  no separate project needed. Linked from the Pit Wall top nav.
+
 ## Spotkick (mohibb.com/spotkick)
 
 `spotkick/` is a self-contained, client-side penalty analytics dashboard
