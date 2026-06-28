@@ -31,7 +31,12 @@ a{color:inherit;}
 .toprule .live-cta .ico{width:14px;height:14px;display:block;flex-shrink:0;}
 .toprule .live-cta .arr{transition:transform .15s;}
 .toprule .live-cta:hover .arr{transform:translateX(3px);}
-@media(max-width:520px){.toprule .live-cta .arr{display:none;}.toprule .back{font-size:11px;}}
+.toprule .sim-cta{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;letter-spacing:0.02em;line-height:1;color:var(--accent);background:transparent;border:1.5px solid var(--accent);border-radius:999px;padding:8px 15px;text-decoration:none;transition:background .15s,color .15s,box-shadow .15s,transform .15s;}
+.toprule .sim-cta:hover{background:var(--accent);color:#fff;transform:translateY(-1px);box-shadow:0 4px 12px rgba(180,71,31,0.28);}
+.toprule .sim-cta .ico{width:14px;height:14px;display:block;flex-shrink:0;}
+.toprule .sim-cta .arr{transition:transform .15s;}
+.toprule .sim-cta:hover .arr{transform:translateX(3px);}
+@media(max-width:520px){.toprule .live-cta .arr,.toprule .sim-cta .arr{display:none;}.toprule .back{font-size:11px;}}
 
 /* ---------- control bar (sticky) ---------- */
 .statusbar{position:sticky;top:0;z-index:40;background:rgba(237,232,221,0.92);backdrop-filter:blur(10px);border-bottom:1.5px solid var(--line);}
