@@ -9,17 +9,20 @@ export const config = {
   dt: 0.1,                 // seconds of sim time per fixed step
   raceLaps: 30,            // laps in a full grand prix (scaled down for watchability)
 
-  // ---- track generation ----
+  // ---- track generation (rounded-polygon generator) ----
   track: {
-    controlPoints: 11,     // number of spline control points (turns-ish)
-    baseRadius: 360,       // metres, mean radius of the loop
-    noiseAmp: 0.42,        // 0..1 fraction of baseRadius the noise can push a point
-    noiseFreq: 2.3,        // how wavy the loop is
-    width: 13,             // racing-surface half-width is width/2 (metres)
+    width: 13,             // racing surface width (metres); half-width = width/2
     cornerWidthFactor: 0.7,// corners are narrower than straights
-    // curvature thresholds (1/m) used to classify segments
-    slowCorner: 0.014,     // above this curvature -> slow corner / apex
-    fastCorner: 0.006,     // between fast and slow -> sweeper
+    pointCloud: 22,        // base count of random points (+ up to 8 more) to hull
+    spreadX: 640,          // random-point box width (metres)
+    spreadY: 460,          // random-point box height (metres)
+    cornersMin: 14,        // target corner count lower bound
+    cornersMax: 20,        // target corner count upper bound (avg ~17)
+    fastRadius: 72,        // fillet radius (m) for the gentlest corners (sweepers)
+    hairpinRadius: 13,     // fillet radius (m) for the sharpest corners (hairpins)
+    straightSpeed: 95,     // base speed (m/s) on a straight / DRS zone
+    cornerSpeedBase: 15,   // corner base speed (m/s) at zero radius …
+    cornerSpeedK: 1.05,    // … plus this much per metre of fillet radius
   },
 
   // ---- pit lane ----

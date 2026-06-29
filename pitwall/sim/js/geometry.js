@@ -32,6 +32,14 @@ export function buildClosedSpline(pts, samplesPerSeg = 24) {
   return finishPolyline(raw);
 }
 
+// Build a Polyline directly from an already-sampled closed ring of points
+// (no Catmull-Rom smoothing) — used by the rounded-polygon track generator,
+// whose fillet arcs + straights are the final racing line and must not be
+// re-rounded.
+export function closedPolyline(raw) {
+  return finishPolyline(raw);
+}
+
 // Shared post-processing: cumulative arc length, headings, curvature.
 function finishPolyline(raw) {
   const m = raw.length;
