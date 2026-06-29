@@ -15,6 +15,7 @@ export class Controls {
 
     this.playBtn.addEventListener('click', () => this.h.onToggle());
     $('restartBtn').addEventListener('click', () => this.h.onRestart());
+    $('randomBtn').addEventListener('click', () => this.h.onRandomTrack());
     $('newTrackBtn').addEventListener('click', () => this.h.onNewTrack(this.seedInput.value.trim()));
     $('resetViewBtn').addEventListener('click', () => this.h.onResetView());
 
