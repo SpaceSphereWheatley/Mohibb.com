@@ -273,33 +273,54 @@ export class Track {
     }
   }
 
-  // A separate, offset path leaving the racing line before the start-finish
-  // line and rejoining after it. The longer, speed-limited path *is* the time
-  // loss. Spans are sized to the S/F straight so entry/exit stay on it.
+  // length of straight track on each side of the start-finish line (so the pit
+  // lane can be confined to the genuinely straight section)
+  _straightHalf() {
+    const n = this.segMeta.length, L = this.length;
+    const i0 = this.line.indexAt(this.line.wrap(this.sfDist));
+    const isStr = (t) => t === SEG.STRAIGHT || t === SEG.START_FINISH;
+    const seg = (i) => ((this.line.pts[(i + 1) % n].dist - this.line.pts[i].dist) % L + L) % L;
+    let fwd = 0, back = 0;
+    for (let k = 0; k < n; k++) { const i = (i0 + k) % n; if (!isStr(this.segMeta[i].type)) break; fwd += seg(i); }
+    for (let k = 1; k < n; k++) { const i = (i0 - k + n) % n; if (!isStr(this.segMeta[i].type)) break; back += seg(i); }
+    return Math.max(40, Math.min(fwd, back) * 0.9);
+  }
+
+  // The pit lane is a straight line parallel to the start-finish straight,
+  // offset to one side. Cars in the pits travel this longer, speed-limited path
+  // — that geometry *is* the time loss. It spans only the straight section, so
+  // entry/exit never fall into the bordering corners (which would bend it).
   _buildPitLane() {
     const off = config.pit.offset;
-    const half = Math.min(150, Math.max(90, this.sfLen * 0.45));
+    const half = this._straightHalf();
     const entry = this.line.wrap(this.sfDist - half);
     const exit = this.line.wrap(this.sfDist + half);
     this.pit = { entryDist: entry, exitDist: exit, speed: config.pit.speed };
 
-    const span = this.line.wrap(exit - entry);
-    const steps = Math.max(30, Math.floor(span / 4));
+    // straight endpoints on the racing line, and the (straight) chord direction
+    const a = this.line.at(entry), b = this.line.at(exit);
+    const dir = (() => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1; return { x: dx / l, y: dy / l }; })();
+    let nrm = { x: -dir.y, y: dir.x };
+    // offset to the outside of the circuit (away from the track centre)
+    const c = this.line.bounds();
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const toMid = { x: mid.x - (c.minX + c.maxX) / 2, y: mid.y - (c.minY + c.maxY) / 2 };
+    if (nrm.x * toMid.x + nrm.y * toMid.y < 0) nrm = { x: -nrm.x, y: -nrm.y };
+
+    const span = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.max(20, Math.floor(span / 4));
     const samples = [];
-    let acc = 0, prev = null;
     for (let s = 0; s <= steps; s++) {
       const f = s / steps;
-      const ease = Math.sin(Math.min(f, 1 - f) * Math.PI);
-      const d = this.line.wrap(entry + span * f);
-      const p = this.line.offsetAt(d, off * ease);
-      if (prev) acc += Math.hypot(p.x - prev.x, p.y - prev.y);
-      p.dist = acc;
-      p.isBox = f > 0.42 && f < 0.58;
-      samples.push(p);
-      prev = p;
+      samples.push({
+        x: a.x + (b.x - a.x) * f + nrm.x * off,
+        y: a.y + (b.y - a.y) * f + nrm.y * off,
+        dist: span * f,
+        isBox: f > 0.42 && f < 0.58,
+      });
     }
     this.pit.samples = samples;
-    this.pit.length = acc;
+    this.pit.length = span;
     this.pit.boxIndex = samples.findIndex((p) => p.isBox);
 
     this._tagRange(entry, this.line.wrap(entry + 24), SEG.PIT_ENTRY);
