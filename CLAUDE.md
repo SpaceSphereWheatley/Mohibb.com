@@ -137,11 +137,19 @@ grand prix and renders team-coloured dots with a live timing tower.
 - **Data:** `data.json` is a hand-authored, *illustrative* 2026 grid (11
   teams / 22 drivers) in the documented `teams[]` / `drivers[]` shape; a "Load
   grid…" file picker overrides it at runtime (`colour`/`code` optional).
+- **Track generation** is a **rounded-polygon** generator (`track.js`): a
+  convex hull of seeded random points gets concave pockets (midpoint
+  displacement), is tuned to a target corner count (14–20, avg ~17), then each
+  vertex becomes a fillet arc whose radius is set by how sharply it turns
+  (sharp = hairpin, shallow = sweeper) — leaving genuine straights between
+  corners. One long edge is forced to be the start-finish straight; a tight
+  chicane is dropped onto another. `geometry.js#closedPolyline` turns the
+  filleted point ring into the arc-length `Polyline` without re-smoothing it.
 - **Dependencies** are **vendored** into `pitwall/sim/vendor/` (no runtime
   CDN, like `pdf/pdf-lib.min.js`) and pinned via the import map: **PixiJS**
-  (`pixi.min.mjs`, rendering), **simplex-noise** (`*.min.mjs`, track gen),
-  **Tweakpane** (`tweakpane.min.js`, the `?debug` tuning panel), **Chart.js**
-  (`chart.umd.min.js`, post-race analysis as the global `Chart`).
+  (`pixi.min.mjs`, rendering), **Tweakpane** (`tweakpane.min.js`, the `?debug`
+  tuning panel), **Chart.js** (`chart.umd.min.js`, post-race analysis as the
+  global `Chart`).
 - **CI notes:** load the entry module via `<script type="module" src=…>` —
   never inline a module with `import`, because validate.yml's inline-script
   check runs `new Function()` on `type="module"` blocks and rejects `import`.

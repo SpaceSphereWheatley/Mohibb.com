@@ -173,6 +173,7 @@ async function boot() {
     onToggle: () => setPlaying(!state.playing),
     onSpeed: setSpeed,
     onRestart: () => newRace(state.race.seed),
+    onRandomTrack: () => newRace((Math.random() * 1e9) >>> 0),
     onNewTrack: (seedStr) => newRace(resolveSeed(seedStr)),
     onLoadGrid: loadGridFile,
     onResetView: () => renderer.resetView(),

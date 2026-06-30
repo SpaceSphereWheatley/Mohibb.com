@@ -1,10 +1,11 @@
-// track.js — procedural circuit. A seeded, noise-perturbed ring of control
-// points becomes a smooth closed loop; curvature classifies each metre into a
-// segment type (straight / sweeper / braking / apex / accel / start-finish /
-// pit). A parallel pit lane branches before the line and rejoins after it.
+// track.js — procedural circuit via a rounded-polygon generator. A convex hull
+// of random points is given concave pockets (midpoint displacement) and tuned
+// to a target corner count, then every vertex is replaced by a fillet arc whose
+// radius is set by how sharply it turns (sharp = hairpin, shallow = sweeper),
+// leaving genuine straights between corners. One long edge is forced to be the
+// start-finish straight; a tight chicane is dropped onto another straight.
 
-import { createNoise2D } from 'simplex-noise';
-import { buildClosedSpline, segmentsIntersect } from './geometry.js';
+import { closedPolyline, segmentsIntersect } from './geometry.js';
 import { config } from './config.js';
 
 export const SEG = {
@@ -18,93 +19,241 @@ export const SEG = {
   PIT_EXIT: 'pit_exit',
 };
 
-// Generate a non-self-intersecting set of control points around a ring.
-function makeControlPoints(rng) {
-  const t = config.track;
-  const noise2d = createNoise2D(() => rng.next());
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const pts = [];
-    const n = t.controlPoints;
-    for (let i = 0; i < n; i++) {
-      const ang = (i / n) * Math.PI * 2;
-      const nx = Math.cos(ang * t.noiseFreq);
-      const ny = Math.sin(ang * t.noiseFreq);
-      const wobble = noise2d(nx + attempt * 3.1, ny - attempt * 1.7); // -1..1
-      const r = t.baseRadius * (1 + wobble * t.noiseAmp);
-      pts.push({ x: Math.cos(ang) * r, y: Math.sin(ang) * r });
-    }
-    if (!selfIntersects(pts)) return pts;
-  }
-  // fallback: a clean ellipse (should basically never happen)
-  return Array.from({ length: t.controlPoints }, (_, i) => {
-    const a = (i / t.controlPoints) * Math.PI * 2;
-    return { x: Math.cos(a) * t.baseRadius, y: Math.sin(a) * t.baseRadius * 0.8 };
-  });
+// ---- small vector helpers ----
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+const mul = (a, s) => ({ x: a.x * s, y: a.y * s });
+const vlen = (a) => Math.hypot(a.x, a.y);
+const norm = (a) => { const l = vlen(a) || 1; return { x: a.x / l, y: a.y / l }; };
+const perp = (a) => ({ x: -a.y, y: a.x });
+
+// Andrew's monotone-chain convex hull (returns CCW ring).
+function convexHull(P) {
+  P = P.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo = [];
+  for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  const up = [];
+  for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  lo.pop(); up.pop();
+  return lo.concat(up);
 }
 
-function selfIntersects(pts) {
-  const n = pts.length;
+const centroid = (P) => {
+  let x = 0, y = 0;
+  for (const p of P) { x += p.x; y += p.y; }
+  return { x: x / P.length, y: y / P.length };
+};
+
+// interior angle (radians) between the two edges meeting at vertex i
+function turnAngle(P, i) {
+  const N = P.length, B = P[i], A = P[(i - 1 + N) % N], C = P[(i + 1) % N];
+  const u1 = norm(sub(A, B)), u2 = norm(sub(C, B));
+  return Math.acos(Math.max(-1, Math.min(1, u1.x * u2.x + u1.y * u2.y)));
+}
+
+function ringSelfIntersects(P) {
+  const n = P.length;
   for (let i = 0; i < n; i++) {
-    const a1 = pts[i], a2 = pts[(i + 1) % n];
+    const a1 = P[i], a2 = P[(i + 1) % n];
     for (let j = i + 1; j < n; j++) {
       if (j === i || (j + 1) % n === i || (i + 1) % n === j) continue;
-      const b1 = pts[j], b2 = pts[(j + 1) % n];
-      if (segmentsIntersect(a1, a2, b1, b2)) return true;
+      if (segmentsIntersect(a1, a2, P[j], P[(j + 1) % n])) return true;
     }
   }
   return false;
 }
 
-// Map curvature -> a target speed (m/s). Tight apex = slow, straight = fast.
-function speedFor(curv) {
+// Build the waypoint polygon: hull -> displacement -> chicane -> target count.
+function generateWaypoints(rng) {
   const t = config.track;
-  if (curv >= t.slowCorner) return 24 + (t.slowCorner / Math.max(curv, 1e-4)) * 30;
-  if (curv >= t.fastCorner) {
-    const f = (curv - t.fastCorner) / (t.slowCorner - t.fastCorner);
-    return 78 - f * 30;          // sweeper: 78 -> 48 m/s
+  const cloud = [];
+  const k = t.pointCloud + Math.floor(rng.next() * 9);
+  for (let i = 0; i < k; i++) cloud.push({ x: (rng.next() - 0.5) * t.spreadX, y: (rng.next() - 0.5) * t.spreadY });
+  let P = convexHull(cloud);
+  if (P.length < 5) {                       // pathological cloud -> jittered ring
+    P = [];
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; P.push({ x: Math.cos(a) * 300, y: Math.sin(a) * 220 }); }
   }
-  return 95;                      // straight / DRS
+
+  // concave pockets: displace some long-edge midpoints, mostly inward
+  const C = centroid(P);
+  let out = [];
+  for (let i = 0; i < P.length; i++) {
+    const A = P[i], B = P[(i + 1) % P.length];
+    out.push(A);
+    const l = vlen(sub(B, A));
+    if (l > 150 && rng.next() < 0.6) {
+      const M = mul(add(A, B), 0.5);
+      const inward = norm(sub(C, M));
+      const sign = rng.next() < 0.72 ? 1 : -1;
+      out.push(add(M, mul(inward, l * (0.12 + rng.next() * 0.26) * sign)));
+    }
+  }
+  // drop degenerate short edges
+  P = out.filter((p, i) => vlen(sub(p, out[(i - 1 + out.length) % out.length])) > 48);
+  if (P.length < 7) P = out;
+
+  // chicane: a tight S on the longest edge (+2 corners)
+  P = addChicane(P, rng);
+
+  // tune to a target corner count
+  const target = t.cornersMin + Math.floor(rng.next() * (t.cornersMax - t.cornersMin + 1));
+  let guard = 0;
+  while (P.length < target && guard++ < 80) {
+    let li = -1, ll = 0;
+    for (let i = 0; i < P.length; i++) {
+      if (P[i].chic || P[(i + 1) % P.length].chic) continue;
+      const l = vlen(sub(P[(i + 1) % P.length], P[i]));
+      if (l > ll) { ll = l; li = i; }
+    }
+    if (li < 0) break;
+    const a = P[li], b = P[(li + 1) % P.length], M = mul(add(a, b), 0.5);
+    const inward = norm(sub(centroid(P), M));
+    P.splice(li + 1, 0, add(M, mul(inward, ll * (0.1 + rng.next() * 0.22) * (rng.next() < 0.6 ? 1 : -1))));
+  }
+  guard = 0;
+  while (P.length > target && guard++ < 80) {
+    let si = -1, sa = -1;                    // remove the shallowest (straightest) corner
+    for (let i = 0; i < P.length; i++) { if (P[i].chic) continue; const a = turnAngle(P, i); if (a > sa) { sa = a; si = i; } }
+    if (si < 0) break;
+    P.splice(si, 1);
+  }
+
+  // per-corner radius jitter
+  for (const p of P) if (p.rj === undefined) p.rj = 0.7 + rng.next() * 0.6;
+
+  // start-finish = longest non-chicane edge
+  let sfIndex = 0, sfLen = 0;
+  for (let i = 0; i < P.length; i++) {
+    if (P[i].chic || P[(i + 1) % P.length].chic) continue;
+    const l = vlen(sub(P[(i + 1) % P.length], P[i]));
+    if (l > sfLen) { sfLen = l; sfIndex = i; }
+  }
+  return { pts: P, sfIndex, sfLen };
 }
 
-function classify(curv, prevCurv) {
+function addChicane(P, rng) {
+  let bi = -1, bl = 0;
+  for (let i = 0; i < P.length; i++) { const l = vlen(sub(P[(i + 1) % P.length], P[i])); if (l > bl) { bl = l; bi = i; } }
+  if (bl < 170) return P;
+  const a = P[bi], b = P[(bi + 1) % P.length], dir = norm(sub(b, a)), n = perp(dir), w = 30;
+  const c1 = { ...add(add(a, mul(dir, bl * 0.40)), mul(n, w)), rj: 0.5, chic: true };
+  const c2 = { ...add(add(a, mul(dir, bl * 0.60)), mul(n, -w)), rj: 0.5, chic: true };
+  const out = [...P];
+  out.splice(bi + 1, 0, c1, c2);
+  return out;
+}
+
+// speed (m/s) a corner of fillet radius r supports
+function cornerSpeed(r) {
   const t = config.track;
-  if (curv >= t.slowCorner) return SEG.APEX;
-  if (curv >= t.fastCorner) {
-    if (curv > prevCurv) return SEG.BRAKING;     // curvature rising into a corner
-    return curv < prevCurv ? SEG.ACCEL : SEG.SWEEPER;
+  return Math.min(t.straightSpeed - 4, t.cornerSpeedBase + t.cornerSpeedK * r);
+}
+
+function metaForType(type, baseSpeed) {
+  const t = config.track;
+  const narrow = type === SEG.APEX || type === SEG.BRAKING;
+  return {
+    type,
+    baseSpeed,
+    width: t.width * (narrow ? t.cornerWidthFactor : 1),
+    overtake: type === SEG.STRAIGHT ? 1 : type === SEG.BRAKING ? 0.7
+      : type === SEG.ACCEL ? 0.35 : type === SEG.SWEEPER ? 0.18 : 0.04,
+    drs: type === SEG.STRAIGHT,
+  };
+}
+
+// Fillet every vertex; emit a dense centre-line of arc points + straight points,
+// each tagged with segment metadata. Returns points, aligned meta, and the
+// world coordinate of the start-finish line.
+function buildCenterline(P, sfIndex) {
+  const t = config.track;
+  const N = P.length;
+  const corner = [];                         // per vertex: { Pin, Pout, arc:[{x,y,meta}] }
+  for (let i = 0; i < N; i++) {
+    const B = P[i], A = P[(i - 1 + N) % N], Cn = P[(i + 1) % N];
+    const u1 = norm(sub(A, B)), u2 = norm(sub(Cn, B));
+    const l1 = vlen(sub(A, B)), l2 = vlen(sub(Cn, B));
+    const ang = Math.acos(Math.max(-1, Math.min(1, u1.x * u2.x + u1.y * u2.y)));
+    const half = ang / 2;
+    const sharp = 1 - ang / Math.PI;         // 0 straight .. 1 hairpin
+    let r = (t.fastRadius - sharp * (t.fastRadius - t.hairpinRadius)) * (B.rj || 1);
+    if (B.chic) r = t.hairpinRadius;
+    let tan = r / Math.tan(half);
+    const tmax = 0.45 * Math.min(l1, l2);
+    if (tan > tmax) { tan = tmax; r = tan * Math.tan(half); }
+    const Pin = add(B, mul(u1, tan)), Pout = add(B, mul(u2, tan));
+    const center = add(B, mul(norm(add(u1, u2)), r / Math.sin(half)));
+    let a0 = Math.atan2(Pin.y - center.y, Pin.x - center.x);
+    let a1 = Math.atan2(Pout.y - center.y, Pout.x - center.x);
+    let d = a1 - a0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    const steps = Math.max(4, Math.round(Math.abs(d) / 0.16));
+    const slow = r < t.hairpinRadius * 2.3;
+    const spd = cornerSpeed(r);
+    const arc = [];
+    for (let s = 0; s <= steps; s++) {
+      const f = s / steps;
+      const a = a0 + d * f;
+      const type = f < 0.3 ? SEG.BRAKING : f > 0.7 ? SEG.ACCEL : (slow ? SEG.APEX : SEG.SWEEPER);
+      const bs = type === SEG.BRAKING ? Math.min(t.straightSpeed - 4, spd * 1.15)
+        : type === SEG.ACCEL ? Math.min(t.straightSpeed - 4, spd * 1.22) : spd;
+      arc.push({ x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r, meta: metaForType(type, bs) });
+    }
+    corner.push({ Pin, Pout, arc });
   }
-  return SEG.STRAIGHT;
+
+  // assemble ring: arc_i, then straight from Pout_i to Pin_{i+1}
+  const pts = [], meta = [];
+  let sfPoint = null;
+  for (let i = 0; i < N; i++) {
+    for (const a of corner[i].arc) { pts.push({ x: a.x, y: a.y }); meta.push(a.meta); }
+    const from = corner[i].Pout, to = corner[(i + 1) % N].Pin;
+    const segLen = vlen(sub(to, from));
+    const steps = Math.max(1, Math.floor(segLen / 12));
+    for (let s = 1; s < steps; s++) {        // interior straight points only
+      const f = s / steps;
+      pts.push({ x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f });
+      meta.push(metaForType(SEG.STRAIGHT, config.track.straightSpeed));
+    }
+    if (i === sfIndex) sfPoint = mul(add(from, to), 0.5);
+  }
+  if (!sfPoint) sfPoint = pts[0];
+  return { pts, meta, sfPoint };
 }
 
 export class Track {
   constructor(rng) {
     const t = config.track;
-    this.line = buildClosedSpline(makeControlPoints(rng));
-    this.length = this.line.length;
     this.halfWidth = t.width / 2;
 
-    // per-sample segment metadata, aligned to the spline samples
-    const pts = this.line.pts;
-    this.segMeta = pts.map((p, i) => {
-      const prev = pts[(i - 1 + pts.length) % pts.length];
-      const type = classify(p.curv, prev.curv);
-      const narrow = (type === SEG.APEX || type === SEG.BRAKING);
-      return {
-        dist: p.dist,
-        type,
-        baseSpeed: speedFor(p.curv),
-        width: t.width * (narrow ? t.cornerWidthFactor : 1),
-        // straights/braking zones are where passing happens
-        overtake: type === SEG.STRAIGHT ? 1 : type === SEG.BRAKING ? 0.7
-          : type === SEG.ACCEL ? 0.35 : type === SEG.SWEEPER ? 0.18 : 0.04,
-        drs: type === SEG.STRAIGHT,
-      };
-    });
+    // generate until we get a clean (non-self-intersecting) layout
+    let wp, cl;
+    for (let attempt = 0; attempt < 24; attempt++) {
+      wp = generateWaypoints(rng);
+      if (!ringSelfIntersects(wp.pts) || attempt === 23) break;
+    }
+    cl = buildCenterline(wp.pts, wp.sfIndex);
 
-    // start-finish: place on the longest straight run
-    this.sfDist = this._longestStraightCentre();
+    this.line = closedPolyline(cl.pts);
+    this.length = this.line.length;
+    this.segMeta = cl.meta.map((m, i) => ({ ...m, dist: this.line.pts[i].dist }));
+    this.sfLen = wp.sfLen;
+
+    // start-finish distance = sample nearest the S/F midpoint
+    this.sfDist = this._distOfPoint(cl.sfPoint);
+
     this._tagStartFinish();
     this._buildPitLane(rng);
+  }
+
+  _distOfPoint(p) {
+    let best = 0, bd = Infinity;
+    for (const q of this.line.pts) {
+      const d2 = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+      if (d2 < bd) { bd = d2; best = q.dist; }
+    }
+    return best;
   }
 
   // metadata for the metre at distance d
@@ -113,27 +262,7 @@ export class Track {
     return this.segMeta[i];
   }
 
-  _longestStraightCentre() {
-    const meta = this.segMeta;
-    let best = { len: -1, mid: 0 };
-    let runStart = null;
-    const wrapPts = [...meta, ...meta];   // tolerate a run across the seam
-    for (let i = 0; i < wrapPts.length; i++) {
-      const isStraight = wrapPts[i].type === SEG.STRAIGHT;
-      if (isStraight && runStart === null) runStart = i;
-      if ((!isStraight || i === wrapPts.length - 1) && runStart !== null) {
-        const a = wrapPts[runStart].dist;
-        let b = wrapPts[i].dist;
-        if (b < a) b += this.length;
-        if (b - a > best.len) best = { len: b - a, mid: (a + b) / 2 };
-        runStart = null;
-      }
-    }
-    return this.line.wrap(best.mid);
-  }
-
   _tagStartFinish() {
-    // tag a short window around sfDist as the start-finish segment
     const win = 18; // metres
     for (let i = 0; i < this.segMeta.length; i++) {
       let d = this.segMeta[i].dist - this.sfDist;
@@ -144,39 +273,56 @@ export class Track {
     }
   }
 
-  // The pit lane is a separate, offset path that leaves the racing line a bit
-  // before the start-finish line and rejoins a bit after it. Cars in the pits
-  // travel this longer, speed-limited path — that geometry *is* the time loss.
-  _buildPitLane(rng) {
+  // length of straight track on each side of the start-finish line (so the pit
+  // lane can be confined to the genuinely straight section)
+  _straightHalf() {
+    const n = this.segMeta.length, L = this.length;
+    const i0 = this.line.indexAt(this.line.wrap(this.sfDist));
+    const isStr = (t) => t === SEG.STRAIGHT || t === SEG.START_FINISH;
+    const seg = (i) => ((this.line.pts[(i + 1) % n].dist - this.line.pts[i].dist) % L + L) % L;
+    let fwd = 0, back = 0;
+    for (let k = 0; k < n; k++) { const i = (i0 + k) % n; if (!isStr(this.segMeta[i].type)) break; fwd += seg(i); }
+    for (let k = 1; k < n; k++) { const i = (i0 - k + n) % n; if (!isStr(this.segMeta[i].type)) break; back += seg(i); }
+    return Math.max(40, Math.min(fwd, back) * 0.9);
+  }
+
+  // The pit lane is a straight line parallel to the start-finish straight,
+  // offset to one side. Cars in the pits travel this longer, speed-limited path
+  // — that geometry *is* the time loss. It spans only the straight section, so
+  // entry/exit never fall into the bordering corners (which would bend it).
+  _buildPitLane() {
     const off = config.pit.offset;
-    const entry = this.line.wrap(this.sfDist - 120);  // branch before the line
-    const exit = this.line.wrap(this.sfDist + 120);   // rejoin after the line
+    const half = this._straightHalf();
+    const entry = this.line.wrap(this.sfDist - half);
+    const exit = this.line.wrap(this.sfDist + half);
     this.pit = { entryDist: entry, exitDist: exit, speed: config.pit.speed };
 
-    // sample the offset path from entry..exit, easing the offset in/out so the
-    // pit lane peels away and merges smoothly instead of stepping sideways.
-    const span = this.line.wrap(exit - entry);
-    const steps = Math.max(30, Math.floor(span / 4));
+    // straight endpoints on the racing line, and the (straight) chord direction
+    const a = this.line.at(entry), b = this.line.at(exit);
+    const dir = (() => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1; return { x: dx / l, y: dy / l }; })();
+    let nrm = { x: -dir.y, y: dir.x };
+    // offset to the outside of the circuit (away from the track centre)
+    const c = this.line.bounds();
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const toMid = { x: mid.x - (c.minX + c.maxX) / 2, y: mid.y - (c.minY + c.maxY) / 2 };
+    if (nrm.x * toMid.x + nrm.y * toMid.y < 0) nrm = { x: -nrm.x, y: -nrm.y };
+
+    const span = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.max(20, Math.floor(span / 4));
     const samples = [];
-    let acc = 0;
-    let prev = null;
     for (let s = 0; s <= steps; s++) {
       const f = s / steps;
-      const ease = Math.sin(Math.min(f, 1 - f) * Math.PI);   // 0 at ends, 1 mid
-      const d = this.line.wrap(entry + span * f);
-      const p = this.line.offsetAt(d, off * ease);
-      if (prev) acc += Math.hypot(p.x - prev.x, p.y - prev.y);
-      p.dist = acc;
-      // the box sits in the flat middle third of the lane
-      p.isBox = f > 0.42 && f < 0.58;
-      samples.push(p);
-      prev = p;
+      samples.push({
+        x: a.x + (b.x - a.x) * f + nrm.x * off,
+        y: a.y + (b.y - a.y) * f + nrm.y * off,
+        dist: span * f,
+        isBox: f > 0.42 && f < 0.58,
+      });
     }
     this.pit.samples = samples;
-    this.pit.length = acc;
+    this.pit.length = span;
     this.pit.boxIndex = samples.findIndex((p) => p.isBox);
 
-    // tag the on-line metres that straddle entry/exit so the UI/segments know
     this._tagRange(entry, this.line.wrap(entry + 24), SEG.PIT_ENTRY);
     this._tagRange(this.line.wrap(exit - 24), exit, SEG.PIT_EXIT);
   }
@@ -184,13 +330,12 @@ export class Track {
   _tagRange(from, to, type) {
     for (let i = 0; i < this.segMeta.length; i++) {
       const d = this.segMeta[i].dist;
-      const within = from < to ? (d >= from && d <= to)
-        : (d >= from || d <= to);
+      const within = from < to ? (d >= from && d <= to) : (d >= from || d <= to);
       if (within) this.segMeta[i] = { ...this.segMeta[i], type };
     }
   }
 
-  // position along the pit path, parameter u in [0,1]; returns world point.
+  // world point at pit-path parameter u in [0,1]
   pitAt(u) {
     const s = this.pit;
     const target = Math.max(0, Math.min(1, u)) * s.length;

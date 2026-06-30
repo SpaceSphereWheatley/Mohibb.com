@@ -143,8 +143,10 @@ export class Renderer {
     const pad = 60;
     const w = (b.maxX - b.minX) + pad * 2;
     const h = (b.maxY - b.minY) + pad * 2;
-    const cw = this.app.renderer.width / this.app.renderer.resolution;
-    const ch = this.app.renderer.height / this.app.renderer.resolution;
+    // logical (CSS) canvas size — app.screen is resolution-independent, so this
+    // centres correctly on high-DPI displays too
+    const cw = this.app.screen.width;
+    const ch = this.app.screen.height;
     const scale = Math.min(cw / w, ch / h);
     this.world.scale.set(scale);
     this.world.position.set(
