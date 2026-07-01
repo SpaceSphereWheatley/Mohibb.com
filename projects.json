@@ -47,7 +47,7 @@
           "name": "Betting Tracker",
           "category": "Football",
           "description": "A spreadsheet tracking simulated football bets, including automated bet selection, staking, and ROI.",
-          "url": "https://docs.google.com/spreadsheets/d/1_DRVnfGEwIajn_3eTKH6A7W_MgfTIGTn-wZzDJFCTVY/edit?usp=drivesdk",
+          "url": "/tracker/",
           "status": "live"
         }
       ]

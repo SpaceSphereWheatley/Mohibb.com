@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<title>Tracker v2 — Mohibb Malik</title>
+<link rel="canonical" href="https://mohibb.com/tracker/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Tracker v2 — Arbitrage Dashboard">
+<meta property="og:description" content="Live arbitrage betting dashboard pulling data from Google Sheets.">
+<meta property="og:url" content="https://mohibb.com/tracker/">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Tracker v2 — Arbitrage Dashboard">
+<meta name="twitter:description" content="Live arbitrage betting dashboard pulling data from Google Sheets.">
+<meta name="theme-color" content="#0A0D12">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Tracker v2","url":"https://mohibb.com/tracker/","description":"Live arbitrage betting dashboard pulling data from Google Sheets.","author":{"@type":"Person","name":"Mohibb Malik"}}</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root{
+  --bg:#0A0D12;
+  --surface:#11151C;
+  --surface2:#161C26;
+  --border:#232A36;
+  --border-soft:#1A2029;
+  --text:#E7ECF2;
+  --muted:#8B96A8;
+  --muted2:#5C6577;
+  --profit:#3ECF8E;
+  --loss:#FF5C6C;
+  --accent:#5B8CFF;
+  --warn:#F5A623;
+  --font-display:'Space Grotesk',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+
+body{
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(91,140,255,0.08), transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--font-mono);
+  padding:32px 24px 80px;
+  min-height:100vh;
+}
+
+.wrap{max-width:1180px;margin:0 auto;}
+
+/* Header */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-end;
+  flex-wrap:wrap;
+  gap:16px;
+  border-bottom:1px solid var(--border);
+  padding-bottom:20px;
+  margin-bottom:28px;
+}
+.title-block h1{
+  font-family:var(--font-display);
+  font-weight:700;
+  font-size:28px;
+  letter-spacing:-0.02em;
+}
+.title-block .sub{
+  color:var(--muted);
+  font-size:13px;
+  margin-top:4px;
+}
+.status{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-size:12px;
+  color:var(--muted);
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted2);}
+.dot.live{background:var(--profit);box-shadow:0 0 8px var(--profit);}
+.dot.err{background:var(--loss);box-shadow:0 0 8px var(--loss);}
+#refreshBtn{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  color:var(--text);
+  font-family:var(--font-mono);
+  font-size:12px;
+  padding:8px 14px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:border-color .15s;
+}
+#refreshBtn:hover{border-color:var(--accent);}
+#refreshBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+#refreshBtn:disabled{opacity:.5;cursor:default;}
+
+/* Error banner */
+.errorBanner{
+  display:none;
+  background:rgba(255,92,108,0.08);
+  border:1px solid rgba(255,92,108,0.35);
+  color:var(--loss);
+  border-radius:8px;
+  padding:14px 16px;
+  font-size:13px;
+  margin-bottom:24px;
+  line-height:1.5;
+}
+.errorBanner.show{display:block;}
+.errorBanner a{color:var(--loss);}
+
+section{margin-bottom:36px;}
+.section-label{
+  font-family:var(--font-display);
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted);
+  margin-bottom:14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.section-label::after{
+  content:'';
+  flex:1;
+  height:1px;
+  background:var(--border-soft);
+}
+
+/* KPI grid */
+.kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+}
+.kpi{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:16px 18px;
+}
+.kpi .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+.kpi .value{font-size:22px;font-weight:600;margin-top:6px;font-variant-numeric:tabular-nums;}
+.kpi .sub{font-size:11px;color:var(--muted2);margin-top:4px;}
+.pos{color:var(--profit);}
+.neg{color:var(--loss);}
+
+/* Open position hero */
+.hero{
+  background:linear-gradient(135deg, rgba(91,140,255,0.07), rgba(62,207,142,0.03));
+  border:1px solid var(--border);
+  border-left:3px solid var(--accent);
+  border-radius:12px;
+  padding:24px 26px;
+}
+.hero-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  flex-wrap:wrap;
+  gap:16px;
+  margin-bottom:20px;
+}
+.hero-match{font-family:var(--font-display);font-size:22px;font-weight:600;}
+.hero-meta{font-size:12px;color:var(--muted);margin-top:6px;}
+.hero-countdown{
+  font-family:var(--font-mono);
+  font-size:13px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:8px 14px;
+  color:var(--warn);
+}
+.legs{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:10px;
+}
+.leg{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:12px 14px;
+}
+.leg .out{font-size:11px;color:var(--muted);text-transform:uppercase;}
+.leg .odds{font-family:var(--font-display);font-size:18px;font-weight:600;margin-top:4px;}
+.leg .row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted2);margin-top:8px;}
+.leg .row span:last-child{color:var(--text);}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+th{
+  text-align:left;
+  color:var(--muted);
+  font-weight:500;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  padding:8px 12px;
+  border-bottom:1px solid var(--border);
+}
+td{padding:9px 12px;border-bottom:1px solid var(--border-soft);}
+tr:last-child td{border-bottom:none;}
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+}
+.badge{
+  font-size:10px;
+  padding:2px 8px;
+  border-radius:10px;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+.badge.won{background:rgba(62,207,142,.12);color:var(--profit);}
+.badge.lost{background:rgba(255,92,108,.12);color:var(--loss);}
+.badge.open{background:rgba(245,166,35,.12);color:var(--warn);}
+
+/* Two-column layout */
+.grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
+@media(max-width:860px){.grid2{grid-template-columns:1fr;}}
+
+/* Country bars */
+.bar-row{display:flex;align-items:center;gap:12px;padding:8px 16px;}
+.bar-row .name{width:110px;font-size:12px;flex-shrink:0;}
+.bar-track{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;}
+.bar-fill.pos{background:var(--profit);}
+.bar-fill.neg{background:var(--loss);}
+.bar-row .val{width:130px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;flex-shrink:0;}
+.bar-row .cnt{width:36px;text-align:right;color:var(--muted2);font-size:11px;flex-shrink:0;}
+
+/* Odds diverging chart */
+.odds-chart{display:flex;gap:8px;padding:16px;height:200px;}
+.odds-col{flex:1;display:flex;flex-direction:column;align-items:center;}
+.zone-pos{height:90px;width:100%;display:flex;align-items:flex-end;justify-content:center;}
+.zone-neg{height:90px;width:100%;display:flex;align-items:flex-start;justify-content:center;}
+.odds-bar{width:65%;min-height:2px;}
+.odds-bar.pos{background:var(--profit);border-radius:3px 3px 0 0;}
+.odds-bar.neg{background:var(--loss);border-radius:0 0 3px 3px;}
+.zeroline{width:100%;height:1px;background:var(--border);}
+.odds-label{font-size:11px;color:var(--muted);margin-top:8px;}
+.odds-val{font-size:10px;color:var(--muted2);margin-top:2px;}
+
+/* Misc panel */
+.misc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;padding:16px;}
+.misc-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+.misc-item .k{font-size:11px;color:var(--muted);text-transform:uppercase;}
+.misc-item .v{font-size:16px;font-weight:600;margin-top:4px;}
+
+footer{
+  margin-top:40px;
+  padding-top:20px;
+  border-top:1px solid var(--border-soft);
+  font-size:11px;
+  color:var(--muted2);
+  line-height:1.6;
+}
+
+.skeleton{color:var(--muted2);font-size:12px;padding:20px;text-align:center;}
+</style>
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <h1>Tracker v2</h1>
+      <div class="sub">Arbitrage betting dashboard · live from Google Sheets</div>
+    </div>
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Not loaded</span>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+  </header>
+
+  <div class="errorBanner" id="errorBanner"></div>
+
+  <section>
+    <div class="section-label">Overview</div>
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="skeleton">Loading…</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">Open Position</div>
+    <div class="hero" id="heroSection">
+      <div class="skeleton">Loading…</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">Recent Bets</div>
+    <div class="card" id="recentCard">
+      <div class="skeleton">Loading…</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid2">
+      <div>
+        <div class="section-label">Profit by Country</div>
+        <div class="card" id="countryCard">
+          <div class="skeleton">Loading…</div>
+        </div>
+      </div>
+      <div>
+        <div class="section-label">Profit by Odds Bracket</div>
+        <div class="card" id="oddsCard">
+          <div class="skeleton">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">Misc — Saksinnsyn / Ulvenkroken</div>
+    <div class="card" id="miscCard">
+      <div class="skeleton">Loading…</div>
+    </div>
+  </section>
+
+  <footer id="footerNote"></footer>
+
+</div>
+
+<script>
+const SHEET_ID = '1_DRVnfGEwIajn_3eTKH6A7W_MgfTIGTn-wZzDJFCTVY';
+const GIDS = { main: '1619776881', bets: '2076253557', open: '992602483' };
+
+function csvUrl(gid){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}`;
+}
+
+function parseCSV(str){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < str.length; i++){
+    const c = str[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (str[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function getCell(rows, r, c){
+  return (rows[r] && rows[r][c] !== undefined) ? rows[r][c].trim() : '';
+}
+
+function parseKr(str){
+  if (!str) return 0;
+  const cleaned = String(str).replace(/kr/gi,'').replace(/,/g,'').replace(/%/g,'').trim();
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+function fmtKr(num){
+  if (num === null || num === undefined || isNaN(num)) return '—';
+  const sign = num < 0 ? '-' : '';
+  return `${sign}kr ${Math.abs(num).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+}
+
+async function fetchSheet(gid){
+  const res = await fetch(csvUrl(gid));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return parseCSV(text);
+}
+
+/* ---------- MAIN tab ---------- */
+function parseMain(rows){
+  const row1text = (rows[0] || []).join(' ');
+  const totalMatch = row1text.match(/Total:\s*kr\s*([\d,.\s]+?)(?:\s{2,}|Available)/i);
+  const availMatch = row1text.match(/Available:\s*kr:?\s*([\d,.\s]+)/i);
+  const totalFunds = totalMatch ? parseKr(totalMatch[1]) : null;
+  const availFunds = availMatch ? parseKr(availMatch[1]) : null;
+
+  const nonArb = parseKr(getCell(rows,73,2));
+  const arb = parseKr(getCell(rows,74,2));
+  const totalProfit = parseKr(getCell(rows,75,2));
+
+  const oddsProfit = [];
+  for (let r = 63; r <= 72; r++){
+    const label = getCell(rows,r,0);
+    if (label) oddsProfit.push({ label, value: parseKr(getCell(rows,r,2)) });
+  }
+
+  const countries = [];
+  for (let r = 78; r <= 91; r++){
+    const country = getCell(rows,r,3);
+    if (country) countries.push({
+      country,
+      profit: parseKr(getCell(rows,r,4)),
+      count: parseInt(getCell(rows,r,5)) || 0
+    });
+  }
+  countries.sort((a,b) => b.profit - a.profit);
+  const countryTotal = { profit: parseKr(getCell(rows,92,4)), count: getCell(rows,92,5) };
+
+  const sak = getCell(rows,98,0);
+  const tittel = getCell(rows,98,1);
+  const blocks = [];
+  for (let r = 98; r <= 99; r++){
+    const blokk = getCell(rows,r,6);
+    if (blokk) blocks.push({ blokk, solgt: getCell(rows,r,7), ledige: getCell(rows,r,8) });
+  }
+
+  return { totalFunds, availFunds, nonArb, arb, totalProfit, oddsProfit, countries, countryTotal, sak, tittel, blocks };
+}
+
+/* ---------- BETS tab ---------- */
+function parseBets(rows){
+  const data = rows.slice(1).filter(r => (r[0] || '').trim() !== '');
+  let wins = 0, finished = 0, totalProfit = 0, lastROI = null;
+  data.forEach(r => {
+    const isFinished = (r[7] || '').trim().toUpperCase() === 'TRUE';
+    const isWin = (r[9] || '').trim().toUpperCase() === 'TRUE';
+    totalProfit += parseKr(r[10]);
+    if (isFinished){ finished++; if (isWin) wins++; }
+    const roiStr = (r[12] || '').trim();
+    if (roiStr) lastROI = roiStr;
+  });
+  return {
+    totalBets: data.length,
+    finished, wins,
+    winRate: finished > 0 ? (wins / finished * 100) : 0,
+    totalProfit,
+    currentROI: lastROI
+  };
+}
+
+/* ---------- OPEN BETS tab ---------- */
+function parseOpenBets(rows){
+  const summaryText = (rows[0] || []).join(' ');
+  const m = summaryText.match(/Wins\/conluded:\s*(\d+)\/(\d+)\s*\((\d+)%\)\s*Open Bets:\s*(\d+)\s*Due today:\s*(\d+)/i);
+  const summary = m ? { wins:+m[1], concluded:+m[2], pct:+m[3], open:+m[4], dueToday:+m[5] } : null;
+
+  const matchLookup = {};
+  const recent = [];
+  for (let r = 2; r < rows.length; r++){
+    const matchNumA = getCell(rows,r,0);
+    const matchNumJ = getCell(rows,r,9);
+    if (matchNumJ){
+      matchLookup[matchNumJ] = {
+        league: getCell(rows,r,12),
+        home: getCell(rows,r,13),
+        away: getCell(rows,r,14),
+        result: getCell(rows,r,18)
+      };
+    }
+    if (matchNumA){
+      recent.push({
+        matchNum: matchNumA,
+        concludingTime: getCell(rows,r,1),
+        stake: parseKr(getCell(rows,r,2)),
+        odds: parseFloat(getCell(rows,r,3)) || 0,
+        matchRef: getCell(rows,r,4),
+        selection: getCell(rows,r,5),
+        profitRaw: getCell(rows,r,6),
+        timeAgo: getCell(rows,r,7)
+      });
+    }
+    if (!matchNumA && !matchNumJ) break;
+  }
+  recent.forEach(b => { b.match = matchLookup[b.matchRef] || null; });
+
+  const outcomeHeader = [getCell(rows,25,1), getCell(rows,25,2), getCell(rows,25,3)];
+  const atRisk = [getCell(rows,26,1), getCell(rows,26,2), getCell(rows,26,3)].map(parseKr);
+  const potential = [getCell(rows,27,1), getCell(rows,27,2), getCell(rows,27,3)].map(parseKr);
+  const oddsRow = [getCell(rows,28,1), getCell(rows,28,2), getCell(rows,28,3)].map(v => parseFloat(v) || 0);
+  const chance = [getCell(rows,29,1), getCell(rows,29,2), getCell(rows,29,3)];
+  const roiRow = [getCell(rows,30,1), getCell(rows,30,2), getCell(rows,30,3)];
+  const matchName = getCell(rows,31,0);
+  const maxDays = getCell(rows,26,7);
+  const nextMatch = getCell(rows,23,10);
+  const nextBet = getCell(rows,24,10);
+  const stakeTotal = parseKr(getCell(rows,23,5));
+  const profitTotal = parseKr(getCell(rows,23,6));
+  const roiTotal = getCell(rows,23,7);
+
+  return { summary, recent, outcomeHeader, atRisk, potential, oddsRow, chance, roiRow, matchName, maxDays, nextMatch, nextBet, stakeTotal, profitTotal, roiTotal };
+}
+
+/* ---------- Renderers ---------- */
+function renderKPIs(main, bets){
+  const el = document.getElementById('kpiGrid');
+  const roiClass = (bets.currentROI || '').includes('-') ? 'neg' : 'pos';
+  el.innerHTML = `
+    <div class="kpi"><div class="label">Total Funds</div><div class="value">${fmtKr(main.totalFunds)}</div></div>
+    <div class="kpi"><div class="label">Available</div><div class="value">${fmtKr(main.availFunds)}</div></div>
+    <div class="kpi"><div class="label">Arbitrage Profit</div><div class="value ${main.arb>=0?'pos':'neg'}">${fmtKr(main.arb)}</div><div class="sub">vs ${fmtKr(main.nonArb)} non-arb</div></div>
+    <div class="kpi"><div class="label">Total Profit</div><div class="value ${main.totalProfit>=0?'pos':'neg'}">${fmtKr(main.totalProfit)}</div></div>
+    <div class="kpi"><div class="label">Bet Win Rate</div><div class="value">${bets.winRate.toFixed(1)}%</div><div class="sub">${bets.wins}/${bets.finished} finished</div></div>
+    <div class="kpi"><div class="label">Latest ROI (cumulative)</div><div class="value ${roiClass}">${bets.currentROI || '—'}</div><div class="sub">from most recent bet row</div></div>
+  `;
+}
+
+function renderHero(open){
+  const el = document.getElementById('heroSection');
+  if (!open.matchName){
+    el.innerHTML = `<div class="skeleton">No open position found.</div>`;
+    return;
+  }
+  const legs = open.outcomeHeader.map((label,i) => `
+    <div class="leg">
+      <div class="out">${label || '—'}</div>
+      <div class="odds">${open.oddsRow[i] ?? '—'}</div>
+      <div class="row"><span>At risk</span><span>${fmtKr(open.atRisk[i])}</span></div>
+      <div class="row"><span>Potential</span><span>${fmtKr(open.potential[i])}</span></div>
+      <div class="row"><span>Chance</span><span>${open.chance[i] || '—'}</span></div>
+      <div class="row"><span>ROI</span><span>${open.roiRow[i] || '—'}</span></div>
+    </div>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="hero-top">
+      <div>
+        <div class="hero-match">${open.matchName}</div>
+        <div class="hero-meta">
+          ${open.summary ? `Wins/concluded: ${open.summary.wins}/${open.summary.concluded} (${open.summary.pct}%) · Open bets: ${open.summary.open} · Due today: ${open.summary.dueToday}` : ''}
+        </div>
+      </div>
+      <div class="hero-countdown">${open.nextMatch || '—'}</div>
+    </div>
+    <div class="legs">${legs}</div>
+    <div class="hero-meta" style="margin-top:16px;">
+      Stake at risk: ${fmtKr(open.stakeTotal)} · Expected profit: ${fmtKr(open.profitTotal)} (${open.roiTotal || '—'}) · Max days to conclude: ${open.maxDays || '—'}
+    </div>
+  `;
+}
+
+function renderRecent(open){
+  const el = document.getElementById('recentCard');
+  if (!open.recent.length){
+    el.innerHTML = `<div class="skeleton">No recent bets found.</div>`;
+    return;
+  }
+  const rows = open.recent.map(b => {
+    const teams = b.match ? `${b.match.home} vs ${b.match.away}` : `Match ${b.matchRef}`;
+    const isOpen = /left/i.test(b.timeAgo);
+    let badge;
+    if (isOpen) badge = `<span class="badge open">Open</span>`;
+    else {
+      const profit = parseKr(b.profitRaw);
+      badge = profit >= 0 ? `<span class="badge won">Won</span>` : `<span class="badge lost">Lost</span>`;
+    }
+    const profitDisplay = b.profitRaw ? fmtKr(parseKr(b.profitRaw)) : '—';
+    const profitClass = b.profitRaw ? (parseKr(b.profitRaw) >= 0 ? 'pos' : 'neg') : '';
+    return `<tr>
+      <td>${teams}</td>
+      <td>${b.selection}</td>
+      <td>${b.odds}</td>
+      <td>${fmtKr(b.stake)}</td>
+      <td class="${profitClass}">${profitDisplay}</td>
+      <td>${badge}</td>
+      <td style="color:var(--muted2)">${b.timeAgo}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<table>
+    <thead><tr><th>Match</th><th>Sel</th><th>Odds</th><th>Stake</th><th>Profit</th><th>Status</th><th>Time</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function renderCountries(main){
+  const el = document.getElementById('countryCard');
+  if (!main.countries.length){
+    el.innerHTML = `<div class="skeleton">No country data found.</div>`;
+    return;
+  }
+  const maxAbs = Math.max(...main.countries.map(c => Math.abs(c.profit)), 1);
+  const rows = main.countries.map(c => `
+    <div class="bar-row">
+      <div class="name">${c.country}</div>
+      <div class="bar-track"><div class="bar-fill ${c.profit>=0?'pos':'neg'}" style="width:${Math.abs(c.profit)/maxAbs*100}%"></div></div>
+      <div class="val ${c.profit>=0?'pos':'neg'}">${fmtKr(c.profit)}</div>
+      <div class="cnt">${c.count}×</div>
+    </div>
+  `).join('');
+  el.innerHTML = rows + (main.countryTotal.profit ? `
+    <div class="bar-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:12px;">
+      <div class="name" style="font-weight:600;">Total</div>
+      <div class="bar-track" style="visibility:hidden;"></div>
+      <div class="val pos" style="font-weight:600;">${fmtKr(main.countryTotal.profit)}</div>
+      <div class="cnt">${main.countryTotal.count}×</div>
+    </div>` : '');
+}
+
+function renderOddsChart(main){
+  const el = document.getElementById('oddsCard');
+  if (!main.oddsProfit.length){
+    el.innerHTML = `<div class="skeleton">No odds-bracket data found.</div>`;
+    return;
+  }
+  const maxAbs = Math.max(...main.oddsProfit.map(o => Math.abs(o.value)), 1);
+  const cols = main.oddsProfit.map(o => {
+    const h = (Math.abs(o.value) / maxAbs * 90).toFixed(0);
+    const posBar = o.value >= 0 ? `<div class="odds-bar pos" style="height:${h}px"></div>` : '';
+    const negBar = o.value < 0 ? `<div class="odds-bar neg" style="height:${h}px"></div>` : '';
+    return `<div class="odds-col">
+      <div class="zone-pos">${posBar}</div>
+      <div class="zeroline"></div>
+      <div class="zone-neg">${negBar}</div>
+      <div class="odds-label">${o.label}</div>
+      <div class="odds-val ${o.value>=0?'pos':'neg'}">${fmtKr(o.value)}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="odds-chart">${cols}</div>`;
+}
+
+function renderMisc(main){
+  const el = document.getElementById('miscCard');
+  const items = [];
+  if (main.sak) items.push({ k: 'Sak', v: main.sak });
+  if (main.tittel) items.push({ k: 'Tittel', v: main.tittel });
+  main.blocks.forEach(b => {
+    items.push({ k: `Blokk ${b.blokk}`, v: `${b.solgt} · ${b.ledige} ledige` });
+  });
+  if (!items.length){
+    el.innerHTML = `<div class="skeleton">No data found.</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="misc-grid">${items.map(i => `
+    <div class="misc-item"><div class="k">${i.k}</div><div class="v">${i.v}</div></div>
+  `).join('')}</div>`;
+}
+
+/* ---------- Orchestration ---------- */
+async function loadAll(){
+  const btn = document.getElementById('refreshBtn');
+  const dot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const errorBanner = document.getElementById('errorBanner');
+
+  btn.disabled = true;
+  dot.className = 'dot';
+  statusText.textContent = 'Loading…';
+  errorBanner.className = 'errorBanner';
+
+  try {
+    const [mainRows, betsRows, openRows] = await Promise.all([
+      fetchSheet(GIDS.main),
+      fetchSheet(GIDS.bets),
+      fetchSheet(GIDS.open)
+    ]);
+
+    const main = parseMain(mainRows);
+    const bets = parseBets(betsRows);
+    const open = parseOpenBets(openRows);
+
+    renderKPIs(main, bets);
+    renderHero(open);
+    renderRecent(open);
+    renderCountries(main);
+    renderOddsChart(main);
+    renderMisc(main);
+
+    dot.className = 'dot live';
+    statusText.textContent = `Live · updated ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    dot.className = 'dot err';
+    statusText.textContent = 'Failed to load';
+    errorBanner.className = 'errorBanner show';
+    errorBanner.innerHTML = `Could not load live data (${err.message}). This usually means the sheet isn't shared as
+      "Anyone with the link can view", or the browser blocked the cross-origin request. Open the sheet directly to check:
+      <a href="https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit" target="_blank" rel="noopener">open sheet</a>.`;
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', loadAll);
+loadAll();
+</script>
+</body>
+</html>
