@@ -222,6 +222,24 @@ function calcStats(settled) {
   const best = settled.length
     ? settled.reduce((m, g) => g.bet.profit > m.bet.profit ? g : m)
     : null;
+  const worst = settled.length
+    ? settled.reduce((m, g) => g.bet.profit < m.bet.profit ? g : m)
+    : null;
+
+  const sortedByTime = [...settled].sort((a, b) => {
+    const da = a.bet.concludingTime || a.bet.betDate;
+    const db = b.bet.concludingTime || b.bet.betDate;
+    return da - db;
+  });
+  let streakCount = 0, streakType = null;
+  if (sortedByTime.length) {
+    const lastWin = sortedByTime[sortedByTime.length - 1].bet.win;
+    streakType = lastWin ? 'W' : 'L';
+    for (let i = sortedByTime.length - 1; i >= 0; i--) {
+      if (sortedByTime[i].bet.win === lastWin) streakCount++;
+      else break;
+    }
+  }
 
   const byCountry = {};
   for (const g of settled) {
@@ -242,6 +260,9 @@ function calcStats(settled) {
     roi: totalStake ? (totalProfit / totalStake) * 100 : 0,
     edge: totalProfit - totalExpected,
     best,
+    worst,
+    streakCount,
+    streakType,
     countryRanked: Object.entries(byCountry).sort((a, b) => b[1] - a[1])
   };
 }
@@ -299,7 +320,7 @@ function renderKPIs(stats, prevStats, bankroll) {
   const prev = prevStats;
 
   document.getElementById('kpi-bankroll').innerHTML =
-    `<span class="kpi-label">Bankroll</span>
+    `<span class="kpi-label">Current Bankroll</span>
      <span class="kpi-value">${fmtKr(bankroll)}</span>`;
 
   document.getElementById('kpi-pl').innerHTML =
@@ -342,6 +363,33 @@ function renderKPIs(stats, prevStats, bankroll) {
     `<span class="kpi-label">Best Bet</span>
      <span class="kpi-value pos">${best ? '+' + fmtKr(best.bet.profit) : '—'}</span>
      ${bestDetail}`;
+
+  const worst = stats.worst;
+  let worstDetail = '';
+  if (worst) {
+    const b = worst.bet;
+    const oddsStr = b.totalOdds ? `@ ${b.totalOdds.toFixed(2)}` : '';
+    const placedLine = `Placed ${fmtDate(b.betDate)}`;
+    const settledLine = b.concludingTime && fmtDate(b.concludingTime) !== fmtDate(b.betDate)
+      ? `<br>Settled ${fmtDate(b.concludingTime)}` : '';
+    worstDetail = `<div class="kpi-best-detail">
+      ${b.betType}${oddsStr ? ' ' + oddsStr : ''} &middot; Stake ${fmtKr(b.stake)}<br>
+      ${b.matchLabel || ''}
+      <br>${placedLine}${settledLine}
+    </div>`;
+  }
+  document.getElementById('kpi-worst').innerHTML =
+    `<span class="kpi-label">Worst Bet</span>
+     <span class="kpi-value neg">${worst ? fmtKr(worst.bet.profit) : '—'}</span>
+     ${worstDetail}`;
+
+  const streakCls = stats.streakType === 'W' ? 'pos' : 'neg';
+  const streakLabel = stats.streakType === 'W' ? 'Win streak' : 'Losing streak';
+  document.getElementById('kpi-streak').innerHTML = stats.streakCount
+    ? `<span class="kpi-label">Current Streak</span>
+       <span class="kpi-value ${streakCls}">${stats.streakCount}${stats.streakType}</span>
+       <span class="kpi-sub">${streakLabel}</span>`
+    : `<span class="kpi-label">Current Streak</span><span class="kpi-value">—</span>`;
 
   document.getElementById('kpi-edge').innerHTML =
     `<span class="kpi-label">Edge vs Expected</span>
@@ -426,11 +474,13 @@ function renderBankrollChart(labels, data) {
 
 function renderMonthlyChart(groups) {
   const monthly = {};
+  const monthlyCounts = {};
   for (const g of groups) {
     const d = g.bet.concludingTime || g.bet.betDate;
     if (!d) continue;
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     monthly[key] = (monthly[key] || 0) + g.bet.profit;
+    monthlyCounts[key] = (monthlyCounts[key] || 0) + 1;
   }
   const keys = Object.keys(monthly).sort();
   const data = keys.map(k => monthly[k]);
@@ -455,7 +505,10 @@ function renderMonthlyChart(groups) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => ' ' + fmtKr(ctx.raw) }
+        callbacks: {
+          label: ctx => ' ' + fmtKr(ctx.raw),
+          afterLabel: ctx => ` ${monthlyCounts[keys[ctx.dataIndex]]} bet${monthlyCounts[keys[ctx.dataIndex]] !== 1 ? 's' : ''}`
+        }
       }},
       scales: {
         x: { ticks: { color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
@@ -483,6 +536,7 @@ function renderOpenBets(openGroups, pendingGroups) {
       <div class="open-card-top">${badge}<span class="open-type">${b.betType}</span></div>
       <div class="open-match">${b.matchLabel || '—'}</div>
       <div class="open-card-nums">
+        <span>Placed <strong>${fmtDate(b.betDate)}</strong></span>
         <span>Stake <strong>${fmtKr(b.stake)}</strong></span>
         <span>Potential <strong>${fmtKr(b.potentialPayout)}</strong></span>
         ${b.countries.length ? `<span>${b.countries.join(', ')}</span>` : ''}
