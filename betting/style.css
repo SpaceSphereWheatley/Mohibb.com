@@ -108,6 +108,33 @@ h1 {
   padding-bottom: 0.2rem;
 }
 
+/* ── Period filter ── */
+.period-bar {
+  margin-bottom: 1.5rem;
+}
+
+.period-tabs {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.period-btn {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--font);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
+}
+
+.period-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+.period-btn.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
 /* ── KPI Cards ── */
 .kpi-grid {
   display: grid;
@@ -147,6 +174,20 @@ h1 {
   font-size: 0.73rem;
   color: var(--ink-3);
   margin-top: 0.1rem;
+}
+
+.kpi-compare {
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+  opacity: 0.85;
+}
+
+.kpi-best-detail {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  margin-top: 0.15rem;
+  line-height: 1.5;
 }
 
 /* Profit vs Expected layout */

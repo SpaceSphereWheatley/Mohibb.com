@@ -1,7 +1,12 @@
 const BETS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT6GhPD4kXOQposMCsLE8i3YFxsUeFiiYWqDtoFZSlV7i1DkD5m1Xh-KhLyM3yGvFtbtVzJLFOyo7Yh/pub?gid=2076253557&single=true&output=csv';
 const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT6GhPD4kXOQposMCsLE8i3YFxsUeFiiYWqDtoFZSlV7i1DkD5m1Xh-KhLyM3yGvFtbtVzJLFOyo7Yh/pub?gid=329494115&single=true&output=csv';
 
-// ── CSV / formatting helpers ────────────────────────────────────────────────
+// ── Module state ─────────────────────────────────────────────────────────────
+let allGroups = [];
+let allBets = [];
+let currentPeriod = 'all';
+
+// ── CSV / formatting helpers ─────────────────────────────────────────────────
 
 function parseCSV(text) {
   const rows = [];
@@ -38,7 +43,7 @@ function parseDate(s) {
 function fmtKr(n) {
   const sign = n < 0 ? '-' : '';
   const val = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return sign + 'kr ' + val;
+  return sign + 'kr ' + val;
 }
 
 function fmtDate(d) {
@@ -49,7 +54,7 @@ function fmtDate(d) {
 function sign(n) { return n >= 0 ? '+' : ''; }
 function cls(n) { return n >= 0 ? 'pos' : 'neg'; }
 
-// ── Data loading ────────────────────────────────────────────────────────────
+// ── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadData() {
   const [betsText, matchesText] = await Promise.all([
@@ -84,7 +89,7 @@ async function loadData() {
   return { bets, matchMap };
 }
 
-// ── Arb grouping ────────────────────────────────────────────────────────────
+// ── Arb grouping ─────────────────────────────────────────────────────────────
 
 function matchLabel(nums, matchMap) {
   return nums.map(n => {
@@ -135,7 +140,11 @@ function groupBets(bets, matchMap) {
     } else {
       groups.push({
         type: 'single',
-        bet: { ...bet, matchLabel: matchLabel(bet.matchNums, matchMap) }
+        bet: {
+          ...bet,
+          roi: bet.stake > 0 ? (bet.profit / bet.stake) * 100 : 0,
+          matchLabel: matchLabel(bet.matchNums, matchMap)
+        }
       });
     }
   }
@@ -144,17 +153,56 @@ function groupBets(bets, matchMap) {
   return groups;
 }
 
-// ── Stats ───────────────────────────────────────────────────────────────────
+// ── Period helpers ────────────────────────────────────────────────────────────
 
-function calcStats(groups, bets) {
-  const settled = groups.filter(g => g.bet.win !== null);
+function getPeriodRange(value) {
+  if (value === 'all') return null;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  function monthsBack(d, n) {
+    const r = new Date(d);
+    r.setMonth(r.getMonth() - n);
+    r.setHours(0, 0, 0, 0);
+    return r;
+  }
+
+  switch (value) {
+    case 'ytd': {
+      const start = new Date(end.getFullYear(), 0, 1);
+      const prevStart = new Date(end.getFullYear() - 1, 0, 1);
+      return { start, end, prevStart, prevEnd: new Date(start) };
+    }
+    case '6m': {
+      const start = monthsBack(end, 6);
+      return { start, end, prevStart: monthsBack(start, 6), prevEnd: new Date(start) };
+    }
+    case '3m': {
+      const start = monthsBack(end, 3);
+      return { start, end, prevStart: monthsBack(start, 3), prevEnd: new Date(start) };
+    }
+    case '1m': {
+      const start = monthsBack(end, 1);
+      return { start, end, prevStart: monthsBack(start, 1), prevEnd: new Date(start) };
+    }
+    default: return null;
+  }
+}
+
+function filterByRange(groups, start, end) {
+  return groups.filter(g => {
+    const d = g.bet.concludingTime || g.bet.betDate;
+    return d && d >= start && d <= end;
+  });
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+function calcStats(settled) {
   const won = settled.filter(g => g.bet.win === true);
   const totalProfit = settled.reduce((s, g) => s + g.bet.profit, 0);
   const totalStake = settled.reduce((s, g) => s + g.bet.stake, 0);
   const totalExpected = settled.reduce((s, g) => s + g.bet.expectedProfit, 0);
-
-  const lastBet = [...bets].sort((a, b) => a.betId - b.betId).filter(b => b.win !== null).pop();
-  const bankroll = lastBet ? lastBet.funds : 0;
 
   const best = settled.length
     ? settled.reduce((m, g) => g.bet.profit > m.bet.profit ? g : m)
@@ -168,10 +216,8 @@ function calcStats(groups, bets) {
       byCountry[c] = (byCountry[c] || 0) + g.bet.profit / countries.length;
     }
   }
-  const countryRanked = Object.entries(byCountry).sort((a, b) => b[1] - a[1]);
 
   return {
-    bankroll,
     totalProfit,
     totalStake,
     totalExpected,
@@ -181,44 +227,108 @@ function calcStats(groups, bets) {
     roi: totalStake ? (totalProfit / totalStake) * 100 : 0,
     edge: totalProfit - totalExpected,
     best,
-    countryRanked
+    countryRanked: Object.entries(byCountry).sort((a, b) => b[1] - a[1])
   };
 }
 
-// ── Render: KPIs ────────────────────────────────────────────────────────────
+// ── Bankroll series (arb-aware, period-aware) ────────────────────────────────
 
-function renderKPIs(stats) {
+function buildBankrollSeries(allSettled, periodSettled) {
+  if (!allSettled.length) return { labels: [], data: [] };
+
+  // Compute running bankroll using grouped profits (one event per arb)
+  const initial = allSettled[0].bet.funds - allSettled[0].bet.profit;
+  let running = initial;
+  const bankrollById = new Map();
+  for (const g of allSettled) {
+    running += g.bet.profit;
+    bankrollById.set(g.bet.betId, running);
+  }
+
+  const isAllTime = periodSettled.length === allSettled.length;
+
+  if (isAllTime) {
+    return {
+      labels: allSettled.map(g => fmtDate(g.bet.concludingTime || g.bet.betDate)),
+      data: allSettled.map(g => bankrollById.get(g.bet.betId))
+    };
+  }
+
+  if (!periodSettled.length) return { labels: [], data: [] };
+
+  const firstId = periodSettled[0].bet.betId;
+  const before = allSettled.filter(g => g.bet.betId < firstId);
+  const startBankroll = before.length
+    ? bankrollById.get(before[before.length - 1].bet.betId)
+    : initial;
+
+  const periodIds = new Set(periodSettled.map(g => g.bet.betId));
+  const inOrder = allSettled.filter(g => periodIds.has(g.bet.betId));
+
+  return {
+    labels: ['Start', ...inOrder.map(g => fmtDate(g.bet.concludingTime || g.bet.betDate))],
+    data: [startBankroll, ...inOrder.map(g => bankrollById.get(g.bet.betId))]
+  };
+}
+
+// ── Render: KPIs ──────────────────────────────────────────────────────────────
+
+function cmpHtml(curr, prev, fmt) {
+  if (prev === null || prev === undefined) return '';
+  const delta = curr - prev;
+  const arrow = delta >= 0 ? '&#8593;' : '&#8595;';
+  return `<span class="kpi-compare ${cls(delta)}">${arrow} ${sign(delta)}${fmt(Math.abs(delta))} vs prev</span>`;
+}
+
+function renderKPIs(stats, prevStats, bankroll) {
+  const prev = prevStats;
+
   document.getElementById('kpi-bankroll').innerHTML =
     `<span class="kpi-label">Bankroll</span>
-     <span class="kpi-value">${fmtKr(stats.bankroll)}</span>`;
+     <span class="kpi-value">${fmtKr(bankroll)}</span>`;
 
   document.getElementById('kpi-pl').innerHTML =
     `<span class="kpi-label">Total P/L</span>
-     <span class="kpi-value ${cls(stats.totalProfit)}">${sign(stats.totalProfit)}${fmtKr(stats.totalProfit)}</span>`;
+     <span class="kpi-value ${cls(stats.totalProfit)}">${sign(stats.totalProfit)}${fmtKr(stats.totalProfit)}</span>
+     ${cmpHtml(stats.totalProfit, prev && prev.totalProfit, fmtKr)}`;
 
   document.getElementById('kpi-winrate').innerHTML =
     `<span class="kpi-label">Win Rate</span>
      <span class="kpi-value">${stats.winRate.toFixed(1)}%</span>
-     <span class="kpi-sub">${stats.wonCount} / ${stats.totalBets} bets</span>`;
+     <span class="kpi-sub">${stats.wonCount} / ${stats.totalBets} bets</span>
+     ${cmpHtml(stats.winRate, prev && prev.winRate, n => n.toFixed(1) + 'pp')}`;
 
   document.getElementById('kpi-total').innerHTML =
     `<span class="kpi-label">Bets Placed</span>
-     <span class="kpi-value">${stats.totalBets}</span>`;
+     <span class="kpi-value">${stats.totalBets}</span>
+     ${prev ? cmpHtml(stats.totalBets, prev.totalBets, n => Math.round(n).toString()) : ''}`;
 
   document.getElementById('kpi-roi').innerHTML =
     `<span class="kpi-label">Overall ROI</span>
-     <span class="kpi-value ${cls(stats.roi)}">${sign(stats.roi)}${stats.roi.toFixed(1)}%</span>`;
+     <span class="kpi-value ${cls(stats.roi)}">${sign(stats.roi)}${stats.roi.toFixed(1)}%</span>
+     ${cmpHtml(stats.roi, prev && prev.roi, n => n.toFixed(1) + 'pp')}`;
 
   const best = stats.best;
+  let bestDetail = '';
+  if (best) {
+    const b = best.bet;
+    const oddsStr = b.totalOdds ? `@ ${b.totalOdds.toFixed(2)}` : '';
+    bestDetail = `<div class="kpi-best-detail">
+      ${b.betType}${oddsStr ? ' ' + oddsStr : ''} &middot; Stake ${fmtKr(b.stake)}<br>
+      ${b.matchLabel || ''}<br>
+      ${fmtDate(b.concludingTime)}
+    </div>`;
+  }
   document.getElementById('kpi-best').innerHTML =
     `<span class="kpi-label">Best Bet</span>
      <span class="kpi-value pos">${best ? '+' + fmtKr(best.bet.profit) : '—'}</span>
-     ${best ? `<span class="kpi-sub">${best.bet.matchLabel || best.bet.betType} &middot; ${fmtDate(best.bet.concludingTime)}</span>` : ''}`;
+     ${bestDetail}`;
 
   document.getElementById('kpi-edge').innerHTML =
     `<span class="kpi-label">Edge vs Expected</span>
      <span class="kpi-value ${cls(stats.edge)}">${sign(stats.edge)}${fmtKr(stats.edge)}</span>
-     <span class="kpi-sub">Expected total: ${fmtKr(stats.totalExpected)}</span>`;
+     <span class="kpi-sub">Expected: ${fmtKr(stats.totalExpected)}</span>
+     ${cmpHtml(stats.edge, prev && prev.edge, fmtKr)}`;
 
   document.getElementById('kpi-pvse').innerHTML =
     `<span class="kpi-label">Profit vs Expected</span>
@@ -235,7 +345,7 @@ function renderKPIs(stats) {
      </div>`;
 }
 
-// ── Render: Country table ───────────────────────────────────────────────────
+// ── Render: Country table ─────────────────────────────────────────────────────
 
 function renderCountryTable(countryRanked) {
   if (!countryRanked.length) {
@@ -255,7 +365,7 @@ function renderCountryTable(countryRanked) {
      </table>`;
 }
 
-// ── Render: Charts ──────────────────────────────────────────────────────────
+// ── Render: Charts ────────────────────────────────────────────────────────────
 
 let bankrollChart, monthlyChart;
 
@@ -263,20 +373,19 @@ const CHART_FONT = { family: 'Plus Jakarta Sans, system-ui, sans-serif', size: 1
 const GRID_COLOR = 'rgba(107,101,96,0.15)';
 const TICK_COLOR = '#6B6560';
 
-function renderBankrollChart(bets) {
-  const settled = [...bets].filter(b => b.win !== null).sort((a, b) => a.betId - b.betId);
+function renderBankrollChart(labels, data) {
   const ctx = document.getElementById('bankroll-chart').getContext('2d');
   if (bankrollChart) bankrollChart.destroy();
   bankrollChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: settled.map(b => fmtDate(b.concludingTime || b.betDate)),
+      labels,
       datasets: [{
-        data: settled.map(b => b.funds),
+        data,
         borderColor: '#B4471F',
         backgroundColor: 'rgba(180,71,31,0.07)',
         borderWidth: 2,
-        pointRadius: 2.5,
+        pointRadius: 3,
         pointBackgroundColor: '#B4471F',
         fill: true,
         tension: 0.3
@@ -298,7 +407,7 @@ function renderBankrollChart(bets) {
 
 function renderMonthlyChart(groups) {
   const monthly = {};
-  for (const g of groups.filter(g2 => g2.bet.win !== null)) {
+  for (const g of groups) {
     const d = g.bet.concludingTime || g.bet.betDate;
     if (!d) continue;
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -337,7 +446,7 @@ function renderMonthlyChart(groups) {
   });
 }
 
-// ── Render: Open / Pending bets ─────────────────────────────────────────────
+// ── Render: Open / Pending bets ───────────────────────────────────────────────
 
 function renderOpenBets(openGroups, pendingGroups) {
   const all = [...pendingGroups, ...openGroups];
@@ -363,7 +472,7 @@ function renderOpenBets(openGroups, pendingGroups) {
   }).join('');
 }
 
-// ── Render: Bets table ──────────────────────────────────────────────────────
+// ── Render: Bets table ────────────────────────────────────────────────────────
 
 function renderBetsTable(groups) {
   document.getElementById('bets-tbody').innerHTML = groups.map(g => {
@@ -432,7 +541,31 @@ function renderBetsTable(groups) {
   });
 }
 
-// ── Init ────────────────────────────────────────────────────────────────────
+// ── Main render pass ──────────────────────────────────────────────────────────
+
+function renderAll(period) {
+  const range = getPeriodRange(period);
+  const allSettled = allGroups.filter(g => g.bet.win !== null).sort((a, b) => a.bet.betId - b.bet.betId);
+
+  const periodSettled = range ? filterByRange(allSettled, range.start, range.end) : allSettled;
+  const prevSettled = range ? filterByRange(allSettled, range.prevStart, range.prevEnd) : [];
+
+  const stats = calcStats(periodSettled);
+  const prevStats = prevSettled.length ? calcStats(prevSettled) : null;
+
+  // Bankroll is always the current all-time value regardless of period
+  const lastBet = [...allBets].sort((a, b) => a.betId - b.betId).filter(b => b.win !== null).pop();
+  const bankroll = lastBet ? lastBet.funds : 0;
+
+  renderKPIs(stats, prevStats, bankroll);
+  renderCountryTable(stats.countryRanked);
+
+  const { labels, data } = buildBankrollSeries(allSettled, periodSettled);
+  renderBankrollChart(labels, data);
+  renderMonthlyChart(periodSettled);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
   const loadingEl = document.getElementById('loading');
@@ -441,25 +574,32 @@ async function init() {
 
   try {
     const { bets, matchMap } = await loadData();
-    const groups = groupBets(bets, matchMap);
+    allBets = bets;
+    allGroups = groupBets(bets, matchMap);
 
-    const open = groups.filter(g => !g.bet.isFinished && g.bet.win === null);
-    const pending = groups.filter(g => g.bet.isFinished && g.bet.win === null);
+    const open = allGroups.filter(g => !g.bet.isFinished && g.bet.win === null);
+    const pending = allGroups.filter(g => g.bet.isFinished && g.bet.win === null);
 
-    const stats = calcStats(groups, bets);
-
-    renderKPIs(stats);
-    renderCountryTable(stats.countryRanked);
-    renderBankrollChart(bets);
-    renderMonthlyChart(groups);
     renderOpenBets(open, pending);
-    renderBetsTable([...groups].reverse());
+    renderBetsTable([...allGroups].reverse());
+    renderAll('all');
 
     document.getElementById('last-updated').textContent =
       new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
     loadingEl.classList.add('hidden');
     contentEl.classList.remove('hidden');
+
+    // Period filter buttons
+    document.getElementById('period-tabs').addEventListener('click', e => {
+      const btn = e.target.closest('.period-btn');
+      if (!btn) return;
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentPeriod = btn.dataset.period;
+      renderAll(currentPeriod);
+    });
+
   } catch (err) {
     console.error(err);
     loadingEl.classList.add('hidden');
