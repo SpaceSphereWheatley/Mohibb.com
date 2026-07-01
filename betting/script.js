@@ -55,6 +55,22 @@ function fmtDate(d) {
 function sign(n) { return n >= 0 ? '+' : ''; }
 function cls(n) { return n >= 0 ? 'pos' : 'neg'; }
 
+function relTime(d) {
+  if (!d) return null;
+  const now = new Date();
+  const diffMs = d - now;
+  const diffDays = Math.round(diffMs / 86400000);
+  if (diffMs < 0) return 'today or past';
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'tomorrow';
+  if (diffDays < 7) return `in ${diffDays} days`;
+  if (diffDays < 14) return 'in 1 week';
+  const diffWeeks = Math.round(diffDays / 7);
+  if (diffDays < 60) return `in ${diffWeeks} weeks`;
+  const diffMonths = Math.round(diffDays / 30);
+  return `in ${diffMonths} months`;
+}
+
 // ── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadData() {
@@ -67,6 +83,7 @@ async function loadData() {
   parseCSV(matchesText).slice(1).filter(r => r[0]).forEach(r => {
     matchMap[r[0].trim()] = {
       home: r[6], away: r[7], league: r[4], country: r[14],
+      matchDate: parseDate(r[2]),
       odds1: parseFloat(r[8]) || null,
       oddsx: parseFloat(r[9]) || null,
       odds2: parseFloat(r[10]) || null
@@ -697,9 +714,16 @@ function renderOpenBets(openGroups, pendingGroups) {
     const badge = isPending
       ? '<span class="badge badge-pending">Awaiting result</span>'
       : '<span class="badge badge-open">Open</span>';
+    const matchDates = b.matchNums.map(n => allMatchMap[n] && allMatchMap[n].matchDate).filter(Boolean);
+    const nextDate = matchDates.length ? matchDates.reduce((a, b) => a < b ? a : b) : null;
+    const rel = relTime(nextDate);
+    const matchTimeHtml = nextDate
+      ? `<div class="open-card-when"><span class="open-when-rel">${rel}</span><span class="open-when-abs">${fmtDate(nextDate)}</span></div>`
+      : '';
     return `<div class="open-card">
       <div class="open-card-top">${badge}<span class="open-type">${b.betType}</span></div>
       <div class="open-match">${b.matchLabel || '—'}</div>
+      ${matchTimeHtml}
       <div class="open-card-nums">
         <span>Placed <strong>${fmtDate(b.betDate)}</strong></span>
         <span>Stake <strong>${fmtKr(b.stake)}</strong></span>
