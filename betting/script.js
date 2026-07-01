@@ -546,6 +546,133 @@ function renderMonthlyChart(groups) {
   });
 }
 
+let cumulativeChart, typeChart, rollingChart;
+
+function renderCumulativePLChart(periodSettled) {
+  const sorted = [...periodSettled].sort((a, b) => {
+    const da = a.bet.concludingTime || a.bet.betDate;
+    const db = b.bet.concludingTime || b.bet.betDate;
+    return da - db;
+  });
+  const labels = ['Start'];
+  const actual = [0], expected = [0];
+  let runActual = 0, runExpected = 0;
+  for (const g of sorted) {
+    runActual += g.bet.profit;
+    runExpected += g.bet.expectedProfit;
+    labels.push(fmtDate(g.bet.concludingTime || g.bet.betDate));
+    actual.push(runActual);
+    expected.push(runExpected);
+  }
+  const ctx = document.getElementById('cumulative-chart').getContext('2d');
+  if (cumulativeChart) cumulativeChart.destroy();
+  cumulativeChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Actual P/L', data: actual, borderColor: '#B4471F', backgroundColor: 'rgba(180,71,31,0.07)', borderWidth: 2, pointRadius: 2, pointBackgroundColor: '#B4471F', fill: true, tension: 0.3 },
+        { label: 'Expected P/L', data: expected, borderColor: '#6B6560', backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: TICK_COLOR, font: CHART_FONT, boxWidth: 24, padding: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtKr(ctx.raw)}` } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
+        y: { ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
+      }
+    }
+  });
+}
+
+function renderTypeChart(periodSettled) {
+  const byType = {};
+  for (const g of periodSettled) {
+    const t = g.type === 'arb' ? 'Arbitrage' : 'Single';
+    if (!byType[t]) byType[t] = { profit: 0, count: 0 };
+    byType[t].profit += g.bet.profit;
+    byType[t].count++;
+  }
+  const labels = Object.keys(byType);
+  const data = labels.map(l => byType[l].profit);
+  const counts = labels.map(l => byType[l].count);
+  const ctx = document.getElementById('type-chart').getContext('2d');
+  if (typeChart) typeChart.destroy();
+  typeChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: data.map(v => v >= 0 ? 'rgba(46,111,79,0.65)' : 'rgba(180,71,31,0.65)'),
+        borderColor: data.map(v => v >= 0 ? '#2E6F4F' : '#B4471F'),
+        borderWidth: 1.5, borderRadius: 3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${fmtKr(ctx.raw)}`, afterLabel: ctx => ` ${counts[ctx.dataIndex]} bets` } }
+      },
+      scales: {
+        x: { ticks: { color: TICK_COLOR, font: CHART_FONT }, grid: { color: GRID_COLOR } },
+        y: { ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
+      }
+    }
+  });
+}
+
+function renderRollingWinRateChart(periodSettled) {
+  const WINDOW = 10;
+  const sorted = [...periodSettled].sort((a, b) => {
+    const da = a.bet.concludingTime || a.bet.betDate;
+    const db = b.bet.concludingTime || b.bet.betDate;
+    return da - db;
+  });
+  const labels = [], rates = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const slice = sorted.slice(Math.max(0, i - WINDOW + 1), i + 1);
+    const wins = slice.filter(g => g.bet.win === true).length;
+    rates.push((wins / slice.length) * 100);
+    labels.push(fmtDate(sorted[i].bet.concludingTime || sorted[i].bet.betDate));
+  }
+  const ctx = document.getElementById('rolling-chart').getContext('2d');
+  if (rollingChart) rollingChart.destroy();
+  rollingChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Win rate %',
+        data: rates,
+        borderColor: '#2E6F4F',
+        backgroundColor: 'rgba(46,111,79,0.08)',
+        borderWidth: 2,
+        pointRadius: 2,
+        pointBackgroundColor: '#2E6F4F',
+        fill: true,
+        tension: 0.35
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.raw.toFixed(1)}%` } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
+        y: { min: 0, max: 100, ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => v + '%' }, grid: { color: GRID_COLOR } }
+      }
+    }
+  });
+}
+
 // ── Render: Open / Pending bets ───────────────────────────────────────────────
 
 function renderOpenBets(openGroups, pendingGroups) {
@@ -706,6 +833,9 @@ function renderAll(period) {
   const { labels, data, expectedData } = buildBankrollSeries(allSettled, periodSettled);
   renderBankrollChart(labels, data, expectedData);
   renderMonthlyChart(periodSettled);
+  renderCumulativePLChart(periodSettled);
+  renderTypeChart(periodSettled);
+  renderRollingWinRateChart(periodSettled);
 
   // Bets table: settled within period + all open/pending, most recent first
   const openPending = allGroups.filter(g => g.bet.win === null);
