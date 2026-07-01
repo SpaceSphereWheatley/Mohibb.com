@@ -206,6 +206,10 @@ function getPeriodRange(value) {
       const start = monthsBack(end, 1);
       return { start, end, prevStart: monthsBack(start, 1), prevEnd: new Date(start) };
     }
+    case '1y': {
+      const start = monthsBack(end, 12);
+      return { start, end, prevStart: monthsBack(start, 12), prevEnd: new Date(start) };
+    }
     default: return null;
   }
 }
