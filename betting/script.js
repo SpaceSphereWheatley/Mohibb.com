@@ -55,18 +55,41 @@ function fmtDate(d) {
 function sign(n) { return n >= 0 ? '+' : ''; }
 function cls(n) { return n >= 0 ? 'pos' : 'neg'; }
 
+function relTime(d) {
+  if (!d) return null;
+  const now = new Date();
+  const diffMs = d - now;
+  const diffDays = Math.round(diffMs / 86400000);
+  if (diffMs < 0) return 'today or past';
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'tomorrow';
+  if (diffDays < 7) return `in ${diffDays} days`;
+  if (diffDays < 14) return 'in 1 week';
+  const diffWeeks = Math.round(diffDays / 7);
+  if (diffDays < 60) return `in ${diffWeeks} weeks`;
+  const diffMonths = Math.round(diffDays / 30);
+  return `in ${diffMonths} months`;
+}
+
 // ── Data loading ─────────────────────────────────────────────────────────────
 
-async function loadData() {
+const CACHE_KEY = 'bettingCache';
+const CACHE_TTL = 10 * 60 * 1000;
+
+async function fetchCSVs() {
   const [betsText, matchesText] = await Promise.all([
     fetch(BETS_URL).then(r => { if (!r.ok) throw new Error(`Bets HTTP ${r.status}`); return r.text(); }),
     fetch(MATCHES_URL).then(r => { if (!r.ok) throw new Error(`Matches HTTP ${r.status}`); return r.text(); })
   ]);
+  return { betsText, matchesText };
+}
 
+function parseData(betsText, matchesText) {
   const matchMap = {};
   parseCSV(matchesText).slice(1).filter(r => r[0]).forEach(r => {
     matchMap[r[0].trim()] = {
       home: r[6], away: r[7], league: r[4], country: r[14],
+      matchDate: parseDate(r[2]),
       odds1: parseFloat(r[8]) || null,
       oddsx: parseFloat(r[9]) || null,
       odds2: parseFloat(r[10]) || null
@@ -697,9 +720,16 @@ function renderOpenBets(openGroups, pendingGroups) {
     const badge = isPending
       ? '<span class="badge badge-pending">Awaiting result</span>'
       : '<span class="badge badge-open">Open</span>';
+    const matchDates = b.matchNums.map(n => allMatchMap[n] && allMatchMap[n].matchDate).filter(Boolean);
+    const nextDate = matchDates.length ? matchDates.reduce((a, d) => a < d ? a : d) : null;
+    const rel = relTime(nextDate);
+    const matchTimeHtml = nextDate
+      ? `<div class="open-card-when"><span class="open-when-rel">${rel}</span><span class="open-when-abs">${fmtDate(nextDate)}</span></div>`
+      : '';
     return `<div class="open-card">
       <div class="open-card-top">${badge}<span class="open-type">${b.betType}</span></div>
       <div class="open-match">${b.matchLabel || '—'}</div>
+      ${matchTimeHtml}
       <div class="open-card-nums">
         <span>Placed <strong>${fmtDate(b.betDate)}</strong></span>
         <span>Stake <strong>${fmtKr(b.stake)}</strong></span>
@@ -858,25 +888,47 @@ function renderAll(period) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+function applyData(bets, matchMap) {
+  allBets = bets;
+  allMatchMap = matchMap;
+  allGroups = groupBets(bets, matchMap);
+
+  const open = allGroups.filter(g => !g.bet.isFinished && g.bet.win === null);
+  const pending = allGroups.filter(g => g.bet.isFinished && g.bet.win === null);
+
+  renderOpenBets(open, pending);
+  renderAll(currentPeriod);
+
+  document.getElementById('last-updated').textContent =
+    new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
 async function init() {
   const loadingEl = document.getElementById('loading');
   const contentEl = document.getElementById('content');
   const errorEl = document.getElementById('error-state');
 
   try {
-    const { bets, matchMap } = await loadData();
-    allBets = bets;
-    allMatchMap = matchMap;
-    allGroups = groupBets(bets, matchMap);
+    let betsText, matchesText, fromCache = false;
 
-    const open = allGroups.filter(g => !g.bet.isFinished && g.bet.win === null);
-    const pending = allGroups.filter(g => g.bet.isFinished && g.bet.win === null);
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (raw) {
+      try {
+        const c = JSON.parse(raw);
+        if (Date.now() - c.ts < CACHE_TTL) {
+          ({ betsText, matchesText } = c);
+          fromCache = true;
+        }
+      } catch (e) {}
+    }
 
-    renderOpenBets(open, pending);
-    renderAll('6m');
+    if (!fromCache) {
+      ({ betsText, matchesText } = await fetchCSVs());
+      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), betsText, matchesText })); } catch (e) {}
+    }
 
-    document.getElementById('last-updated').textContent =
-      new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const { bets, matchMap } = parseData(betsText, matchesText);
+    applyData(bets, matchMap);
 
     loadingEl.classList.add('hidden');
     contentEl.classList.remove('hidden');
@@ -890,6 +942,17 @@ async function init() {
       currentPeriod = btn.dataset.period;
       renderAll(currentPeriod);
     });
+
+    // Stale-while-revalidate: refresh in background and re-render when done
+    if (fromCache) {
+      fetchCSVs()
+        .then(({ betsText: b, matchesText: m }) => {
+          try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), betsText: b, matchesText: m })); } catch (e) {}
+          const { bets: freshBets, matchMap: freshMap } = parseData(b, m);
+          applyData(freshBets, freshMap);
+        })
+        .catch(() => {});
+    }
 
   } catch (err) {
     console.error(err);
