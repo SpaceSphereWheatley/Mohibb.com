@@ -4,6 +4,7 @@ const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT6GhPD4kXO
 // ── Module state ─────────────────────────────────────────────────────────────
 let allGroups = [];
 let allBets = [];
+let allMatchMap = {};
 let currentPeriod = '6m';
 
 // ── CSV / formatting helpers ─────────────────────────────────────────────────
@@ -573,45 +574,75 @@ function renderBetsTable(groups) {
 
     const oddsCell = b.totalOdds ? b.totalOdds.toFixed(2) : '—';
 
-    let expandBtn = '';
-    let legRows = '';
+    const isMultiMatch = g.type === 'single' && b.matchNums.length > 1;
+    const isExpandable = g.type === 'arb' || isMultiMatch;
+    const expandId = g.type === 'arb' ? `arb-${g.arbId}` : `multi-${b.betId}`;
+
+    let matchCell = '';
+    let subRows = '';
+
     if (g.type === 'arb') {
-      expandBtn = `<button class="arb-toggle" data-arb="${g.arbId}" aria-expanded="false">&#9658; ${g.legs.length} legs</button>`;
-      legRows = g.legs.map(leg => `<tr class="arb-leg" data-arb-leg="${g.arbId}" style="display:none">
-        <td>${fmtDate(leg.betDate)}</td>
-        <td>${fmtDate(leg.concludingTime) || '—'}</td>
-        <td colspan="2">&#8627; Selection: ${leg.selection}</td>
-        <td>${leg.countries.join(', ')}</td>
-        <td>${fmtKr(leg.stake)}</td>
-        <td>${leg.totalOdds.toFixed(2)}</td>
-        <td><span class="${cls(leg.profit)}">${sign(leg.profit)}${fmtKr(leg.profit)}</span></td>
-        <td></td>
-        <td>${leg.win === true ? '<span class="tag tag-win">Win</span>' : leg.win === false ? '<span class="tag tag-loss">Loss</span>' : '<span class="tag tag-open">—</span>'}</td>
-      </tr>`).join('');
+      matchCell = `<td class="match-cell"><span class="expand-indicator">&#9658;</span> ${g.legs.length} legs</td>`;
+      subRows = g.legs.map(leg => {
+        const m = leg.matchNums.map(n => allMatchMap[n]).filter(Boolean);
+        const matchName = m.length ? m.map(x => `${x.home} vs ${x.away}`).join(', ') : leg.matchNums.join(', ');
+        const country = m.length ? m.map(x => x.country).filter(Boolean).join(', ') : leg.countries.join(', ');
+        const legResult = leg.win === true ? '<span class="tag tag-win">Win</span>' : leg.win === false ? '<span class="tag tag-loss">Loss</span>' : '<span class="tag tag-open">—</span>';
+        return `<tr class="sub-row" data-expand-leg="${expandId}" style="display:none">
+          <td>${fmtDate(leg.betDate)}</td>
+          <td>${fmtDate(leg.concludingTime) || '—'}</td>
+          <td class="sub-row-indent" colspan="2">&#8627; ${matchName} &middot; <em>${leg.selection}</em></td>
+          <td>${country}</td>
+          <td>${fmtKr(leg.stake)}</td>
+          <td>${leg.totalOdds.toFixed(2)}</td>
+          <td><span class="${cls(leg.profit)}">${sign(leg.profit)}${fmtKr(leg.profit)}</span></td>
+          <td></td>
+          <td>${legResult}</td>
+        </tr>`;
+      }).join('');
+    } else if (isMultiMatch) {
+      matchCell = `<td class="match-cell"><span class="expand-indicator">&#9658;</span> ${b.matchNums.length} matches</td>`;
+      subRows = b.matchNums.map(n => {
+        const m = allMatchMap[n];
+        const matchName = m ? `${m.home} vs ${m.away}` : `Match ${n}`;
+        const league = m ? m.league || '' : '';
+        const country = m ? m.country || '' : '';
+        return `<tr class="sub-row" data-expand-leg="${expandId}" style="display:none">
+          <td colspan="2"></td>
+          <td class="sub-row-indent" colspan="2">&#8627; ${matchName}${league ? ` &middot; <em>${league}</em>` : ''}</td>
+          <td>${country}</td>
+          <td colspan="5"></td>
+        </tr>`;
+      }).join('');
+    } else {
+      matchCell = `<td class="match-cell">${b.matchLabel || '—'}</td>`;
     }
 
-    return `<tr class="bet-row${g.type === 'arb' ? ' arb-row' : ''}">
+    const rowCls = ['bet-row', g.type === 'arb' ? 'arb-row' : '', isExpandable ? 'expandable-row' : ''].filter(Boolean).join(' ');
+
+    return `<tr class="${rowCls}"${isExpandable ? ` data-expand-id="${expandId}" aria-expanded="false"` : ''}>
       <td>${fmtDate(b.betDate)}</td>
       <td>${b.concludingTime ? fmtDate(b.concludingTime) : '—'}</td>
-      <td><span class="type-tag">${b.betType}</span>${expandBtn}</td>
-      <td class="match-cell" title="${b.matchLabel || ''}">${b.matchLabel || '—'}</td>
+      <td><span class="type-tag">${b.betType}</span></td>
+      ${matchCell}
       <td>${b.countries.slice(0, 2).join(', ') || '—'}</td>
       <td>${fmtKr(b.stake)}</td>
       <td>${oddsCell}</td>
       <td>${profitCell}</td>
       <td>${roiCell}</td>
       <td>${resultHtml}</td>
-    </tr>${legRows}`;
+    </tr>${subRows}`;
   }).join('');
 
-  document.querySelectorAll('.arb-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.arb;
-      const legs = document.querySelectorAll(`[data-arb-leg="${id}"]`);
-      const expanded = btn.getAttribute('aria-expanded') === 'true';
+  document.querySelectorAll('.expandable-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = row.dataset.expandId;
+      const legs = document.querySelectorAll(`[data-expand-leg="${id}"]`);
+      const expanded = row.getAttribute('aria-expanded') === 'true';
       legs.forEach(l => { l.style.display = expanded ? 'none' : ''; });
-      btn.setAttribute('aria-expanded', String(!expanded));
-      btn.innerHTML = (expanded ? '&#9658;' : '&#9660;') + btn.innerHTML.slice(btn.innerHTML.indexOf(' '));
+      row.setAttribute('aria-expanded', String(!expanded));
+      const indicator = row.querySelector('.expand-indicator');
+      if (indicator) indicator.innerHTML = expanded ? '&#9658;' : '&#9660;';
     });
   });
 }
@@ -658,6 +689,7 @@ async function init() {
   try {
     const { bets, matchMap } = await loadData();
     allBets = bets;
+    allMatchMap = matchMap;
     allGroups = groupBets(bets, matchMap);
 
     const open = allGroups.filter(g => !g.bet.isFinished && g.bet.win === null);

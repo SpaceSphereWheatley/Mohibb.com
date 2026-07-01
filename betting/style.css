@@ -101,11 +101,30 @@ h1 {
   line-height: 1.1;
 }
 
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.sheet-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.sheet-link:hover { border-color: var(--ink-3); color: var(--ink); text-decoration: none; }
+
 .updated {
   font-size: 0.78rem;
   color: var(--ink-3);
   white-space: nowrap;
-  padding-bottom: 0.2rem;
 }
 
 /* ── Period filter ── */
@@ -328,14 +347,6 @@ h1 {
 
 .arb-row > td:first-child { border-left: 3px solid var(--accent); }
 
-.arb-leg td {
-  background: rgba(0, 0, 0, 0.018);
-  font-size: 0.77rem;
-  color: var(--ink-3);
-}
-
-.arb-leg td:first-child { padding-left: 2rem; }
-
 .match-cell {
   max-width: 220px;
   word-break: break-word;
@@ -369,22 +380,24 @@ h1 {
 .tag-open { background: rgba(107, 101, 96, 0.1); color: var(--ink-3); }
 .tag-pending { background: rgba(180, 71, 31, 0.08); color: var(--accent); }
 
-.arb-toggle {
+.expandable-row { cursor: pointer; }
+.expandable-row:hover td { background: rgba(0,0,0,0.03); }
+
+.expand-indicator {
   display: inline-block;
-  margin-left: 0.45rem;
   font-size: 0.67rem;
-  font-weight: 700;
   color: var(--accent);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0 0.1rem;
-  font-family: var(--font);
-  letter-spacing: 0.02em;
+  margin-right: 0.3rem;
   vertical-align: middle;
 }
 
-.arb-toggle:hover { text-decoration: underline; }
+.sub-row > td {
+  background: rgba(0,0,0,0.018);
+  font-size: 0.77rem;
+  color: var(--ink-3);
+}
+
+.sub-row-indent { padding-left: 1.75rem !important; }
 
 /* ── Open Bets ── */
 .open-grid {
