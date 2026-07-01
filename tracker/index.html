@@ -52,7 +52,6 @@ body{
 
 .wrap{max-width:1180px;margin:0 auto;}
 
-/* Header */
 header{
   display:flex;
   justify-content:space-between;
@@ -63,133 +62,60 @@ header{
   padding-bottom:20px;
   margin-bottom:28px;
 }
-.title-block h1{
-  font-family:var(--font-display);
-  font-weight:700;
-  font-size:28px;
-  letter-spacing:-0.02em;
-}
-.title-block .sub{
-  color:var(--muted);
-  font-size:13px;
-  margin-top:4px;
-}
-.status{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  font-size:12px;
-  color:var(--muted);
-}
+.title-block h1{font-family:var(--font-display);font-weight:700;font-size:28px;letter-spacing:-0.02em;}
+.title-block .sub{color:var(--muted);font-size:13px;margin-top:4px;}
+.status{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--muted2);}
 .dot.live{background:var(--profit);box-shadow:0 0 8px var(--profit);}
 .dot.err{background:var(--loss);box-shadow:0 0 8px var(--loss);}
 #refreshBtn{
-  background:var(--surface2);
-  border:1px solid var(--border);
-  color:var(--text);
-  font-family:var(--font-mono);
-  font-size:12px;
-  padding:8px 14px;
-  border-radius:6px;
-  cursor:pointer;
-  transition:border-color .15s;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  font-family:var(--font-mono);font-size:12px;padding:8px 14px;border-radius:6px;
+  cursor:pointer;transition:border-color .15s;
 }
 #refreshBtn:hover{border-color:var(--accent);}
 #refreshBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 #refreshBtn:disabled{opacity:.5;cursor:default;}
 
-/* Error banner */
 .errorBanner{
-  display:none;
-  background:rgba(255,92,108,0.08);
-  border:1px solid rgba(255,92,108,0.35);
-  color:var(--loss);
-  border-radius:8px;
-  padding:14px 16px;
-  font-size:13px;
-  margin-bottom:24px;
-  line-height:1.5;
+  display:none;background:rgba(255,92,108,0.08);border:1px solid rgba(255,92,108,0.35);
+  color:var(--loss);border-radius:8px;padding:14px 16px;font-size:13px;
+  margin-bottom:24px;line-height:1.5;
 }
 .errorBanner.show{display:block;}
 .errorBanner a{color:var(--loss);}
 
 section{margin-bottom:36px;}
 .section-label{
-  font-family:var(--font-display);
-  font-size:13px;
-  font-weight:600;
-  letter-spacing:0.08em;
-  text-transform:uppercase;
-  color:var(--muted);
-  margin-bottom:14px;
-  display:flex;
-  align-items:center;
-  gap:10px;
+  font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:0.08em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
 }
-.section-label::after{
-  content:'';
-  flex:1;
-  height:1px;
-  background:var(--border-soft);
-}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border-soft);}
 
 /* KPI grid */
-.kpi-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:12px;
-}
-.kpi{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:10px;
-  padding:16px 18px;
-}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
 .kpi .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
 .kpi .value{font-size:22px;font-weight:600;margin-top:6px;font-variant-numeric:tabular-nums;}
 .kpi .sub{font-size:11px;color:var(--muted2);margin-top:4px;}
 .pos{color:var(--profit);}
 .neg{color:var(--loss);}
 
-/* Open position hero */
+/* Hero */
 .hero{
   background:linear-gradient(135deg, rgba(91,140,255,0.07), rgba(62,207,142,0.03));
-  border:1px solid var(--border);
-  border-left:3px solid var(--accent);
-  border-radius:12px;
-  padding:24px 26px;
+  border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:24px 26px;
 }
-.hero-top{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  flex-wrap:wrap;
-  gap:16px;
-  margin-bottom:20px;
-}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:20px;}
 .hero-match{font-family:var(--font-display);font-size:22px;font-weight:600;}
 .hero-meta{font-size:12px;color:var(--muted);margin-top:6px;}
 .hero-countdown{
-  font-family:var(--font-mono);
-  font-size:13px;
-  background:var(--surface2);
-  border:1px solid var(--border);
-  border-radius:6px;
-  padding:8px 14px;
-  color:var(--warn);
+  font-family:var(--font-mono);font-size:13px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:6px;padding:8px 14px;color:var(--warn);
 }
-.legs{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-  gap:10px;
-}
-.leg{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:8px;
-  padding:12px 14px;
-}
+.legs{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
+.leg{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
 .leg .out{font-size:11px;color:var(--muted);text-transform:uppercase;}
 .leg .odds{font-family:var(--font-display);font-size:18px;font-weight:600;margin-top:4px;}
 .leg .row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted2);margin-top:8px;}
@@ -198,33 +124,35 @@ section{margin-bottom:36px;}
 /* Table */
 table{width:100%;border-collapse:collapse;font-size:12.5px;}
 th{
-  text-align:left;
-  color:var(--muted);
-  font-weight:500;
-  font-size:11px;
-  text-transform:uppercase;
-  letter-spacing:.04em;
-  padding:8px 12px;
-  border-bottom:1px solid var(--border);
+  text-align:left;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;
+  letter-spacing:.04em;padding:8px 12px;border-bottom:1px solid var(--border);
 }
 td{padding:9px 12px;border-bottom:1px solid var(--border-soft);}
 tr:last-child td{border-bottom:none;}
-.card{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:10px;
-  overflow:hidden;
-}
-.badge{
-  font-size:10px;
-  padding:2px 8px;
-  border-radius:10px;
-  text-transform:uppercase;
-  letter-spacing:.03em;
-}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.badge{font-size:10px;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em;}
 .badge.won{background:rgba(62,207,142,.12);color:var(--profit);}
 .badge.lost{background:rgba(255,92,108,.12);color:var(--loss);}
 .badge.open{background:rgba(245,166,35,.12);color:var(--warn);}
+.arb-tag{
+  font-size:9px;padding:1px 5px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;
+  background:rgba(91,140,255,.15);color:var(--accent);margin-right:5px;vertical-align:middle;
+}
+
+/* Period filter */
+.period-filter-row{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:12px;margin-bottom:14px;
+}
+.period-filter-row .pf-label{font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;}
+.period-bar{display:flex;gap:6px;flex-wrap:wrap;}
+.period-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+  font-family:var(--font-mono);font-size:11px;padding:4px 10px;border-radius:4px;
+  cursor:pointer;transition:border-color .12s,color .12s;
+}
+.period-btn:hover{color:var(--text);border-color:var(--muted);}
+.period-btn.active{color:var(--accent);border-color:var(--accent);}
 
 /* Two-column layout */
 .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
@@ -249,24 +177,16 @@ tr:last-child td{border-bottom:none;}
 .odds-bar.pos{background:var(--profit);border-radius:3px 3px 0 0;}
 .odds-bar.neg{background:var(--loss);border-radius:0 0 3px 3px;}
 .zeroline{width:100%;height:1px;background:var(--border);}
-.odds-label{font-size:11px;color:var(--muted);margin-top:8px;}
+.odds-label{font-size:11px;color:var(--muted);margin-top:8px;text-align:center;}
 .odds-val{font-size:10px;color:var(--muted2);margin-top:2px;}
 
-/* Misc panel */
+/* Misc */
 .misc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;padding:16px;}
 .misc-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
 .misc-item .k{font-size:11px;color:var(--muted);text-transform:uppercase;}
 .misc-item .v{font-size:16px;font-weight:600;margin-top:4px;}
 
-footer{
-  margin-top:40px;
-  padding-top:20px;
-  border-top:1px solid var(--border-soft);
-  font-size:11px;
-  color:var(--muted2);
-  line-height:1.6;
-}
-
+footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--border-soft);font-size:11px;color:var(--muted2);line-height:1.6;}
 .skeleton{color:var(--muted2);font-size:12px;padding:20px;text-align:center;}
 </style>
 </head>
@@ -290,47 +210,44 @@ footer{
 
   <section>
     <div class="section-label">Overview</div>
-    <div class="kpi-grid" id="kpiGrid">
-      <div class="skeleton">Loading…</div>
-    </div>
+    <div class="kpi-grid" id="kpiGrid"><div class="skeleton">Loading…</div></div>
   </section>
 
   <section>
     <div class="section-label">Open Position</div>
-    <div class="hero" id="heroSection">
-      <div class="skeleton">Loading…</div>
-    </div>
+    <div class="hero" id="heroSection"><div class="skeleton">Loading…</div></div>
   </section>
 
   <section>
     <div class="section-label">Recent Bets</div>
-    <div class="card" id="recentCard">
-      <div class="skeleton">Loading…</div>
-    </div>
+    <div class="card" id="recentCard"><div class="skeleton">Loading…</div></div>
   </section>
 
   <section>
+    <div class="period-filter-row">
+      <span class="pf-label">Period</span>
+      <div class="period-bar" id="periodBar">
+        <button class="period-btn active" data-period="all" type="button">All time</button>
+        <button class="period-btn" data-period="ytd" type="button">YTD</button>
+        <button class="period-btn" data-period="6m" type="button">6 months</button>
+        <button class="period-btn" data-period="30d" type="button">30 days</button>
+      </div>
+    </div>
     <div class="grid2">
       <div>
         <div class="section-label">Profit by Country</div>
-        <div class="card" id="countryCard">
-          <div class="skeleton">Loading…</div>
-        </div>
+        <div class="card" id="countryCard"><div class="skeleton">Loading…</div></div>
       </div>
       <div>
         <div class="section-label">Profit by Odds Bracket</div>
-        <div class="card" id="oddsCard">
-          <div class="skeleton">Loading…</div>
-        </div>
+        <div class="card" id="oddsCard"><div class="skeleton">Loading…</div></div>
       </div>
     </div>
   </section>
 
   <section>
     <div class="section-label">Misc — Saksinnsyn / Ulvenkroken</div>
-    <div class="card" id="miscCard">
-      <div class="skeleton">Loading…</div>
-    </div>
+    <div class="card" id="miscCard"><div class="skeleton">Loading…</div></div>
   </section>
 
   <footer id="footerNote"></footer>
@@ -341,29 +258,41 @@ footer{
 const SHEET_ID = '1_DRVnfGEwIajn_3eTKH6A7W_MgfTIGTn-wZzDJFCTVY';
 const GIDS = { main: '1619776881', bets: '2076253557', open: '992602483' };
 
+const ODD_BRACKETS = [
+  { label: '< 1.3',   min: 0,   max: 1.3 },
+  { label: '1.3–1.5', min: 1.3, max: 1.5 },
+  { label: '1.5–1.8', min: 1.5, max: 1.8 },
+  { label: '1.8–2.2', min: 1.8, max: 2.2 },
+  { label: '2.2–3.0', min: 2.2, max: 3.0 },
+  { label: '3.0–5.0', min: 3.0, max: 5.0 },
+  { label: '5.0+',    min: 5.0, max: Infinity },
+];
+
+let globalBets = [];
+let globalMatchLookup = {};
+let currentPeriod = 'all';
+
+/* ── utils ── */
 function csvUrl(gid){
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}`;
 }
 
 function parseCSV(str){
   const rows = [];
-  let row = [], field = '', inQuotes = false;
+  let row = [], field = '', inQ = false;
   for (let i = 0; i < str.length; i++){
     const c = str[i];
-    if (inQuotes){
-      if (c === '"'){
-        if (str[i+1] === '"'){ field += '"'; i++; }
-        else inQuotes = false;
-      } else field += c;
+    if (inQ){
+      if (c === '"'){ if (str[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
+      else field += c;
     } else {
-      if (c === '"') inQuotes = true;
+      if (c === '"') inQ = true;
       else if (c === ',') { row.push(field); field = ''; }
       else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
-      else if (c === '\r') { /* skip */ }
-      else field += c;
+      else if (c !== '\r') field += c;
     }
   }
-  if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+  if (field || row.length) { row.push(field); rows.push(row); }
   return rows;
 }
 
@@ -373,54 +302,61 @@ function getCell(rows, r, c){
 
 function parseKr(str){
   if (!str) return 0;
-  const cleaned = String(str).replace(/kr/gi,'').replace(/,/g,'').replace(/%/g,'').trim();
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
+  const n = parseFloat(String(str).replace(/kr/gi,'').replace(/,/g,'').replace(/%/g,'').trim());
+  return isNaN(n) ? 0 : n;
 }
 
 function fmtKr(num){
   if (num === null || num === undefined || isNaN(num)) return '—';
   const sign = num < 0 ? '-' : '';
-  return `${sign}kr ${Math.abs(num).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  return `${sign}kr ${Math.abs(num).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+}
+
+function parseDate(str){
+  if (!str) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str.substring(0, 10));
+  const m = str.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{4})/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
 }
 
 async function fetchSheet(gid){
   const res = await fetch(csvUrl(gid));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const text = await res.text();
-  return parseCSV(text);
+  return parseCSV(await res.text());
 }
 
-/* ---------- MAIN tab ---------- */
+/* ── column detection for Bets tab ── */
+function buildColMap(headerRow){
+  const m = {};
+  headerRow.forEach((h, i) => { m[h.trim().toLowerCase()] = i; });
+  return m;
+}
+
+function findCol(map, ...keys){
+  for (const k of keys) if (map[k.toLowerCase()] !== undefined) return map[k.toLowerCase()];
+  return -1;
+}
+
+/* ── period filter ── */
+function filterBets(bets, period){
+  if (period === 'all') return bets;
+  let cutoff;
+  const now = new Date();
+  if (period === 'ytd') { cutoff = new Date(now.getFullYear(), 0, 1); }
+  else if (period === '6m') { cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6); }
+  else if (period === '30d') { cutoff = new Date(Date.now() - 30 * 86400000); }
+  return bets.filter(b => b.date && b.date >= cutoff);
+}
+
+/* ── parsers ── */
 function parseMain(rows){
   const row1text = (rows[0] || []).join(' ');
   const totalMatch = row1text.match(/Total:\s*kr\s*([\d,.\s]+?)(?:\s{2,}|Available)/i);
   const availMatch = row1text.match(/Available:\s*kr:?\s*([\d,.\s]+)/i);
   const totalFunds = totalMatch ? parseKr(totalMatch[1]) : null;
   const availFunds = availMatch ? parseKr(availMatch[1]) : null;
-
-  const nonArb = parseKr(getCell(rows,73,2));
-  const arb = parseKr(getCell(rows,74,2));
-  const totalProfit = parseKr(getCell(rows,75,2));
-
-  const oddsProfit = [];
-  for (let r = 63; r <= 72; r++){
-    const label = getCell(rows,r,0);
-    if (label) oddsProfit.push({ label, value: parseKr(getCell(rows,r,2)) });
-  }
-
-  const countries = [];
-  for (let r = 78; r <= 91; r++){
-    const country = getCell(rows,r,3);
-    if (country) countries.push({
-      country,
-      profit: parseKr(getCell(rows,r,4)),
-      count: parseInt(getCell(rows,r,5)) || 0
-    });
-  }
-  countries.sort((a,b) => b.profit - a.profit);
-  const countryTotal = { profit: parseKr(getCell(rows,92,4)), count: getCell(rows,92,5) };
-
   const sak = getCell(rows,98,0);
   const tittel = getCell(rows,98,1);
   const blocks = [];
@@ -428,103 +364,201 @@ function parseMain(rows){
     const blokk = getCell(rows,r,6);
     if (blokk) blocks.push({ blokk, solgt: getCell(rows,r,7), ledige: getCell(rows,r,8) });
   }
-
-  return { totalFunds, availFunds, nonArb, arb, totalProfit, oddsProfit, countries, countryTotal, sak, tittel, blocks };
+  return { totalFunds, availFunds, sak, tittel, blocks };
 }
 
-/* ---------- BETS tab ---------- */
 function parseBets(rows){
-  const data = rows.slice(1).filter(r => (r[0] || '').trim() !== '');
-  let wins = 0, finished = 0, totalProfit = 0, lastROI = null;
-  data.forEach(r => {
-    const isFinished = (r[7] || '').trim().toUpperCase() === 'TRUE';
-    const isWin = (r[9] || '').trim().toUpperCase() === 'TRUE';
-    totalProfit += parseKr(r[10]);
-    if (isFinished){ finished++; if (isWin) wins++; }
-    const roiStr = (r[12] || '').trim();
+  if (rows.length < 2) return { bets: [], lastROI: null };
+
+  const cm = buildColMap(rows[0]);
+  const fc = (...keys) => findCol(cm, ...keys);
+
+  const dateCol    = fc('date','dato','event date','match date','bet date');
+  const stakeCol   = fc('stake','amount','innskudd','bet amount','wager');
+  const oddsCol    = fc('odds','price','decimal odds');
+  const selCol     = fc('selection','bet type','outcome','type','tip');
+  const matchCol   = fc('match','match ref','match id','match number','matchref','event','game');
+  const homeCol    = fc('home','home team','hjemme','home side');
+  const awayCol    = fc('away','away team','borte','away side');
+  const finCol     = fc('finished','settled','concluded','done','complete');
+  const winCol     = fc('win','won','winner','correct');
+  const profitCol  = fc('profit','p/l','pnl','net','return','gain');
+  const roiCol     = fc('roi','cumulative roi','cum roi','running roi','total roi');
+  const COUNTRY_COL = 15;
+  const ARB_ID_COL  = 17;
+
+  const bets = [];
+  let lastROI = null;
+
+  for (let r = 1; r < rows.length; r++){
+    const row = rows[r];
+    if (!(row[0] || '').trim()) continue;
+
+    const finished  = (row[finCol] || '').trim().toUpperCase() === 'TRUE';
+    const win       = (row[winCol] || '').trim().toUpperCase() === 'TRUE';
+    const profit    = profitCol >= 0 ? parseKr(row[profitCol]) : 0;
+    const roiStr    = roiCol >= 0 ? (row[roiCol] || '').trim() : '';
     if (roiStr) lastROI = roiStr;
-  });
-  return {
-    totalBets: data.length,
-    finished, wins,
-    winRate: finished > 0 ? (wins / finished * 100) : 0,
-    totalProfit,
-    currentROI: lastROI
-  };
+
+    const rawCountry = (row[COUNTRY_COL] || '').trim();
+    const countries  = rawCountry
+      ? rawCountry.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+    const arbId    = (row[ARB_ID_COL] || '').trim();
+    const date     = dateCol >= 0 ? parseDate(row[dateCol]) : null;
+    const stake    = stakeCol >= 0 ? parseKr(row[stakeCol]) : 0;
+    const odds     = oddsCol >= 0 ? (parseFloat(row[oddsCol]) || 0) : 0;
+    const selection = selCol >= 0 ? (row[selCol] || '').trim() : '';
+    const matchRef  = matchCol >= 0 ? (row[matchCol] || '').trim() : '';
+    const home      = homeCol >= 0 ? (row[homeCol] || '').trim() : '';
+    const away      = awayCol >= 0 ? (row[awayCol] || '').trim() : '';
+
+    bets.push({ date, stake, odds, selection, matchRef, home, away, finished, win, profit, countries, arbId });
+  }
+
+  return { bets, lastROI };
 }
 
-/* ---------- OPEN BETS tab ---------- */
 function parseOpenBets(rows){
   const summaryText = (rows[0] || []).join(' ');
   const m = summaryText.match(/Wins\/conluded:\s*(\d+)\/(\d+)\s*\((\d+)%\)\s*Open Bets:\s*(\d+)\s*Due today:\s*(\d+)/i);
   const summary = m ? { wins:+m[1], concluded:+m[2], pct:+m[3], open:+m[4], dueToday:+m[5] } : null;
 
   const matchLookup = {};
-  const recent = [];
   for (let r = 2; r < rows.length; r++){
-    const matchNumA = getCell(rows,r,0);
-    const matchNumJ = getCell(rows,r,9);
-    if (matchNumJ){
-      matchLookup[matchNumJ] = {
-        league: getCell(rows,r,12),
-        home: getCell(rows,r,13),
-        away: getCell(rows,r,14),
-        result: getCell(rows,r,18)
-      };
-    }
-    if (matchNumA){
-      recent.push({
-        matchNum: matchNumA,
-        concludingTime: getCell(rows,r,1),
-        stake: parseKr(getCell(rows,r,2)),
-        odds: parseFloat(getCell(rows,r,3)) || 0,
-        matchRef: getCell(rows,r,4),
-        selection: getCell(rows,r,5),
-        profitRaw: getCell(rows,r,6),
-        timeAgo: getCell(rows,r,7)
-      });
-    }
-    if (!matchNumA && !matchNumJ) break;
+    const key = getCell(rows,r,9);
+    if (key) matchLookup[key] = {
+      league: getCell(rows,r,12),
+      home:   getCell(rows,r,13),
+      away:   getCell(rows,r,14),
+      result: getCell(rows,r,18)
+    };
   }
-  recent.forEach(b => { b.match = matchLookup[b.matchRef] || null; });
 
   const outcomeHeader = [getCell(rows,25,1), getCell(rows,25,2), getCell(rows,25,3)];
-  const atRisk = [getCell(rows,26,1), getCell(rows,26,2), getCell(rows,26,3)].map(parseKr);
-  const potential = [getCell(rows,27,1), getCell(rows,27,2), getCell(rows,27,3)].map(parseKr);
-  const oddsRow = [getCell(rows,28,1), getCell(rows,28,2), getCell(rows,28,3)].map(v => parseFloat(v) || 0);
-  const chance = [getCell(rows,29,1), getCell(rows,29,2), getCell(rows,29,3)];
-  const roiRow = [getCell(rows,30,1), getCell(rows,30,2), getCell(rows,30,3)];
-  const matchName = getCell(rows,31,0);
-  const maxDays = getCell(rows,26,7);
-  const nextMatch = getCell(rows,23,10);
-  const nextBet = getCell(rows,24,10);
+  const atRisk     = [getCell(rows,26,1), getCell(rows,26,2), getCell(rows,26,3)].map(parseKr);
+  const potential  = [getCell(rows,27,1), getCell(rows,27,2), getCell(rows,27,3)].map(parseKr);
+  const oddsRow    = [getCell(rows,28,1), getCell(rows,28,2), getCell(rows,28,3)].map(v => parseFloat(v) || 0);
+  const chance     = [getCell(rows,29,1), getCell(rows,29,2), getCell(rows,29,3)];
+  const roiRow     = [getCell(rows,30,1), getCell(rows,30,2), getCell(rows,30,3)];
+  const matchName  = getCell(rows,31,0);
+  const maxDays    = getCell(rows,26,7);
+  const nextMatch  = getCell(rows,23,10);
   const stakeTotal = parseKr(getCell(rows,23,5));
-  const profitTotal = parseKr(getCell(rows,23,6));
-  const roiTotal = getCell(rows,23,7);
+  const profitTotal= parseKr(getCell(rows,23,6));
+  const roiTotal   = getCell(rows,23,7);
 
-  return { summary, recent, outcomeHeader, atRisk, potential, oddsRow, chance, roiRow, matchName, maxDays, nextMatch, nextBet, stakeTotal, profitTotal, roiTotal };
+  return { summary, matchLookup, outcomeHeader, atRisk, potential, oddsRow, chance, roiRow, matchName, maxDays, nextMatch, stakeTotal, profitTotal, roiTotal };
 }
 
-/* ---------- Renderers ---------- */
-function renderKPIs(main, bets){
+/* ── computation ── */
+function computeKPIs(bets){
+  let arbProfit = 0, nonArbProfit = 0, wins = 0, finished = 0;
+  bets.forEach(b => {
+    if (!b.finished) return;
+    finished++;
+    if (b.win) wins++;
+    if (b.arbId) arbProfit += b.profit;
+    else nonArbProfit += b.profit;
+  });
+  return {
+    arbProfit, nonArbProfit,
+    totalProfit: arbProfit + nonArbProfit,
+    winRate: finished > 0 ? wins / finished * 100 : 0,
+    wins, finished, totalBets: bets.length
+  };
+}
+
+function computeByCountry(bets){
+  const map = {};
+  bets.forEach(b => {
+    if (!b.finished || !b.countries.length) return;
+    const share = b.profit / b.countries.length;
+    b.countries.forEach(c => {
+      if (!map[c]) map[c] = { profit: 0, count: 0 };
+      map[c].profit += share;
+      map[c].count++;
+    });
+  });
+  return Object.entries(map)
+    .map(([country, d]) => ({ country, profit: d.profit, count: d.count }))
+    .sort((a, b) => b.profit - a.profit);
+}
+
+function computeByOdds(bets){
+  const brackets = ODD_BRACKETS.map(b => ({ ...b, value: 0, count: 0 }));
+  bets.forEach(b => {
+    if (!b.finished || !b.odds) return;
+    const br = brackets.find(br => b.odds >= br.min && b.odds < br.max);
+    if (br) { br.value += b.profit; br.count++; }
+  });
+  return brackets.filter(b => b.count > 0);
+}
+
+/* ── recent bets grouping ── */
+function buildArbGroups(bets){
+  const sorted = [...bets].sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return b.date - a.date;
+  });
+
+  const groups = [];
+  const arbMap = {};
+
+  for (const bet of sorted){
+    if (bet.arbId){
+      if (!arbMap[bet.arbId]){
+        const g = { type: 'arb', arbId: bet.arbId, legs: [], date: bet.date, matchRef: bet.matchRef, home: bet.home, away: bet.away };
+        arbMap[bet.arbId] = g;
+        groups.push(g);
+      }
+      arbMap[bet.arbId].legs.push(bet);
+    } else {
+      groups.push({ type: 'single', ...bet });
+    }
+  }
+  return groups;
+}
+
+function matchName(home, away, matchRef, lookup){
+  if (home && away) return `${home} vs ${away}`;
+  const m = lookup[matchRef];
+  if (m && m.home) return `${m.home} vs ${m.away}`;
+  return matchRef || '—';
+}
+
+function fmtDate(d){
+  if (!d) return '—';
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+}
+
+/* ── renderers ── */
+function renderKPIs(main, computed, lastROI){
   const el = document.getElementById('kpiGrid');
-  const roiClass = (bets.currentROI || '').includes('-') ? 'neg' : 'pos';
+  const roiClass = (lastROI || '').includes('-') ? 'neg' : 'pos';
   el.innerHTML = `
     <div class="kpi"><div class="label">Total Funds</div><div class="value">${fmtKr(main.totalFunds)}</div></div>
     <div class="kpi"><div class="label">Available</div><div class="value">${fmtKr(main.availFunds)}</div></div>
-    <div class="kpi"><div class="label">Arbitrage Profit</div><div class="value ${main.arb>=0?'pos':'neg'}">${fmtKr(main.arb)}</div><div class="sub">vs ${fmtKr(main.nonArb)} non-arb</div></div>
-    <div class="kpi"><div class="label">Total Profit</div><div class="value ${main.totalProfit>=0?'pos':'neg'}">${fmtKr(main.totalProfit)}</div></div>
-    <div class="kpi"><div class="label">Bet Win Rate</div><div class="value">${bets.winRate.toFixed(1)}%</div><div class="sub">${bets.wins}/${bets.finished} finished</div></div>
-    <div class="kpi"><div class="label">Latest ROI (cumulative)</div><div class="value ${roiClass}">${bets.currentROI || '—'}</div><div class="sub">from most recent bet row</div></div>
+    <div class="kpi"><div class="label">Arbitrage Profit</div>
+      <div class="value ${computed.arbProfit>=0?'pos':'neg'}">${fmtKr(computed.arbProfit)}</div>
+      <div class="sub">vs ${fmtKr(computed.nonArbProfit)} non-arb</div></div>
+    <div class="kpi"><div class="label">Total Profit</div>
+      <div class="value ${computed.totalProfit>=0?'pos':'neg'}">${fmtKr(computed.totalProfit)}</div></div>
+    <div class="kpi"><div class="label">Bet Win Rate</div>
+      <div class="value">${computed.winRate.toFixed(1)}%</div>
+      <div class="sub">${computed.wins}/${computed.finished} finished</div></div>
+    <div class="kpi"><div class="label">Latest ROI (cumulative)</div>
+      <div class="value ${roiClass}">${lastROI || '—'}</div>
+      <div class="sub">from most recent bet row</div></div>
   `;
 }
 
 function renderHero(open){
   const el = document.getElementById('heroSection');
-  if (!open.matchName){
-    el.innerHTML = `<div class="skeleton">No open position found.</div>`;
-    return;
-  }
+  if (!open.matchName){ el.innerHTML = `<div class="skeleton">No open position found.</div>`; return; }
   const legs = open.outcomeHeader.map((label,i) => `
     <div class="leg">
       <div class="out">${label || '—'}</div>
@@ -533,9 +567,7 @@ function renderHero(open){
       <div class="row"><span>Potential</span><span>${fmtKr(open.potential[i])}</span></div>
       <div class="row"><span>Chance</span><span>${open.chance[i] || '—'}</span></div>
       <div class="row"><span>ROI</span><span>${open.roiRow[i] || '—'}</span></div>
-    </div>
-  `).join('');
-
+    </div>`).join('');
   el.innerHTML = `
     <div class="hero-top">
       <div>
@@ -549,76 +581,85 @@ function renderHero(open){
     <div class="legs">${legs}</div>
     <div class="hero-meta" style="margin-top:16px;">
       Stake at risk: ${fmtKr(open.stakeTotal)} · Expected profit: ${fmtKr(open.profitTotal)} (${open.roiTotal || '—'}) · Max days to conclude: ${open.maxDays || '—'}
-    </div>
-  `;
+    </div>`;
 }
 
-function renderRecent(open){
+function renderRecent(bets, lookup){
   const el = document.getElementById('recentCard');
-  if (!open.recent.length){
-    el.innerHTML = `<div class="skeleton">No recent bets found.</div>`;
-    return;
-  }
-  const rows = open.recent.map(b => {
-    const teams = b.match ? `${b.match.home} vs ${b.match.away}` : `Match ${b.matchRef}`;
-    const isOpen = /left/i.test(b.timeAgo);
-    let badge;
-    if (isOpen) badge = `<span class="badge open">Open</span>`;
-    else {
-      const profit = parseKr(b.profitRaw);
-      badge = profit >= 0 ? `<span class="badge won">Won</span>` : `<span class="badge lost">Lost</span>`;
+  if (!bets.length){ el.innerHTML = `<div class="skeleton">No bets found.</div>`; return; }
+
+  const groups = buildArbGroups(bets).slice(0, 25);
+
+  const rows = groups.map(g => {
+    if (g.type === 'arb'){
+      const totalStake  = g.legs.reduce((s, b) => s + b.stake, 0);
+      const totalProfit = g.legs.reduce((s, b) => s + b.profit, 0);
+      const allFinished = g.legs.every(b => b.finished);
+      const selections  = g.legs.map(b => b.selection || '?').join(' / ');
+      const name        = matchName(g.home, g.away, g.matchRef, lookup);
+      const badge       = !allFinished
+        ? `<span class="badge open">Open</span>`
+        : totalProfit >= 0 ? `<span class="badge won">Won</span>` : `<span class="badge lost">Lost</span>`;
+      const pc = allFinished ? (totalProfit >= 0 ? 'pos' : 'neg') : '';
+      return `<tr>
+        <td><span class="arb-tag">ARB</span>${name}</td>
+        <td>${selections}</td>
+        <td style="color:var(--muted2)">—</td>
+        <td>${fmtKr(totalStake)}</td>
+        <td class="${pc}">${allFinished ? fmtKr(totalProfit) : '—'}</td>
+        <td>${badge}</td>
+        <td style="color:var(--muted2)">${fmtDate(g.date)}</td>
+      </tr>`;
+    } else {
+      const name  = matchName(g.home, g.away, g.matchRef, lookup);
+      const badge = !g.finished
+        ? `<span class="badge open">Open</span>`
+        : g.profit >= 0 ? `<span class="badge won">Won</span>` : `<span class="badge lost">Lost</span>`;
+      const pc = g.finished ? (g.profit >= 0 ? 'pos' : 'neg') : '';
+      return `<tr>
+        <td>${name}</td>
+        <td>${g.selection || '—'}</td>
+        <td>${g.odds || '—'}</td>
+        <td>${fmtKr(g.stake)}</td>
+        <td class="${pc}">${g.finished ? fmtKr(g.profit) : '—'}</td>
+        <td>${badge}</td>
+        <td style="color:var(--muted2)">${fmtDate(g.date)}</td>
+      </tr>`;
     }
-    const profitDisplay = b.profitRaw ? fmtKr(parseKr(b.profitRaw)) : '—';
-    const profitClass = b.profitRaw ? (parseKr(b.profitRaw) >= 0 ? 'pos' : 'neg') : '';
-    return `<tr>
-      <td>${teams}</td>
-      <td>${b.selection}</td>
-      <td>${b.odds}</td>
-      <td>${fmtKr(b.stake)}</td>
-      <td class="${profitClass}">${profitDisplay}</td>
-      <td>${badge}</td>
-      <td style="color:var(--muted2)">${b.timeAgo}</td>
-    </tr>`;
   }).join('');
 
   el.innerHTML = `<table>
-    <thead><tr><th>Match</th><th>Sel</th><th>Odds</th><th>Stake</th><th>Profit</th><th>Status</th><th>Time</th></tr></thead>
+    <thead><tr><th>Match</th><th>Selection</th><th>Odds</th><th>Stake</th><th>Profit</th><th>Status</th><th>Date</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }
 
-function renderCountries(main){
+function renderCountries(countries){
   const el = document.getElementById('countryCard');
-  if (!main.countries.length){
-    el.innerHTML = `<div class="skeleton">No country data found.</div>`;
-    return;
-  }
-  const maxAbs = Math.max(...main.countries.map(c => Math.abs(c.profit)), 1);
-  const rows = main.countries.map(c => `
+  if (!countries.length){ el.innerHTML = `<div class="skeleton">No country data for this period.</div>`; return; }
+  const maxAbs = Math.max(...countries.map(c => Math.abs(c.profit)), 1);
+  const total  = countries.reduce((s, c) => s + c.profit, 0);
+  const rows   = countries.map(c => `
     <div class="bar-row">
       <div class="name">${c.country}</div>
       <div class="bar-track"><div class="bar-fill ${c.profit>=0?'pos':'neg'}" style="width:${Math.abs(c.profit)/maxAbs*100}%"></div></div>
       <div class="val ${c.profit>=0?'pos':'neg'}">${fmtKr(c.profit)}</div>
       <div class="cnt">${c.count}×</div>
-    </div>
-  `).join('');
-  el.innerHTML = rows + (main.countryTotal.profit ? `
+    </div>`).join('');
+  el.innerHTML = rows + `
     <div class="bar-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:12px;">
       <div class="name" style="font-weight:600;">Total</div>
       <div class="bar-track" style="visibility:hidden;"></div>
-      <div class="val pos" style="font-weight:600;">${fmtKr(main.countryTotal.profit)}</div>
-      <div class="cnt">${main.countryTotal.count}×</div>
-    </div>` : '');
+      <div class="val ${total>=0?'pos':'neg'}" style="font-weight:600;">${fmtKr(total)}</div>
+      <div class="cnt"></div>
+    </div>`;
 }
 
-function renderOddsChart(main){
+function renderOddsChart(brackets){
   const el = document.getElementById('oddsCard');
-  if (!main.oddsProfit.length){
-    el.innerHTML = `<div class="skeleton">No odds-bracket data found.</div>`;
-    return;
-  }
-  const maxAbs = Math.max(...main.oddsProfit.map(o => Math.abs(o.value)), 1);
-  const cols = main.oddsProfit.map(o => {
+  if (!brackets.length){ el.innerHTML = `<div class="skeleton">No odds data for this period.</div>`; return; }
+  const maxAbs = Math.max(...brackets.map(o => Math.abs(o.value)), 1);
+  const cols = brackets.map(o => {
     const h = (Math.abs(o.value) / maxAbs * 90).toFixed(0);
     const posBar = o.value >= 0 ? `<div class="odds-bar pos" style="height:${h}px"></div>` : '';
     const negBar = o.value < 0 ? `<div class="odds-bar neg" style="height:${h}px"></div>` : '';
@@ -638,24 +679,34 @@ function renderMisc(main){
   const items = [];
   if (main.sak) items.push({ k: 'Sak', v: main.sak });
   if (main.tittel) items.push({ k: 'Tittel', v: main.tittel });
-  main.blocks.forEach(b => {
-    items.push({ k: `Blokk ${b.blokk}`, v: `${b.solgt} · ${b.ledige} ledige` });
-  });
-  if (!items.length){
-    el.innerHTML = `<div class="skeleton">No data found.</div>`;
-    return;
-  }
-  el.innerHTML = `<div class="misc-grid">${items.map(i => `
-    <div class="misc-item"><div class="k">${i.k}</div><div class="v">${i.v}</div></div>
-  `).join('')}</div>`;
+  main.blocks.forEach(b => items.push({ k: `Blokk ${b.blokk}`, v: `${b.solgt} · ${b.ledige} ledige` }));
+  if (!items.length){ el.innerHTML = `<div class="skeleton">No data found.</div>`; return; }
+  el.innerHTML = `<div class="misc-grid">${items.map(i =>
+    `<div class="misc-item"><div class="k">${i.k}</div><div class="v">${i.v}</div></div>`
+  ).join('')}</div>`;
 }
 
-/* ---------- Orchestration ---------- */
+function renderCharts(period){
+  const filtered = filterBets(globalBets, period);
+  renderCountries(computeByCountry(filtered));
+  renderOddsChart(computeByOdds(filtered));
+}
+
+/* ── period filter wiring ── */
+document.getElementById('periodBar').addEventListener('click', e => {
+  const btn = e.target.closest('[data-period]');
+  if (!btn) return;
+  currentPeriod = btn.dataset.period;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderCharts(currentPeriod);
+});
+
+/* ── orchestration ── */
 async function loadAll(){
-  const btn = document.getElementById('refreshBtn');
-  const dot = document.getElementById('statusDot');
+  const btn        = document.getElementById('refreshBtn');
+  const dot        = document.getElementById('statusDot');
   const statusText = document.getElementById('statusText');
-  const errorBanner = document.getElementById('errorBanner');
+  const errorBanner= document.getElementById('errorBanner');
 
   btn.disabled = true;
   dot.className = 'dot';
@@ -669,15 +720,19 @@ async function loadAll(){
       fetchSheet(GIDS.open)
     ]);
 
-    const main = parseMain(mainRows);
-    const bets = parseBets(betsRows);
-    const open = parseOpenBets(openRows);
+    const main            = parseMain(mainRows);
+    const { bets, lastROI } = parseBets(betsRows);
+    const open            = parseOpenBets(openRows);
 
-    renderKPIs(main, bets);
+    globalBets        = bets;
+    globalMatchLookup = open.matchLookup;
+
+    const computed = computeKPIs(bets);
+
+    renderKPIs(main, computed, lastROI);
     renderHero(open);
-    renderRecent(open);
-    renderCountries(main);
-    renderOddsChart(main);
+    renderRecent(bets, open.matchLookup);
+    renderCharts(currentPeriod);
     renderMisc(main);
 
     dot.className = 'dot live';
