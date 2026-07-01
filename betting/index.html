@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Betting dashboard — live performance overview for football betting, including P/L, win rate, ROI, and bankroll over time.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://mohibb.com/betting/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Betting Dashboard | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Betting Dashboard">
+<meta property="og:description" content="Live betting performance overview — P/L, win rate, ROI, and bankroll over time.">
+<meta property="og:url" content="https://mohibb.com/betting/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Betting Dashboard">
+<meta name="twitter:description" content="Live betting performance overview — P/L, win rate, ROI, and bankroll over time.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Betting Dashboard",
+  "url": "https://mohibb.com/betting/",
+  "description": "Live betting performance dashboard — P/L, win rate, ROI, bankroll chart, and arbitrage tracking.",
+  "applicationCategory": "SportsApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<main>
+  <header class="dash-header">
+    <div>
+      <p class="eyebrow">Football Betting</p>
+      <h1>Performance Dashboard</h1>
+    </div>
+    <p class="updated">Updated <span id="last-updated">&mdash;</span></p>
+  </header>
+
+  <div id="loading" class="loading-state">
+    <div class="spinner"></div>
+    <p>Loading data&hellip;</p>
+  </div>
+
+  <div id="error-state" class="error-state hidden">
+    <p>Failed to load data. <span class="error-msg"></span></p>
+    <p class="error-hint">Make sure the Google Sheet is published to the web.</p>
+  </div>
+
+  <div id="content" class="hidden">
+
+    <section id="open-section" class="section hidden">
+      <h2 class="section-title">Open &amp; Pending</h2>
+      <div id="open-bets" class="open-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="kpi-grid kpi-row-1">
+        <div class="kpi-card" id="kpi-bankroll"></div>
+        <div class="kpi-card" id="kpi-pl"></div>
+        <div class="kpi-card" id="kpi-winrate"></div>
+        <div class="kpi-card" id="kpi-total"></div>
+        <div class="kpi-card" id="kpi-roi"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="kpi-grid kpi-row-2">
+        <div class="kpi-card" id="kpi-best"></div>
+        <div class="kpi-card" id="kpi-edge"></div>
+        <div class="kpi-card" id="kpi-pvse"></div>
+        <div class="kpi-card kpi-card-country" id="kpi-country">
+          <span class="kpi-label">P/L by Country</span>
+          <div id="country-table"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h2 class="chart-title">Bankroll Over Time</h2>
+          <div class="chart-wrap">
+            <canvas id="bankroll-chart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h2 class="chart-title">Monthly P/L</h2>
+          <div class="chart-wrap">
+            <canvas id="monthly-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Bet History</h2>
+      <div class="table-wrap">
+        <table class="bets-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Matches</th>
+              <th>Countries</th>
+              <th>Stake</th>
+              <th>Odds</th>
+              <th>Profit</th>
+              <th>ROI</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody id="bets-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script src="./script.js"></script>
+</body>
+</html>
