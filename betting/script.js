@@ -384,8 +384,9 @@ function renderBetsTable(groups) {
       ? `<span class="${cls(b.profit)}">${sign(b.profit)}${fmtKr(b.profit)}</span>`
       : '—';
 
+    const roi = typeof b.roi === 'number' ? b.roi : (b.stake > 0 ? (b.profit / b.stake) * 100 : 0);
     const roiCell = isSettled
-      ? `<span class="${cls(b.roi)}">${sign(b.roi)}${b.roi.toFixed(1)}%</span>`
+      ? `<span class="${cls(roi)}">${sign(roi)}${roi.toFixed(1)}%</span>`
       : '—';
 
     const oddsCell = b.totalOdds ? b.totalOdds.toFixed(2) : '—';
