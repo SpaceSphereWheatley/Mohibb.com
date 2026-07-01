@@ -294,11 +294,16 @@ function buildBankrollSeries(allSettled, periodSettled) {
     expectedById.set(g.bet.betId, expectedRunning);
   }
 
+  function isoDate(g) {
+    const d = g.bet.concludingTime || g.bet.betDate;
+    return d ? d.toISOString().slice(0, 10) : null;
+  }
+
   const isAllTime = periodSettled.length === allSettled.length;
 
   if (isAllTime) {
     return {
-      labels: allSettled.map(g => fmtDate(g.bet.concludingTime || g.bet.betDate)),
+      labels: allSettled.map(isoDate),
       data: allSettled.map(g => bankrollById.get(g.bet.betId)),
       expectedData: allSettled.map(g => expectedById.get(g.bet.betId))
     };
@@ -310,12 +315,13 @@ function buildBankrollSeries(allSettled, periodSettled) {
   const before = allSettled.filter(g => g.bet.betId < firstId);
   const startBankroll = before.length ? bankrollById.get(before[before.length - 1].bet.betId) : initial;
   const startExpected = before.length ? expectedById.get(before[before.length - 1].bet.betId) : initial;
+  const startLabel = before.length ? isoDate(before[before.length - 1]) : isoDate(periodSettled[0]);
 
   const periodIds = new Set(periodSettled.map(g => g.bet.betId));
   const inOrder = allSettled.filter(g => periodIds.has(g.bet.betId));
 
   return {
-    labels: ['Start', ...inOrder.map(g => fmtDate(g.bet.concludingTime || g.bet.betDate))],
+    labels: [startLabel, ...inOrder.map(isoDate)],
     data: [startBankroll, ...inOrder.map(g => bankrollById.get(g.bet.betId))],
     expectedData: [startExpected, ...inOrder.map(g => expectedById.get(g.bet.betId))]
   };
@@ -468,8 +474,7 @@ function renderBankrollChart(labels, data, expectedData) {
           borderColor: '#B4471F',
           backgroundColor: 'rgba(180,71,31,0.07)',
           borderWidth: 2,
-          pointRadius: 3,
-          pointBackgroundColor: '#B4471F',
+          pointRadius: 0,
           fill: true,
           tension: 0.3
         },
@@ -497,7 +502,7 @@ function renderBankrollChart(labels, data, expectedData) {
         tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtKr(ctx.raw)}` } }
       },
       scales: {
-        x: { ticks: { maxTicksLimit: 8, color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
+        x: { type: 'time', time: { unit: 'month', tooltipFormat: 'dd MMM yyyy', displayFormats: { month: 'MMM yy', week: 'dd MMM', day: 'dd MMM' } }, ticks: { color: TICK_COLOR, font: CHART_FONT, maxRotation: 0, maxTicksLimit: 8 }, grid: { color: GRID_COLOR } },
         y: { min: 0, ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
       }
     }
@@ -558,13 +563,15 @@ function renderCumulativePLChart(periodSettled) {
     const db = b.bet.concludingTime || b.bet.betDate;
     return da - db;
   });
-  const labels = ['Start'];
+  const isoD = g => { const d = g.bet.concludingTime || g.bet.betDate; return d ? d.toISOString().slice(0, 10) : null; };
+  const startLabel = sorted.length ? isoD(sorted[0]) : null;
+  const labels = [startLabel];
   const actual = [0], expected = [0];
   let runActual = 0, runExpected = 0;
   for (const g of sorted) {
     runActual += g.bet.profit;
     runExpected += g.bet.expectedProfit;
-    labels.push(fmtDate(g.bet.concludingTime || g.bet.betDate));
+    labels.push(isoD(g));
     actual.push(runActual);
     expected.push(runExpected);
   }
@@ -575,7 +582,7 @@ function renderCumulativePLChart(periodSettled) {
     data: {
       labels,
       datasets: [
-        { label: 'Actual P/L', data: actual, borderColor: '#B4471F', backgroundColor: 'rgba(180,71,31,0.07)', borderWidth: 2, pointRadius: 2, pointBackgroundColor: '#B4471F', fill: true, tension: 0.3 },
+        { label: 'Actual P/L', data: actual, borderColor: '#B4471F', backgroundColor: 'rgba(180,71,31,0.07)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3 },
         { label: 'Expected P/L', data: expected, borderColor: '#6B6560', backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, fill: false, tension: 0.3 }
       ]
     },
@@ -586,7 +593,7 @@ function renderCumulativePLChart(periodSettled) {
         tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtKr(ctx.raw)}` } }
       },
       scales: {
-        x: { ticks: { maxTicksLimit: 8, color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
+        x: { type: 'time', time: { unit: 'month', tooltipFormat: 'dd MMM yyyy', displayFormats: { month: 'MMM yy', week: 'dd MMM', day: 'dd MMM' } }, ticks: { color: TICK_COLOR, font: CHART_FONT, maxRotation: 0, maxTicksLimit: 8 }, grid: { color: GRID_COLOR } },
         y: { ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
       }
     }
@@ -657,8 +664,7 @@ function renderRollingWinRateChart(periodSettled) {
         borderColor: '#2E6F4F',
         backgroundColor: 'rgba(46,111,79,0.08)',
         borderWidth: 2,
-        pointRadius: 2,
-        pointBackgroundColor: '#2E6F4F',
+        pointRadius: 0,
         fill: true,
         tension: 0.35
       }]
