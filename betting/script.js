@@ -498,7 +498,7 @@ function renderBankrollChart(labels, data, expectedData) {
       },
       scales: {
         x: { ticks: { maxTicksLimit: 8, color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
-        y: { ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
+        y: { min: 0, ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
       }
     }
   });
