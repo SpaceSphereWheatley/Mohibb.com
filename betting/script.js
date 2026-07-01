@@ -271,15 +271,18 @@ function calcStats(settled) {
 // ── Bankroll series (arb-aware, period-aware) ────────────────────────────────
 
 function buildBankrollSeries(allSettled, periodSettled) {
-  if (!allSettled.length) return { labels: [], data: [] };
+  if (!allSettled.length) return { labels: [], data: [], expectedData: [] };
 
-  // Compute running bankroll using grouped profits (one event per arb)
+  // Compute running actual and expected bankroll (one event per group)
   const initial = allSettled[0].bet.funds - allSettled[0].bet.profit;
-  let running = initial;
+  let running = initial, expectedRunning = initial;
   const bankrollById = new Map();
+  const expectedById = new Map();
   for (const g of allSettled) {
     running += g.bet.profit;
+    expectedRunning += g.bet.expectedProfit;
     bankrollById.set(g.bet.betId, running);
+    expectedById.set(g.bet.betId, expectedRunning);
   }
 
   const isAllTime = periodSettled.length === allSettled.length;
@@ -287,24 +290,25 @@ function buildBankrollSeries(allSettled, periodSettled) {
   if (isAllTime) {
     return {
       labels: allSettled.map(g => fmtDate(g.bet.concludingTime || g.bet.betDate)),
-      data: allSettled.map(g => bankrollById.get(g.bet.betId))
+      data: allSettled.map(g => bankrollById.get(g.bet.betId)),
+      expectedData: allSettled.map(g => expectedById.get(g.bet.betId))
     };
   }
 
-  if (!periodSettled.length) return { labels: [], data: [] };
+  if (!periodSettled.length) return { labels: [], data: [], expectedData: [] };
 
   const firstId = periodSettled[0].bet.betId;
   const before = allSettled.filter(g => g.bet.betId < firstId);
-  const startBankroll = before.length
-    ? bankrollById.get(before[before.length - 1].bet.betId)
-    : initial;
+  const startBankroll = before.length ? bankrollById.get(before[before.length - 1].bet.betId) : initial;
+  const startExpected = before.length ? expectedById.get(before[before.length - 1].bet.betId) : initial;
 
   const periodIds = new Set(periodSettled.map(g => g.bet.betId));
   const inOrder = allSettled.filter(g => periodIds.has(g.bet.betId));
 
   return {
     labels: ['Start', ...inOrder.map(g => fmtDate(g.bet.concludingTime || g.bet.betDate))],
-    data: [startBankroll, ...inOrder.map(g => bankrollById.get(g.bet.betId))]
+    data: [startBankroll, ...inOrder.map(g => bankrollById.get(g.bet.betId))],
+    expectedData: [startExpected, ...inOrder.map(g => expectedById.get(g.bet.betId))]
   };
 }
 
@@ -441,30 +445,48 @@ const CHART_FONT = { family: 'Plus Jakarta Sans, system-ui, sans-serif', size: 1
 const GRID_COLOR = 'rgba(107,101,96,0.15)';
 const TICK_COLOR = '#6B6560';
 
-function renderBankrollChart(labels, data) {
+function renderBankrollChart(labels, data, expectedData) {
   const ctx = document.getElementById('bankroll-chart').getContext('2d');
   if (bankrollChart) bankrollChart.destroy();
   bankrollChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        data,
-        borderColor: '#B4471F',
-        backgroundColor: 'rgba(180,71,31,0.07)',
-        borderWidth: 2,
-        pointRadius: 3,
-        pointBackgroundColor: '#B4471F',
-        fill: true,
-        tension: 0.3
-      }]
+      datasets: [
+        {
+          label: 'Actual',
+          data,
+          borderColor: '#B4471F',
+          backgroundColor: 'rgba(180,71,31,0.07)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#B4471F',
+          fill: true,
+          tension: 0.3
+        },
+        {
+          label: 'Expected',
+          data: expectedData,
+          borderColor: '#6B6560',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => ' ' + fmtKr(ctx.raw) }
-      }},
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: TICK_COLOR, font: CHART_FONT, boxWidth: 24, padding: 12 }
+        },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtKr(ctx.raw)}` } }
+      },
       scales: {
         x: { ticks: { maxTicksLimit: 8, color: TICK_COLOR, font: CHART_FONT, maxRotation: 0 }, grid: { color: GRID_COLOR } },
         y: { ticks: { color: TICK_COLOR, font: CHART_FONT, callback: v => fmtKr(v) }, grid: { color: GRID_COLOR } }
@@ -666,8 +688,8 @@ function renderAll(period) {
   renderKPIs(stats, prevStats, bankroll);
   renderCountryTable(stats.countryRanked);
 
-  const { labels, data } = buildBankrollSeries(allSettled, periodSettled);
-  renderBankrollChart(labels, data);
+  const { labels, data, expectedData } = buildBankrollSeries(allSettled, periodSettled);
+  renderBankrollChart(labels, data, expectedData);
   renderMonthlyChart(periodSettled);
 
   // Bets table: settled within period + all open/pending, most recent first
