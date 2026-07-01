@@ -4,7 +4,7 @@ const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT6GhPD4kXO
 // ── Module state ─────────────────────────────────────────────────────────────
 let allGroups = [];
 let allBets = [];
-let currentPeriod = 'all';
+let currentPeriod = '6m';
 
 // ── CSV / formatting helpers ─────────────────────────────────────────────────
 
@@ -87,6 +87,21 @@ async function loadData() {
   }));
 
   return { bets, matchMap };
+}
+
+// ── Arb bias helper ──────────────────────────────────────────────────────────
+
+const SELECTION_LABEL = { '1': 'Home Win', 'x': 'Draw', '2': 'Away Win' };
+
+function arbBias(legs) {
+  const payouts = legs.map(l => l.stake * l.totalOdds);
+  const max = Math.max(...payouts);
+  const min = Math.min(...payouts);
+  if (max === 0) return '';
+  if ((max - min) / max <= 0.05) return 'Neutral arb';
+  const topLeg = legs[payouts.indexOf(max)];
+  const label = SELECTION_LABEL[topLeg.selection.toLowerCase()] || topLeg.selection;
+  return `Biased toward ${label}`;
 }
 
 // ── Arb grouping ─────────────────────────────────────────────────────────────
@@ -313,10 +328,14 @@ function renderKPIs(stats, prevStats, bankroll) {
   if (best) {
     const b = best.bet;
     const oddsStr = b.totalOdds ? `@ ${b.totalOdds.toFixed(2)}` : '';
+    const biasLine = best.type === 'arb' ? `<br>${arbBias(best.legs)}` : '';
+    const placedLine = `Placed ${fmtDate(b.betDate)}`;
+    const settledLine = b.concludingTime && fmtDate(b.concludingTime) !== fmtDate(b.betDate)
+      ? `<br>Settled ${fmtDate(b.concludingTime)}` : '';
     bestDetail = `<div class="kpi-best-detail">
       ${b.betType}${oddsStr ? ' ' + oddsStr : ''} &middot; Stake ${fmtKr(b.stake)}<br>
-      ${b.matchLabel || ''}<br>
-      ${fmtDate(b.concludingTime)}
+      ${b.matchLabel || ''}${biasLine}<br>
+      ${placedLine}${settledLine}
     </div>`;
   }
   document.getElementById('kpi-best').innerHTML =
@@ -506,6 +525,7 @@ function renderBetsTable(groups) {
       expandBtn = `<button class="arb-toggle" data-arb="${g.arbId}" aria-expanded="false">&#9658; ${g.legs.length} legs</button>`;
       legRows = g.legs.map(leg => `<tr class="arb-leg" data-arb-leg="${g.arbId}" style="display:none">
         <td>${fmtDate(leg.betDate)}</td>
+        <td>${fmtDate(leg.concludingTime) || '—'}</td>
         <td colspan="2">&#8627; Selection: ${leg.selection}</td>
         <td>${leg.countries.join(', ')}</td>
         <td>${fmtKr(leg.stake)}</td>
@@ -518,6 +538,7 @@ function renderBetsTable(groups) {
 
     return `<tr class="bet-row${g.type === 'arb' ? ' arb-row' : ''}">
       <td>${fmtDate(b.betDate)}</td>
+      <td>${b.concludingTime ? fmtDate(b.concludingTime) : '—'}</td>
       <td><span class="type-tag">${b.betType}</span>${expandBtn}</td>
       <td class="match-cell" title="${b.matchLabel || ''}">${b.matchLabel || '—'}</td>
       <td>${b.countries.slice(0, 2).join(', ') || '—'}</td>
@@ -563,6 +584,14 @@ function renderAll(period) {
   const { labels, data } = buildBankrollSeries(allSettled, periodSettled);
   renderBankrollChart(labels, data);
   renderMonthlyChart(periodSettled);
+
+  // Bets table: settled within period + all open/pending, most recent first
+  const openPending = allGroups.filter(g => g.bet.win === null);
+  const openPendingInPeriod = range
+    ? openPending.filter(g => { const d = g.bet.betDate; return d && d >= range.start && d <= range.end; })
+    : openPending;
+  const tableGroups = [...periodSettled, ...openPendingInPeriod].reverse();
+  renderBetsTable(tableGroups);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -581,8 +610,7 @@ async function init() {
     const pending = allGroups.filter(g => g.bet.isFinished && g.bet.win === null);
 
     renderOpenBets(open, pending);
-    renderBetsTable([...allGroups].reverse());
-    renderAll('all');
+    renderAll('6m');
 
     document.getElementById('last-updated').textContent =
       new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });

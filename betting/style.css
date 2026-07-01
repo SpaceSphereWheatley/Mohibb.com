@@ -287,6 +287,8 @@ h1 {
 /* ── Bets Table ── */
 .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 520px;
   border: 1.5px solid var(--line);
   border-radius: var(--radius);
 }
@@ -309,6 +311,9 @@ h1 {
   border-bottom: 1.5px solid var(--line);
   white-space: nowrap;
   background: var(--card);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .bets-table td {
