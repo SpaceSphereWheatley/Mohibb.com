@@ -65,7 +65,12 @@ async function loadData() {
 
   const matchMap = {};
   parseCSV(matchesText).slice(1).filter(r => r[0]).forEach(r => {
-    matchMap[r[0].trim()] = { home: r[6], away: r[7], league: r[4], country: r[14] };
+    matchMap[r[0].trim()] = {
+      home: r[6], away: r[7], league: r[4], country: r[14],
+      odds1: parseFloat(r[8]) || null,
+      oddsx: parseFloat(r[9]) || null,
+      odds2: parseFloat(r[10]) || null
+    };
   });
 
   const bets = parseCSV(betsText).slice(1).filter(r => r[18]).map(r => ({
@@ -624,14 +629,24 @@ function renderBetsTable(groups) {
       }).join('');
     } else if (isMultiMatch) {
       matchCell = `<td class="match-cell"><span class="expand-indicator">&#9658;</span> ${b.matchNums.length} matches</td>`;
+      const sel = b.selection ? b.selection.toLowerCase().trim() : null;
       subRows = b.matchNums.map(n => {
         const m = allMatchMap[n];
         const matchName = m ? `${m.home} vs ${m.away}` : `Match ${n}`;
         const league = m ? m.league || '' : '';
         const country = m ? m.country || '' : '';
+        let oddsHtml = '';
+        if (m && (m.odds1 || m.oddsx || m.odds2)) {
+          const fmt = (v, key) => {
+            if (!v) return '';
+            const active = sel === key;
+            return `<span class="match-odds${active ? ' match-odds-sel' : ''}">${key === '1' ? '1' : key === 'x' ? 'X' : '2'} ${v.toFixed(2)}</span>`;
+          };
+          oddsHtml = `<span class="match-odds-wrap">${fmt(m.odds1,'1')}${fmt(m.oddsx,'x')}${fmt(m.odds2,'2')}</span>`;
+        }
         return `<tr class="sub-row" data-expand-leg="${expandId}" style="display:none">
           <td colspan="2"></td>
-          <td class="sub-row-indent" colspan="2">&#8627; ${matchName}${league ? ` &middot; <em>${league}</em>` : ''}</td>
+          <td class="sub-row-indent" colspan="2">&#8627; ${matchName}${league ? ` &middot; <em>${league}</em>` : ''} ${oddsHtml}</td>
           <td>${country}</td>
           <td colspan="5"></td>
         </tr>`;

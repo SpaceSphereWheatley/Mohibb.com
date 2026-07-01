@@ -399,6 +399,23 @@ h1 {
 
 .sub-row-indent { padding-left: 1.75rem !important; }
 
+.match-odds-wrap { display: inline-flex; gap: 0.3rem; margin-left: 0.5rem; vertical-align: middle; }
+
+.match-odds {
+  font-size: 0.67rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: var(--line-soft);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.match-odds-sel {
+  background: var(--ink);
+  color: var(--bg);
+}
+
 /* ── Open Bets ── */
 .open-grid {
   display: grid;
