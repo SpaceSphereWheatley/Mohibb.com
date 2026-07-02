@@ -501,37 +501,6 @@ h1 {
 .badge-open { background: var(--live-dim); color: var(--live); }
 .badge-pending { background: rgba(180, 71, 31, 0.1); color: var(--accent); }
 
-/* ── Skeleton loading ── */
-.skel-page { display: flex; flex-direction: column; gap: 0.75rem; }
-
-.skel {
-  background: linear-gradient(90deg, var(--line-soft) 25%, var(--card) 50%, var(--line-soft) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
-  border-radius: var(--radius);
-}
-
-@keyframes shimmer { to { background-position: -200% 0; } }
-
-.skel-kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-}
-
-.skel-kpi-row2 { grid-template-columns: 1fr 1fr 1fr 1.3fr 1.3fr; }
-.skel-kpi { height: 96px; }
-
-.skel-charts {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 0.75rem;
-}
-
-.skel-chart-lg,
-.skel-chart-sm { height: 290px; }
-.skel-table { height: 180px; }
-
 /* ── Error ── */
 .error-state {
   text-align: center;

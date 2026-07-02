@@ -904,9 +904,17 @@ function applyData(bets, matchMap) {
 }
 
 async function init() {
-  const loadingEl = document.getElementById('loading');
-  const contentEl = document.getElementById('content');
   const errorEl = document.getElementById('error-state');
+
+  // Wire tabs immediately so they're interactive before data loads
+  document.getElementById('period-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.period-btn');
+    if (!btn) return;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPeriod = btn.dataset.period;
+    renderAll(currentPeriod);
+  });
 
   try {
     let betsText, matchesText, fromCache = false;
@@ -930,19 +938,6 @@ async function init() {
     const { bets, matchMap } = parseData(betsText, matchesText);
     applyData(bets, matchMap);
 
-    loadingEl.classList.add('hidden');
-    contentEl.classList.remove('hidden');
-
-    // Period filter buttons
-    document.getElementById('period-tabs').addEventListener('click', e => {
-      const btn = e.target.closest('.period-btn');
-      if (!btn) return;
-      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentPeriod = btn.dataset.period;
-      renderAll(currentPeriod);
-    });
-
     // Stale-while-revalidate: refresh in background and re-render when done
     if (fromCache) {
       fetchCSVs()
@@ -956,7 +951,6 @@ async function init() {
 
   } catch (err) {
     console.error(err);
-    loadingEl.classList.add('hidden');
     errorEl.classList.remove('hidden');
     errorEl.querySelector('.error-msg').textContent = err.message;
   }
