@@ -204,7 +204,7 @@ splitFileInput.addEventListener('change', function() {
   splitFileInput.value = '';
 });
 
-function setSplitFile(f) {
+async function setSplitFile(f) {
   if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') {
     showSplitStatus('Only PDF files are accepted.', 'error');
     return;
@@ -216,6 +216,16 @@ function setSplitFile(f) {
   splitFileInfo.classList.remove('u-hidden');
   hideSplitStatus();
   splitProgressBar.classList.remove('visible');
+
+  // Read page count and update hint
+  try {
+    var buf = await f.arrayBuffer();
+    var doc = await PDFLib.PDFDocument.load(buf);
+    var n = doc.getPageCount();
+    document.getElementById('splitFileSize').textContent = formatSize(f.size) + ' · ' + n + ' page' + (n !== 1 ? 's' : '');
+    document.getElementById('rangeInput').placeholder = n <= 4 ? '1-2, 3-' + n : 'e.g. 1-3, 5, 8-' + n;
+    document.getElementById('rangeHint').textContent = 'Pages 1–' + n + '. Each comma-separated entry becomes a separate PDF.';
+  } catch (_) { /* non-critical, leave defaults */ }
 }
 
 function clearSplit() {
