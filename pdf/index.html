@@ -4,22 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Mohibb Malik">
-<meta name="description" content="Free online PDF merger — combine, reorder, and split PDF files entirely in your browser. No upload, no signup, nothing leaves your device.">
+<meta name="description" content="Free online PDF tools — merge, split, and convert PDF files to Markdown, entirely in your browser. No upload, no signup, nothing leaves your device.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://mohibb.com/pdf/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<title>PDF Merger — Combine &amp; Reorder PDFs Online | Mohibb Malik</title>
+<title>PDF Tools — Merge, Split &amp; Convert | Mohibb Malik</title>
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Mohibb Malik">
-<meta property="og:title" content="PDF Merger — Combine & Reorder PDFs Online">
-<meta property="og:description" content="Free online PDF merger — combine, reorder, and split PDF files entirely in your browser. No upload, no signup, nothing leaves your device.">
+<meta property="og:title" content="PDF Tools — Merge, Split &amp; Convert">
+<meta property="og:description" content="Free online PDF tools — merge, split, and convert PDF files to Markdown, entirely in your browser. No upload, no signup, nothing leaves your device.">
 <meta property="og:url" content="https://mohibb.com/pdf/">
 <meta property="og:locale" content="en_US">
 
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="PDF Merger — Combine & Reorder PDFs Online">
-<meta name="twitter:description" content="Free online PDF merger — combine, reorder, and split PDF files entirely in your browser. No upload, no signup, nothing leaves your device.">
+<meta name="twitter:title" content="PDF Tools — Merge, Split &amp; Convert">
+<meta name="twitter:description" content="Free online PDF tools — merge, split, and convert PDF files to Markdown, entirely in your browser. No upload, no signup, nothing leaves your device.">
 
 <meta name="theme-color" content="#EDE8DD">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,9 +28,9 @@
 {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  "name": "PDF Merger",
+  "name": "PDF Tools",
   "url": "https://mohibb.com/pdf/",
-  "description": "Combine, reorder, and split PDF files entirely in the browser. No upload required.",
+  "description": "Merge, split, and convert PDF files to Markdown entirely in the browser. No upload required.",
   "applicationCategory": "Utility",
   "operatingSystem": "Any",
   "offers": {
@@ -60,11 +60,18 @@
 
   <div class="intro">
     <div class="eyebrow">Tools</div>
-    <h1>PDF Merger</h1>
-    <p class="lede">Combine, reorder, and split PDF files &mdash; entirely in your browser. Nothing is uploaded.</p>
+    <h1>PDF Tools</h1>
+    <p class="lede">Merge, split, and convert PDF files to Markdown &mdash; entirely in your browser. Nothing is uploaded.</p>
   </div>
 
-  <div class="card">
+  <div class="tab-nav" role="tablist" aria-label="PDF tool tabs">
+    <button type="button" class="tab active" id="tab-btn-merge" data-tab="merge" role="tab" aria-selected="true" aria-controls="tab-merge" onclick="switchTab('merge')">Merge</button>
+    <button type="button" class="tab" id="tab-btn-split" data-tab="split" role="tab" aria-selected="false" aria-controls="tab-split" onclick="switchTab('split')">Split</button>
+    <button type="button" class="tab" id="tab-btn-markdown" data-tab="markdown" role="tab" aria-selected="false" aria-controls="tab-markdown" onclick="switchTab('markdown')">To Markdown</button>
+  </div>
+
+  <!-- ── Merge tab ───────────────────────────────────────── -->
+  <div class="card tab-panel" id="tab-merge" role="tabpanel" aria-labelledby="tab-btn-merge">
     <div class="drop-zone" id="dropZone">
       <input type="file" id="fileInput" accept=".pdf" multiple aria-label="Choose PDF files to merge">
       <div class="drop-icon">&#8593;</div>
@@ -76,16 +83,114 @@
     <p class="empty-hint" id="emptyHint">Add at least 2 PDF files to merge.</p>
 
     <div class="actions">
-      <button class="btn-merge" id="mergeBtn" type="button" disabled onclick="mergePDFs()">Merge PDFs</button>
+      <button class="btn-primary" id="mergeBtn" type="button" disabled onclick="mergePDFs()">Merge PDFs</button>
       <button class="btn-clear" type="button" onclick="clearAll()">Clear all</button>
     </div>
 
     <div class="progress-bar" id="progressBar">
       <div class="progress-fill" id="progressFill"></div>
     </div>
-
-    <div class="status" id="status"></div>
+    <div class="status" id="mergeStatus"></div>
   </div>
+
+  <!-- ── Split tab ───────────────────────────────────────── -->
+  <div class="card tab-panel u-hidden" id="tab-split" role="tabpanel" aria-labelledby="tab-btn-split">
+    <div class="drop-zone" id="splitDropZone">
+      <input type="file" id="splitFileInput" accept=".pdf" aria-label="Choose a PDF file to split">
+      <div class="drop-icon">&#8593;</div>
+      <p>Drop a PDF here or <span onclick="document.getElementById('splitFileInput').click()">browse</span></p>
+      <p class="hint">Select one PDF to split</p>
+    </div>
+
+    <div class="u-hidden" id="splitFileInfo">
+      <div class="file-item file-item--single">
+        <div class="file-icon">PDF</div>
+        <div class="file-info">
+          <div class="file-name" id="splitFileName"></div>
+          <div class="file-size" id="splitFileSize"></div>
+        </div>
+        <button type="button" class="remove-btn" onclick="clearSplit()" title="Remove file">&#10005;</button>
+      </div>
+
+      <fieldset class="split-options">
+        <legend>Split method</legend>
+        <label class="radio-label">
+          <input type="radio" name="splitMode" value="all" checked>
+          <span>Every page as a separate PDF <em>(downloads as ZIP)</em></span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="splitMode" value="ranges">
+          <span>Specific pages or ranges</span>
+        </label>
+      </fieldset>
+
+      <div id="rangeWrap" class="u-hidden">
+        <label for="rangeInput" class="range-label">Pages / ranges</label>
+        <input type="text" id="rangeInput" class="range-input" placeholder="e.g. 1-3, 5, 8-10" aria-describedby="rangeHint">
+        <p class="hint" id="rangeHint">Each entry becomes a separate PDF. Multiple entries download as ZIP.</p>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="splitBtn" type="button" onclick="splitPDF()">Split PDF</button>
+        <button class="btn-clear" type="button" onclick="clearSplit()">Clear</button>
+      </div>
+    </div>
+
+    <div class="progress-bar" id="splitProgressBar">
+      <div class="progress-fill" id="splitProgressFill"></div>
+    </div>
+    <div class="status" id="splitStatus"></div>
+  </div>
+
+  <!-- ── To Markdown tab ─────────────────────────────────── -->
+  <div class="card tab-panel u-hidden" id="tab-markdown" role="tabpanel" aria-labelledby="tab-btn-markdown">
+    <div class="drop-zone" id="mdDropZone">
+      <input type="file" id="mdFileInput" accept=".pdf" aria-label="Choose a PDF file to convert to Markdown">
+      <div class="drop-icon">&#8593;</div>
+      <p>Drop a PDF here or <span onclick="document.getElementById('mdFileInput').click()">browse</span></p>
+      <p class="hint">Works best on text-based PDFs &mdash; scanned images produce empty output</p>
+    </div>
+
+    <div class="u-hidden" id="mdFileInfo">
+      <div class="file-item file-item--single">
+        <div class="file-icon">PDF</div>
+        <div class="file-info">
+          <div class="file-name" id="mdFileName"></div>
+          <div class="file-size" id="mdFileSize"></div>
+        </div>
+        <button type="button" class="remove-btn" onclick="clearMarkdown()" title="Remove file">&#10005;</button>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="mdConvertBtn" type="button" onclick="convertToMarkdown()">Convert to Markdown</button>
+        <button class="btn-clear" type="button" onclick="clearMarkdown()">Clear</button>
+      </div>
+    </div>
+
+    <div class="progress-bar" id="mdProgressBar">
+      <div class="progress-fill" id="mdProgressFill"></div>
+    </div>
+    <div class="status" id="mdStatus"></div>
+
+    <div class="u-hidden" id="mdResult">
+      <div class="md-preview-header">
+        <span class="md-preview-label">Markdown preview</span>
+        <button type="button" class="btn-dl-md" onclick="downloadMarkdown()">Download .md</button>
+      </div>
+      <textarea class="md-preview" id="mdPreview" readonly aria-label="Markdown output preview"></textarea>
+    </div>
+  </div>
+
+  <!-- ── Offline download card ───────────────────────────── -->
+  <!-- offline-card-start -->
+  <div class="offline-card">
+    <div class="offline-info">
+      <strong>Use offline</strong>
+      <p>Download this tool as a single self-contained HTML file &mdash; open it locally, no internet needed.</p>
+    </div>
+    <button type="button" class="btn-offline" id="downloadToolBtn" onclick="downloadTool()">&#8615;&nbsp;Download tool</button>
+  </div>
+  <!-- offline-card-end -->
 
   <footer>
     <span>&copy; <span id="year"></span> Mohibb Malik</span>
