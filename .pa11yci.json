@@ -11,7 +11,10 @@
     "http://localhost:8123/pitwall/live/",
     "http://localhost:8123/pitwall/sim/",
     "http://localhost:8123/pdf/",
-    "http://localhost:8123/spotkick/",
+    {
+      "url": "http://localhost:8123/spotkick/",
+      "timeout": 120000
+    },
     "http://localhost:8123/pitstop/",
     "http://localhost:8123/blackhole/",
     "http://localhost:8123/pendulum/",
