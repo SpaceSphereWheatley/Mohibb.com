@@ -501,29 +501,7 @@ h1 {
 .badge-open { background: var(--live-dim); color: var(--live); }
 .badge-pending { background: rgba(180, 71, 31, 0.1); color: var(--accent); }
 
-/* ── Loading / Error ── */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 5rem 0;
-  color: var(--ink-3);
-  font-size: 0.9rem;
-}
-
-.spinner {
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
+/* ── Error ── */
 .error-state {
   text-align: center;
   padding: 3rem 0;

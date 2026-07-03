@@ -73,12 +73,18 @@ function relTime(d) {
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 
-async function loadData() {
+const CACHE_KEY = 'bettingCache';
+const CACHE_TTL = 10 * 60 * 1000;
+
+async function fetchCSVs() {
   const [betsText, matchesText] = await Promise.all([
     fetch(BETS_URL).then(r => { if (!r.ok) throw new Error(`Bets HTTP ${r.status}`); return r.text(); }),
     fetch(MATCHES_URL).then(r => { if (!r.ok) throw new Error(`Matches HTTP ${r.status}`); return r.text(); })
   ]);
+  return { betsText, matchesText };
+}
 
+function parseData(betsText, matchesText) {
   const matchMap = {};
   parseCSV(matchesText).slice(1).filter(r => r[0]).forEach(r => {
     matchMap[r[0].trim()] = {
@@ -715,7 +721,7 @@ function renderOpenBets(openGroups, pendingGroups) {
       ? '<span class="badge badge-pending">Awaiting result</span>'
       : '<span class="badge badge-open">Open</span>';
     const matchDates = b.matchNums.map(n => allMatchMap[n] && allMatchMap[n].matchDate).filter(Boolean);
-    const nextDate = matchDates.length ? matchDates.reduce((a, b) => a < b ? a : b) : null;
+    const nextDate = matchDates.length ? matchDates.reduce((a, d) => a < d ? a : d) : null;
     const rel = relTime(nextDate);
     const matchTimeHtml = nextDate
       ? `<div class="open-card-when"><span class="open-when-rel">${rel}</span><span class="open-when-abs">${fmtDate(nextDate)}</span></div>`
@@ -882,42 +888,69 @@ function renderAll(period) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+function applyData(bets, matchMap) {
+  allBets = bets;
+  allMatchMap = matchMap;
+  allGroups = groupBets(bets, matchMap);
+
+  const open = allGroups.filter(g => !g.bet.isFinished && g.bet.win === null);
+  const pending = allGroups.filter(g => g.bet.isFinished && g.bet.win === null);
+
+  renderOpenBets(open, pending);
+  renderAll(currentPeriod);
+
+  document.getElementById('last-updated').textContent =
+    new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
 async function init() {
-  const loadingEl = document.getElementById('loading');
-  const contentEl = document.getElementById('content');
   const errorEl = document.getElementById('error-state');
 
+  // Wire tabs immediately so they're interactive before data loads
+  document.getElementById('period-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.period-btn');
+    if (!btn) return;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPeriod = btn.dataset.period;
+    renderAll(currentPeriod);
+  });
+
   try {
-    const { bets, matchMap } = await loadData();
-    allBets = bets;
-    allMatchMap = matchMap;
-    allGroups = groupBets(bets, matchMap);
+    let betsText, matchesText, fromCache = false;
 
-    const open = allGroups.filter(g => !g.bet.isFinished && g.bet.win === null);
-    const pending = allGroups.filter(g => g.bet.isFinished && g.bet.win === null);
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (raw) {
+      try {
+        const c = JSON.parse(raw);
+        if (Date.now() - c.ts < CACHE_TTL) {
+          ({ betsText, matchesText } = c);
+          fromCache = true;
+        }
+      } catch (e) {}
+    }
 
-    renderOpenBets(open, pending);
-    renderAll('6m');
+    if (!fromCache) {
+      ({ betsText, matchesText } = await fetchCSVs());
+      try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), betsText, matchesText })); } catch (e) {}
+    }
 
-    document.getElementById('last-updated').textContent =
-      new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const { bets, matchMap } = parseData(betsText, matchesText);
+    applyData(bets, matchMap);
 
-    loadingEl.classList.add('hidden');
-    contentEl.classList.remove('hidden');
-
-    // Period filter buttons
-    document.getElementById('period-tabs').addEventListener('click', e => {
-      const btn = e.target.closest('.period-btn');
-      if (!btn) return;
-      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentPeriod = btn.dataset.period;
-      renderAll(currentPeriod);
-    });
+    // Stale-while-revalidate: refresh in background and re-render when done
+    if (fromCache) {
+      fetchCSVs()
+        .then(({ betsText: b, matchesText: m }) => {
+          try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), betsText: b, matchesText: m })); } catch (e) {}
+          const { bets: freshBets, matchMap: freshMap } = parseData(b, m);
+          applyData(freshBets, freshMap);
+        })
+        .catch(() => {});
+    }
 
   } catch (err) {
     console.error(err);
-    loadingEl.classList.add('hidden');
     errorEl.classList.remove('hidden');
     errorEl.querySelector('.error-msg').textContent = err.message;
   }
