@@ -19,11 +19,10 @@ h1{font-size:clamp(34px,7vw,52px);font-weight:800;letter-spacing:-0.04em;line-he
 
 /* ── Tabs ──────────────────────────────────── */
 .tab-nav{display:flex;gap:0;margin-bottom:-1.5px;position:relative;z-index:1;}
-.tab{background:none;border:1.5px solid var(--line-soft);padding:9px 20px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;transition:color .15s,background .15s,border-color .15s;letter-spacing:.02em;margin-right:-1.5px;}
-.tab:first-child{border-right:none;}
-.tab:last-child{border-left:none;}
-.tab.active{background:var(--card);border-color:var(--line);border-bottom-color:var(--card);color:var(--ink);}
-.tab:hover:not(.active){color:var(--accent);border-color:var(--line-soft);}
+.tab{background:none;border:1.5px solid var(--line-soft);padding:9px 20px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;transition:color .15s,background .15s,border-color .15s;letter-spacing:.02em;position:relative;}
+.tab+.tab{margin-left:-1.5px;}
+.tab.active{background:var(--card);border-color:var(--line);border-bottom-color:var(--card);color:var(--ink);z-index:2;}
+.tab:hover:not(.active){color:var(--accent);border-color:var(--line-soft);z-index:1;}
 .tab-panel{border:1.5px solid var(--line);}
 
 /* ── Card ──────────────────────────────────── */
