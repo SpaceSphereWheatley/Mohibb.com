@@ -25,6 +25,7 @@ pdf/                     PDF Merger tool, served at mohibb.com/pdf/
 pitwall/                 Pit Wall · Analyse: completed-session analysis, served at mohibb.com/pitwall/
 pitwall/live/            Pit Wall companion: live F1 dashboard, at mohibb.com/pitwall/live/
 spotkick/                Spotkick penalty analytics, served at mohibb.com/spotkick/
+functions/               Cloudflare Pages Functions — currently just the Race Report API (see below)
 favicon.svg, robots.txt, sitemap.xml   shared static assets
 .github/workflows/validate.yml         CI checks (see Validation below)
 .stylelintrc.json, .pa11yci.json       config for the CI checks
@@ -158,6 +159,38 @@ grand prix and renders team-coloured dots with a live timing tower.
 - Served at `mohibb.com/pitwall/sim/` as part of this same Pages deployment —
   no separate project needed. Linked from the Pit Wall top nav.
 
+### Race Report API (mohibb.com/api/race-report)
+
+`functions/api/race-report.js` is a **Cloudflare Pages Function** — the
+site's only server-side code — that returns a full-analysis F1 race report
+as a standalone HTML document: `GET /api/race-report` (defaults to the most
+recently completed Race, resolved the same way `pitwall/live` does; pass
+`?session_key=<key>` for a specific past session, or the explicit
+`?session_key=latest`). The report covers classification,
+fastest lap, a race-history (gap-to-winner) chart, tyre strategy + pit
+stops, Safety Car/VSC periods, and a race-pace summary — the same OpenF1
+data and analysis approach as `pitwall/`'s race view, ported into
+Workers-runtime-safe pure functions (no `window`/`document`/`sessionStorage`)
+in `functions/_lib/openf1.js` and `functions/_lib/analysis.js`.
+`functions/_lib/report.js` renders the page: inline `<style>`, no external
+stylesheet/CDN/`<script>`, and the race-history chart is a static inline
+`<svg>` (no Chart.js) so the whole response is one self-contained HTML
+string that can be forwarded or pasted elsewhere (e.g. as an email body).
+
+- **On-demand only** — there's no scheduled job and no email-sending code
+  anywhere in this repo. Call the endpoint whenever you want a report;
+  sending it wherever it needs to go is a separate, manual step.
+- Non-Race sessions, sessions that haven't finished, and missing/unknown
+  `session_key`s get an HTML error page with the matching status code
+  (400/404/409/422); an OpenF1 fetch failure returns 502. A successful
+  response is always `200` with `content-type: text/html`, even when some
+  sections had to degrade because one of the underlying OpenF1 endpoints
+  didn't respond (each panel fails independently, same resilience approach
+  as `pitwall/script.js`'s per-panel retry).
+- Deployed automatically as part of this same Pages project — Cloudflare
+  auto-detects the `functions/` directory on push, no `wrangler.toml` or
+  extra config needed.
+
 ## Spotkick (mohibb.com/spotkick)
 
 `spotkick/` is a self-contained, client-side penalty analytics dashboard
@@ -263,6 +296,13 @@ package.json/lockfile needed — the site itself stays dependency-free):
 When adding a new top-level page, add its URL to `.pa11yci.json` so it's
 covered by the accessibility check.
 
+`functions/**/*.js` (the Race Report API) is covered by the same repo-wide
+JS syntax check above — no workflow changes needed. Its dynamically
+generated HTML response is **not** covered by html-validate/stylelint/
+pa11y-ci (those only scan static `*.html`/`*.css` files), so changes to
+`functions/_lib/report.js` need manual verification instead (render it and
+eyeball the markup/CSS).
+
 ## Deployment
 
 Deployed via Cloudflare Pages:
@@ -272,3 +312,6 @@ Deployed via Cloudflare Pages:
   project.
 - Each other project listed in `projects.json` lives in its own repo / Pages
   project on its own subdomain (e.g. `spotkick.mohibb.com`, `f1.mohibb.com`).
+- Cloudflare Pages auto-detects the `functions/` directory on push and
+  deploys the Race Report API alongside the static site — no `wrangler.toml`
+  or separate Workers project needed.
