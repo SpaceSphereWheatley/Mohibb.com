@@ -1618,7 +1618,9 @@ const baselinePlugin = {
   }
 };
 
-// Top-N driver filter shared across the three race charts.
+// Top-N driver preset shared across the three race charts: all drivers stay in
+// the dataset/legend, this just sets which start hidden — the legend can
+// still show/hide any driver on top of the preset.
 const TOPN = [ { n:3, label:'Top 3' }, { n:6, label:'Top 6' }, { n:8, label:'Top 8' }, { n:0, label:'All' } ];
 function topToolbar(){
   return `<div class="seg topn">${TOPN.map(o => `<button type="button" data-n="${o.n}" class="${state.raceTopN===o.n?'active':''}">${esc(o.label)}</button>`).join('')}</div>`;
@@ -1681,7 +1683,7 @@ async function renderLapChart(session_key, attempt=0){
     const yMax = med * 1.25;            // shows green-flag pace + most pit laps, clips SC/red-flag spikes
 
     body.innerHTML = `<div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the legend or the Top buttons to isolate drivers; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the Top buttons to preset a group of drivers, then add or hide any driver from the legend; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
 
     const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
     const redraw = () => {
@@ -1689,7 +1691,7 @@ async function renderLapChart(session_key, attempt=0){
       host.innerHTML = '<canvas id="lapCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
       const showP = state.showPits;
-      const datasets = drivers.filter(n => !set || set.has(n)).sort((a,b)=> a-b).map(n => {
+      const datasets = drivers.slice().sort((a,b)=> a-b).map(n => {
         const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
         const colour = drvColour(n);
         const mark = (l) => showP && isPit(n,l);
@@ -1699,6 +1701,7 @@ async function renderLapChart(session_key, attempt=0){
           pointRadius: ls.map(l => mark(l)?4:0), pointHoverRadius: 5,
           pointBorderColor: ls.map(l => mark(l)?PIT_DOT.ring:colour), pointBorderWidth: 1.5,
           pointBackgroundColor: ls.map(l => mark(l)?PIT_DOT.fill:colour),
+          hidden: !!set && !set.has(n),
         };
       });
       drawLapChart(datasets, yMin, yMax, bands);
@@ -1755,7 +1758,7 @@ function drawHistory(){
   if (!refCum || !refLast) return;
   const host = $('histHost'); if (host) host.innerHTML = '<canvas id="histCanvas"></canvas>';
   const set = topNSet(H.drivers, state.raceTopN);
-  const datasets = H.drivers.filter(n => !set || set.has(n) || n===refN).map(n => {
+  const datasets = H.drivers.map(n => {
     const map = H.cum[n], pts = [];
     for (let lap = 1; lap <= refLast; lap++){
       const rc = refCum.get(lap), dc = map.get(lap);
@@ -1768,7 +1771,8 @@ function drawHistory(){
       borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true,
       pointRadius: pts.map(p => pits && pits.has(p.x) ? 4 : 0), pointHoverRadius: 5,
       pointBackgroundColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.fill : colour),
-      pointBorderColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.ring : colour), pointBorderWidth: 1.5 };
+      pointBorderColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.ring : colour), pointBorderWidth: 1.5,
+      hidden: !!set && !set.has(n) && n!==refN };
   });
   drawHistoryChart(datasets, H.bands);
 }
@@ -1926,15 +1930,15 @@ async function renderPosition(session_key, attempt=0){
     });
 
     body.innerHTML = `<div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Each line runs to that car's final lap, so finishers reach the flag and retirements stop where they ended. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Toggle drivers in the legend or the Top buttons to follow a recovery drive or an early-stop undercut.</div>`;
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Each line runs to that car's final lap, so finishers reach the flag and retirements stop where they ended. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Use the Top buttons to preset a group of drivers, then toggle any driver in the legend, to follow a recovery drive or an early-stop undercut.</div>`;
     const redraw = () => {
       const host = $('posHost'); if (!host) return;
       host.innerHTML = '<canvas id="posCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
       const shown = order.filter(n => !set || set.has(n));
-      const datasets = shown.map(n => {
+      const datasets = order.map(n => {
         const colour = drvColour(n);
-        return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0 };
+        return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0, hidden: !!set && !set.has(n) };
       });
       if (state.showPits){
         const marks = shown.flatMap(n => pitMarks[n] || []);

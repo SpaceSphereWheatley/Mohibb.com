@@ -49,8 +49,10 @@ haven't finished yet show a "not finished" notice instead — head to the
 - **Estimated Pit Loss** — weekend-level estimate (median of clean practice
   in/out-lap pairs vs green-lap pace).
 
-A shared **Top-N** filter (Top 3/6/8/All) and **pit-stop marker** toggle apply
-to every race chart at once.
+A shared **Top-N** preset (Top 3/6/8/All) and **pit-stop marker** toggle apply
+to every race chart at once. Top-N just sets which drivers start
+shown/hidden — every driver stays in the legend, so any driver can be added
+or hidden on top of the preset.
 
 ## Car Performance
 
