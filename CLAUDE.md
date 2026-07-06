@@ -163,9 +163,10 @@ grand prix and renders team-coloured dots with a live timing tower.
 
 `functions/api/race-report.js` is a **Cloudflare Pages Function** — the
 site's only server-side code — that returns a full-analysis F1 race report
-as a standalone HTML document: `GET /api/race-report?session_key=<key>`
-(accepts the literal `latest`, resolved the same way `pitwall/live` does, to
-the most recently completed Race). The report covers classification,
+as a standalone HTML document: `GET /api/race-report` (defaults to the most
+recently completed Race, resolved the same way `pitwall/live` does; pass
+`?session_key=<key>` for a specific past session, or the explicit
+`?session_key=latest`). The report covers classification,
 fastest lap, a race-history (gap-to-winner) chart, tyre strategy + pit
 stops, Safety Car/VSC periods, and a race-pace summary — the same OpenF1
 data and analysis approach as `pitwall/`'s race view, ported into

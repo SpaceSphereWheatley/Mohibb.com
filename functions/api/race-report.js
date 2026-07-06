@@ -1,11 +1,12 @@
 "use strict";
 /* ============================================================
-   GET /api/race-report?session_key=<key>|latest
+   GET /api/race-report[?session_key=<key>|latest]
    Returns a standalone HTML race report for a completed F1 Race
    session (full analysis: classification, fastest lap, race
    history, tyre strategy + pit stops, safety car/VSC periods,
-   race pace). On-demand only — no scheduling, no email sending;
-   see CLAUDE.md's "Race Report API" section.
+   race pace). No session_key defaults to the latest completed
+   Race. On-demand only — no scheduling, no email sending; see
+   CLAUDE.md's "Race Report API" section.
    ============================================================ */
 
 import {
@@ -27,11 +28,9 @@ function htmlResponse(body, status, extraHeaders) {
 
 export async function onRequestGet({ request }) {
   const url = new URL(request.url);
-  const sessionKeyParam = url.searchParams.get('session_key');
-
-  if (!sessionKeyParam) {
-    return htmlResponse(renderErrorPage(400, 'Missing session_key', 'Add ?session_key=latest or a specific OpenF1 session key, e.g. /api/race-report?session_key=9158.'), 400);
-  }
+  // no session_key at all defaults to the latest completed Race, so the
+  // simplest possible URL (no query string) works for the common case
+  const sessionKeyParam = url.searchParams.get('session_key') || 'latest';
 
   let session, meeting, usedLatest;
   try {
