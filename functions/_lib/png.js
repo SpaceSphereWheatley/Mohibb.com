@@ -151,8 +151,6 @@ function concat(arrays) {
   return out;
 }
 
-const BPP = 3; // RGB, 8-bit
-
 function paethPredictor(a, b, c) {
   const p = a + b - c;
   const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
@@ -172,15 +170,14 @@ function msad(bytes) {
 // Per-scanline adaptive filtering (PNG's None/Sub/Up/Average/Paeth), picking
 // whichever compresses best by the MSAD heuristic. Filtering the raw pixel
 // data before DEFLATE is what actually makes photographic/gradient-heavy
-// content (like our anti-aliased chart lines) compress well — unfiltered
-// data deflates far larger, which matters here because the PNG ships
-// base64-inlined in the report's HTML, and Gmail clips messages over ~102KB.
-function filterScanline(curr, prev, stride) {
+// content compress well — unfiltered data deflates far larger, which
+// matters here because the PNG ships base64-inlined in the report's HTML.
+function filterScanline(curr, prev, stride, bpp) {
   const sub = new Uint8Array(stride), up = new Uint8Array(stride), avg = new Uint8Array(stride), pae = new Uint8Array(stride);
   for (let x = 0; x < stride; x++) {
-    const a = x >= BPP ? curr[x - BPP] : 0;
+    const a = x >= bpp ? curr[x - bpp] : 0;
     const b = prev ? prev[x] : 0;
-    const c = prev && x >= BPP ? prev[x - BPP] : 0;
+    const c = prev && x >= bpp ? prev[x - bpp] : 0;
     sub[x] = (curr[x] - a) & 0xff;
     up[x] = (curr[x] - b) & 0xff;
     avg[x] = (curr[x] - ((a + b) >> 1)) & 0xff;
@@ -195,32 +192,77 @@ function filterScanline(curr, prev, stride) {
   return best;
 }
 
-export async function encodePng(raster) {
-  const { width, height, data } = raster;
-  const stride = width * BPP;
+function filterAndDeflate(pixelBytes, width, height, bpp) {
+  const stride = width * bpp;
   const raw = new Uint8Array(height * (1 + stride));
   let o = 0;
   let prevRow = null;
   for (let y = 0; y < height; y++) {
-    const curr = data.subarray(y * stride, y * stride + stride);
-    const { type, bytes } = filterScanline(curr, prevRow, stride);
+    const curr = pixelBytes.subarray(y * stride, y * stride + stride);
+    const { type, bytes } = filterScanline(curr, prevRow, stride, bpp);
     raw[o++] = type;
     raw.set(bytes, o);
     o += stride;
     prevRow = curr;
   }
-  const compressed = await zlibDeflate(raw);
+  return zlibDeflate(raw);
+}
 
+function ihdrChunk(width, height, colourType) {
   const ihdr = new Uint8Array(13);
   const dv = new DataView(ihdr.buffer);
   dv.setUint32(0, width);
   dv.setUint32(4, height);
-  ihdr[8] = 8;  // bit depth
-  ihdr[9] = 2;  // color type: truecolor (RGB)
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = colourType;
   // ihdr[10..12] = compression/filter/interlace = 0 (defaults)
+  return pngChunk('IHDR', ihdr);
+}
 
+// Our chart has no anti-aliasing (see the note on SS in report.js), so it's
+// drawn from a small, fixed set of exact colors — background, baseline,
+// each driver's hex color, and the (fully opaque once alpha-blended) SC/VSC
+// band tints. That means it almost always fits an 8-bit indexed palette,
+// which is roughly 3x smaller pre-compression than truecolor RGB (1 byte
+// per pixel instead of 3) and compresses even further on top of that.
+function buildPalette(data, maxColors) {
+  const map = new Map();
+  const palette = []; // flat r,g,b,r,g,b,... — 3 entries per color
+  let colourCount = 0;
+  const pixelCount = data.length / 3;
+  const indices = new Uint8Array(pixelCount);
+  for (let p = 0; p < pixelCount; p++) {
+    const r = data[p * 3], g = data[p * 3 + 1], b = data[p * 3 + 2];
+    const key = (r << 16) | (g << 8) | b;
+    let idx = map.get(key);
+    if (idx === undefined) {
+      if (colourCount >= maxColors) return null;
+      idx = colourCount++;
+      map.set(key, idx);
+      palette.push(r, g, b);
+    }
+    indices[p] = idx;
+  }
+  return { palette: Uint8Array.from(palette), indices };
+}
+
+export async function encodePng(raster) {
+  const { width, height, data } = raster;
   const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
-  return concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', compressed), pngChunk('IEND', new Uint8Array(0))]);
+
+  const indexed = buildPalette(data, 256);
+  if (indexed) {
+    const compressed = await filterAndDeflate(indexed.indices, width, height, 1);
+    return concat([
+      sig, ihdrChunk(width, height, 3 /* indexed */),
+      pngChunk('PLTE', indexed.palette), pngChunk('IDAT', compressed), pngChunk('IEND', new Uint8Array(0)),
+    ]);
+  }
+
+  // Fallback: more than 256 distinct colors (shouldn't happen given the
+  // chart's fixed palette, but stay correct rather than lossy-quantize).
+  const compressed = await filterAndDeflate(data, width, height, 3);
+  return concat([sig, ihdrChunk(width, height, 2 /* truecolor RGB */), pngChunk('IDAT', compressed), pngChunk('IEND', new Uint8Array(0))]);
 }
 
 export function bytesToBase64(bytes) {
