@@ -253,6 +253,22 @@ async function sectionHistory(history) {
   </div>`;
 }
 
+// A proportional-width horizontal bar of stint segments, built from actual
+// table cells with a bgcolor attribute — the one color-block technique that
+// renders reliably in Outlook (divs/spans with a CSS background + explicit
+// width, the natural way to draw this, are exactly the inline-block pattern
+// Outlook's Word engine won't size correctly; a <td bgcolor> always works).
+function stintBar(stints) {
+  const total = stints.length ? stints[stints.length - 1].end : 0;
+  if (!total) return '';
+  const cells = stints.map(st => {
+    const pct = Math.max((st.laps / total) * 100, 0.5).toFixed(2);
+    const colour = compoundColour(st.cmp);
+    return `<td bgcolor="${colour}" width="${pct}%" style="background:${colour};width:${pct}%;height:14px;font-size:1px;line-height:1px;">&nbsp;</td>`;
+  }).join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;table-layout:fixed;border-collapse:collapse;"><tr>${cells}</tr></table>`;
+}
+
 function sectionStrategy(strategy) {
   const stintsHtml = strategy.complete
     ? `<table class="tbl" ${TABLE_ATTRS}>
@@ -260,7 +276,10 @@ function sectionStrategy(strategy) {
         <thead><tr><th>Driver</th><th>Stints (compound · laps)</th></tr></thead>
         <tbody>${strategy.strategies.map(s => `<tr>
           ${driverCell(s.driver)}
-          <td>${s.stints.map(st => `<span style="color:${compoundColour(st.cmp)};font-weight:700">${escapeHtml(st.cmp)}</span> ${st.start}-${st.end} (${st.laps})`).join(' &middot; ')}</td>
+          <td>
+            ${stintBar(s.stints)}
+            <div style="margin-top:5px;">${s.stints.map(st => `<span style="color:${compoundColour(st.cmp)};font-weight:700">${escapeHtml(st.cmp)}</span> ${st.start}-${st.end} (${st.laps})`).join(' &middot; ')}</div>
+          </td>
         </tr>`).join('')}</tbody></table>`
     : `<p class="state"><b>Incomplete data.</b> OpenF1's tyre-stint feed for this session is missing stints (gaps or an absent opening stint), so strategy bars would be misleading.</p>`;
 
