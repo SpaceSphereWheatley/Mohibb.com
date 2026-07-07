@@ -244,7 +244,10 @@ async function sectionHistory(history) {
   }
   const chart = await historyChart(history);
   return `<div class="section"><h2>Race history</h2>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="${chart.width}" style="width:${chart.width}px;max-width:100%;border-collapse:collapse;">
+    <tr><td width="${chart.width}" height="${chart.height}" style="width:${chart.width}px;height:${chart.height}px;">
     <img class="chart-img" src="${chart.dataUri}" width="${chart.width}" height="${chart.height}" alt="Gap to race winner, lap by lap">
+    </td></tr></table>
     <div class="legend">${chart.legend}</div>
     <div class="note">Each car's running gap to the race winner, lap by lap (positive = ahead of the winner's pace at that lap), capped to the top 10 classified drivers for readability. Shaded bands mark Safety Car (yellow) / Virtual Safety Car (purple) periods; ringed dots mark pit in-laps. Laps with missing timing are estimated from that driver's median lap, so treat sharp one-lap kinks with care.${chart.clipped ? ' One or more cars fell far enough outside the pack that their line is clipped at the chart edge, to keep the shared scale readable for everyone else.' : ''}</div>
   </div>`;
