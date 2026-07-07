@@ -187,6 +187,17 @@ string that can be forwarded or pasted elsewhere (e.g. as an email body).
   sections had to degrade because one of the underlying OpenF1 endpoints
   didn't respond (each panel fails independently, same resilience approach
   as `pitwall/script.js`'s per-panel retry).
+- Every OpenF1 call in `functions/_lib/openf1.js` is cached at Cloudflare's
+  edge (the Cache API, `caches.default`) — an hour for historical
+  per-session endpoints (laps/stints/pit/position/race_control/drivers/
+  meetings, immutable once a session's finished, same premise as
+  `pitwall/script.js`'s own hard `sessionStorage` caching), 30s for the
+  `session_key=latest` lookup itself. Without this, every request/refresh
+  is a fresh stateless Function invocation firing 6-8 concurrent OpenF1
+  calls with no browser-side cache to fall back on, which OpenF1 was
+  intermittently rate-limiting (visible as missing driver/team data or a
+  502). Failed fetches retry up to twice with jittered backoff before
+  giving up.
 - Deployed automatically as part of this same Pages project — Cloudflare
   auto-detects the `functions/` directory on push, no `wrangler.toml` or
   extra config needed.

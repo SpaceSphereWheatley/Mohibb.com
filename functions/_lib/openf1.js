@@ -6,10 +6,25 @@
    relevant fetch/validation logic from — see pitwall/script.js's
    getJSON/fetchLaps/etc. and loadSession's session-kind/finished
    guards).
+
+   Successful OpenF1 responses are cached at Cloudflare's edge via
+   the Cache API (caches.default). Every report request is a fresh,
+   stateless Function invocation that fires ~6-8 concurrent OpenF1
+   calls, unlike pitwall/script.js's browser-side sessionStorage
+   caching (fetch once per session per browser) — without an
+   equivalent here, rapid refreshes just repeat the same burst and
+   are more likely to get rate-limited by OpenF1. Historical
+   per-session data (laps/stints/pit/position/race_control/drivers/
+   meetings) is immutable once a session has finished — the same
+   "completed sessions never change" premise pitwall/script.js's own
+   hard caching relies on — so it's cached for an hour; the
+   session_key=latest lookup is the only endpoint whose answer
+   changes over time, so it gets a much shorter TTL.
    ============================================================ */
 
 export const OPENF1 = 'https://api.openf1.org/v1/';
 const FETCH_TIMEOUT_MS = 15000;
+const RETRIES = 2;
 
 export class NotFoundError extends Error {
   constructor(message) { super(message); this.status = 404; }
@@ -24,7 +39,31 @@ export class UpstreamError extends Error {
   constructor(message) { super(message); this.status = 502; }
 }
 
-async function getJSON(url, retries = 1, attempt = 0) {
+// best-effort edge cache — a lookup/write failure (e.g. Cache API unavailable
+// in some local dev setups) should never break the actual request
+async function cacheLookup(cacheKey) {
+  try {
+    const hit = await caches.default.match(cacheKey);
+    return hit ? await hit.json() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+async function cacheStore(cacheKey, text, ttlS) {
+  try {
+    await caches.default.put(cacheKey, new Response(text, {
+      headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${ttlS}` },
+    }));
+  } catch {
+    // ignore — see comment above
+  }
+}
+
+async function getJSON(url, { cacheTtlS = 3600, attempt = 0 } = {}) {
+  const cacheKey = new Request(url, { method: 'GET' });
+  const cached = await cacheLookup(cacheKey);
+  if (cached !== undefined) return cached;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -34,12 +73,18 @@ async function getJSON(url, retries = 1, attempt = 0) {
       err.status = res.status;
       throw err;
     }
-    return await res.json();
+    const text = await res.text();
+    if (cacheTtlS > 0) await cacheStore(cacheKey, text, cacheTtlS);
+    return JSON.parse(text);
   } catch (e) {
     const transient = e.name === 'AbortError' || e.status === 429 || (e.status >= 500 && e.status < 600);
-    if (retries > 0 && transient) {
-      await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
-      return getJSON(url, retries - 1, attempt + 1);
+    if (attempt < RETRIES && transient) {
+      // jittered exponential backoff — spreads retries out so a burst of
+      // concurrent requests doesn't all retry in lockstep and re-trigger
+      // the same rate limit
+      const backoff = 1000 * 2 ** attempt + Math.random() * 400;
+      await new Promise(r => setTimeout(r, backoff));
+      return getJSON(url, { cacheTtlS, attempt: attempt + 1 });
     }
     throw new UpstreamError('Could not reach OpenF1 (' + url + '): ' + e.message);
   } finally {
@@ -47,7 +92,7 @@ async function getJSON(url, retries = 1, attempt = 0) {
   }
 }
 
-export const fetchSessions = (qs) => getJSON(`${OPENF1}sessions?${qs}`);
+export const fetchSessions = (qs) => getJSON(`${OPENF1}sessions?${qs}`, { cacheTtlS: qs.includes('latest') ? 30 : 3600 });
 export const fetchMeetings = (meetingKey) => getJSON(`${OPENF1}meetings?meeting_key=${encodeURIComponent(meetingKey)}`);
 export const fetchDrivers = (sk) => getJSON(`${OPENF1}drivers?session_key=${encodeURIComponent(sk)}`);
 export const fetchLaps = (sk) => getJSON(`${OPENF1}laps?session_key=${encodeURIComponent(sk)}`);
