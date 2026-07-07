@@ -166,34 +166,49 @@ function sectionFastestLap(fl) {
 // matters a lot here: the image ships base64-inlined in the report's HTML,
 // and Gmail clips messages over ~102KB, silently truncating everything past
 // that point. Reliability (not being clipped) wins over slightly smoother
-// lines. The y-scale is robust to a single outlier trace (e.g. a car many
-// laps down): without it, one huge gap value flattens every other driver's
-// trace to a near-invisible flat line.
+// lines.
 async function historyChart(history) {
   const W = 720, H = 720, padL = 44, padR = 12, padT = 12, padB = 28;
   const SS = 1; // supersample factor — see note above on why this isn't 2
   const plotW = W - padL - padR, plotH = H - padT - padB;
 
-  // Scale off each driver's peak gap, not the pooled set of all lap points —
-  // a single car many laps down contributes dozens of large points that can
-  // dominate a percentile-of-all-points cut. Comparing peak-to-peak catches
-  // the case that actually matters: one trace towering over every other.
-  const peaks = history.traces
-    .map(t => Math.max(0, ...t.points.map(p => Math.abs(p.gap)).filter(v => isFinite(v))))
-    .sort((a, b) => b - a);
-  let maxAbs, clipped = false;
-  if (!peaks.length || peaks[0] <= 0) {
-    maxAbs = 5;
-  } else if (peaks.length > 1 && peaks[1] > 0 && peaks[0] > peaks[1] * 1.8) {
-    maxAbs = peaks[1] * 1.3;
-    clipped = true;
-  } else {
-    maxAbs = peaks[0];
+  // Fit the y-axis to the data's actual range rather than forcing it
+  // symmetric around zero. "Gap to race winner" is one-sided in practice —
+  // nobody stays ahead of the winner for long — so a +-maxAbs axis wastes
+  // roughly the entire top half of the chart on a range the data never
+  // reaches, cramming every driver's actual trace into a thin strip at the
+  // bottom (this is what looked like the chart "getting cut off"; the PNG
+  // itself was never truncated).
+  //
+  // Each side is scaled off each driver's peak on that side, not the pooled
+  // set of all lap points — a single car many laps down contributes dozens
+  // of large points that can dominate a naive max. Comparing peak-to-peak
+  // catches the case that matters: one trace towering over every other.
+  function robustBound(extremesSortedByMagnitude) {
+    const top = extremesSortedByMagnitude[0] ?? 0;
+    const second = extremesSortedByMagnitude[1] ?? 0;
+    if (Math.abs(top) <= 0) return { bound: 0, clipped: false };
+    if (extremesSortedByMagnitude.length > 1 && Math.abs(second) > 0 && Math.abs(top) > Math.abs(second) * 1.8) {
+      return { bound: second * 1.3, clipped: true };
+    }
+    return { bound: top, clipped: false };
   }
-  maxAbs *= 1.12;
+  const posExtremes = history.traces
+    .map(t => Math.max(0, ...t.points.map(p => p.gap).filter(v => isFinite(v))))
+    .sort((a, b) => b - a);
+  const negExtremes = history.traces
+    .map(t => Math.min(0, ...t.points.map(p => p.gap).filter(v => isFinite(v))))
+    .sort((a, b) => a - b);
+  const { bound: posBound, clipped: clippedPos } = robustBound(posExtremes);
+  const { bound: negBound, clipped: clippedNeg } = robustBound(negExtremes);
+  const clipped = clippedPos || clippedNeg;
+
+  const span = Math.max(posBound - negBound, 1);
+  const margin = span * 0.06;
+  const yMax = posBound + margin, yMin = negBound - margin;
 
   const scaleX = (lap) => (padL + (history.refLast > 1 ? (lap - 1) / (history.refLast - 1) : 0) * plotW) * SS;
-  const scaleY = (gap) => (padT + plotH / 2 - (gap / maxAbs) * (plotH / 2)) * SS;
+  const scaleY = (gap) => (padT + ((yMax - gap) / (yMax - yMin)) * plotH) * SS;
 
   const raster = new Raster(W * SS, H * SS, C.bg);
 
