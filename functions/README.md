@@ -109,13 +109,19 @@ actually took.
    `<img>` external fetch) of each driver's running gap to the race winner,
    lap by lap, **capped to the top 10 classified drivers** for readability.
    Safety Car/VSC periods are shaded; pit in-laps are marked with ringed
-   dots. Rendered server-side by `_lib/png.js` — see
+   dots. Rendered server-side by `_lib/png.js` at 2x resolution and
+   box-downsampled to 1x for cheap anti-aliasing — see
    [Email compatibility](#email-compatibility) for why it's a raster image
-   and not `<svg>`.
+   and not `<svg>`. The y-scale compares each driver's *peak* gap rather
+   than pooling every lap point: if one car falls far enough behind that it
+   would otherwise flatten every other driver's line to the baseline, that
+   car's line is clipped at the chart edge instead and a note is appended
+   below the chart.
 5. **Tyre strategy** — each driver's reconstructed stints (compound + lap
-   range). Falls back to a plain notice if OpenF1's stint feed for that
-   session is incomplete (missing an opening stint or has gaps), rather than
-   render misleading bars.
+   range) as plain text (`SOFT 1-18 (18) · MEDIUM 19-40 (22) · ...`, the
+   compound name colored). Falls back to a plain notice if OpenF1's
+   stint feed for that session is incomplete (missing an opening stint or
+   has gaps), rather than render misleading bars.
 6. **Safety Car / VSC periods** — a table of every period (or "None").
 7. **Footer** — data-source credit, plus which OpenF1 endpoints (if any)
    failed and were degraded.
@@ -125,8 +131,8 @@ actually took.
 The HTML report is designed to be fetched by some outside automation (a
 Google Apps Script job, a manual forward, whatever) and dropped straight
 into an email body — this repo has no email-sending code itself (see
-above), but the HTML needs to survive that trip. Two things broke it in
-practice, both now fixed in `_lib/report.js`:
+above), but the HTML needs to survive that trip, Outlook included. Several
+things broke it in practice, all now fixed in `_lib/report.js`/`_lib/png.js`:
 
 - **No CSS custom properties.** The stylesheet used to define its palette
   as `:root{ --bg:#EDE8DD; ... }` and reference it everywhere via
@@ -144,9 +150,25 @@ practice, both now fixed in `_lib/report.js`:
   runtime's built-in `CompressionStream('deflate')` for the zlib-compressed
   `IDAT` chunk) and embedding it as `<img src="data:image/png;base64,...">`,
   which every mainstream email client (including Gmail) renders.
-- Flexbox-based layouts (`.legend`, `.state`, `.cmp-tag`) were also
-  converted to plain `inline-block` + margins, since Outlook's Word-based
-  rendering engine has no flexbox support.
+- **No flexbox / inline-block chips.** Outlook's Word-based rendering
+  engine has no flexbox support, and largely ignores `width`/`height`/
+  `padding` on non-table inline elements (the old `.legend`/`.cmp-tag`
+  pattern of an empty `<i>` swatch sized via CSS). Both were replaced with
+  plain colored text (e.g. the tyre-strategy compound name itself is
+  colored, instead of a colored swatch next to plain text) — no reliance on
+  inline-block sizing at all.
+- **No HTML5 sectioning elements.** `<header>`/`<section>`/`<footer>`
+  aren't reliably styled by Outlook's Word engine. Replaced with plain
+  `<div class="...">` throughout.
+- **Table header/body misalignment.** Outlook's table layout can drift a
+  `<thead>` out of alignment with its `<tbody>` when column widths are
+  content-driven. Every data table now sets `table-layout:fixed` with an
+  explicit `<colgroup>` (percentage widths) plus
+  `cellpadding="0" cellspacing="0" border="0"` attributes, so columns are
+  pinned regardless of client.
+- **Boxed "no data" notices.** The `.state` badge/box (background, border,
+  border-radius, inline-flex) was simplified to a plain paragraph with a
+  bold label prefix — no box-model properties Outlook might drop.
 - Not fixed, and not fixable from this side: the Google Fonts `<link>` in
   `<head>` is ignored by most email clients (external stylesheets/fonts are
   blocked), so an emailed report always falls back to system fonts. This is
