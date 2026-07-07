@@ -159,15 +159,19 @@ function sectionFastestLap(fl) {
   </div>`;
 }
 
-// Rasterizes the race-history trace at 2x resolution then box-downsamples
-// to 1x — cheap anti-aliasing so lines don't look jagged/blocky, since the
-// underlying rasterizer is a plain (non-antialiased) Bresenham. The y-scale
-// is also robust to a single outlier trace (e.g. a car many laps down):
-// without it, one huge gap value flattens every other driver's trace to a
-// near-invisible flat line.
+// Rasterizes the race-history trace directly at 1x — no supersampling.
+// A 2x-supersample-then-downsample pass was tried for anti-aliasing, but it
+// roughly *doubled* the encoded PNG's size (smooth per-pixel gradients along
+// every line/band edge compress far worse than hard two-tone edges), which
+// matters a lot here: the image ships base64-inlined in the report's HTML,
+// and Gmail clips messages over ~102KB, silently truncating everything past
+// that point. Reliability (not being clipped) wins over slightly smoother
+// lines. The y-scale is robust to a single outlier trace (e.g. a car many
+// laps down): without it, one huge gap value flattens every other driver's
+// trace to a near-invisible flat line.
 async function historyChart(history) {
-  const W = 720, H = 300, padL = 44, padR = 12, padT = 12, padB = 28;
-  const SS = 2; // supersample factor
+  const W = 720, H = 720, padL = 44, padR = 12, padT = 12, padB = 28;
+  const SS = 1; // supersample factor — see note above on why this isn't 2
   const plotW = W - padL - padR, plotH = H - padT - padB;
 
   // Scale off each driver's peak gap, not the pooled set of all lap points —
