@@ -77,8 +77,8 @@ With `format=json`, a `200` response is a single JSON object:
 canonical order), so a caller can tell whether an unrecognized `sections`
 value fell back to the full default. Each conditional key is the same plain
 data `_lib/analysis.js` computes for the HTML report — `race_history` is the
-raw trace data (no SVG), `tyre_strategy` is `{complete, strategies,
-hasStintRows}`, etc.
+raw trace data (no rendered chart; that's only built for the HTML response),
+`tyre_strategy` is `{complete, strategies, hasStintRows}`, etc.
 
 An error response (any non-`200` status) with `format=json` looks like:
 
@@ -90,7 +90,9 @@ An error response (any non-`200` status) with `format=json` looks like:
 
 The rendered page is a single self-contained HTML document — inline
 `<style>`, no external stylesheet/CDN, **no `<script>` at all** — so it's
-safe to forward, paste elsewhere, or use as an email body.
+safe to forward, paste elsewhere, or use as an email body. See
+[Email compatibility](#email-compatibility) below for what that guarantee
+actually took.
 
 1. **Header** — event name, circuit, session date (Europe/Oslo), and a link
    to the same race on [Pit Wall](https://mohibb.com/pitwall/) (deep-linked
@@ -103,10 +105,13 @@ safe to forward, paste elsewhere, or use as an email body.
    cars, since OpenF1's free historical data doesn't expose a sourced
    classification/results field.
 3. **Fastest lap** — driver, team, lap number, time.
-4. **Race history** — an inline SVG chart of each driver's running gap to
-   the race winner, lap by lap, **capped to the top 10 classified drivers**
-   for readability. Safety Car/VSC periods are shaded; pit in-laps are
-   marked with ringed dots.
+4. **Race history** — a rasterized PNG chart (embedded as a `data:` URI, no
+   `<img>` external fetch) of each driver's running gap to the race winner,
+   lap by lap, **capped to the top 10 classified drivers** for readability.
+   Safety Car/VSC periods are shaded; pit in-laps are marked with ringed
+   dots. Rendered server-side by `_lib/png.js` — see
+   [Email compatibility](#email-compatibility) for why it's a raster image
+   and not `<svg>`.
 5. **Tyre strategy** — each driver's reconstructed stints (compound + lap
    range). Falls back to a plain notice if OpenF1's stint feed for that
    session is incomplete (missing an opening stint or has gaps), rather than
@@ -114,6 +119,38 @@ safe to forward, paste elsewhere, or use as an email body.
 6. **Safety Car / VSC periods** — a table of every period (or "None").
 7. **Footer** — data-source credit, plus which OpenF1 endpoints (if any)
    failed and were degraded.
+
+## Email compatibility
+
+The HTML report is designed to be fetched by some outside automation (a
+Google Apps Script job, a manual forward, whatever) and dropped straight
+into an email body — this repo has no email-sending code itself (see
+above), but the HTML needs to survive that trip. Two things broke it in
+practice, both now fixed in `_lib/report.js`:
+
+- **No CSS custom properties.** The stylesheet used to define its palette
+  as `:root{ --bg:#EDE8DD; ... }` and reference it everywhere via
+  `var(--bg)`. Most email rendering engines (Gmail included) don't support
+  CSS custom properties at all and silently drop the declaration, so every
+  color/font-family driven by a `var()` fell back to the client default —
+  this is what made the emailed report look unstyled compared to the
+  browser version. Fixed by baking literal hex values into the generated
+  `<style>` block (via a plain JS `const C = {...}` object) instead.
+- **No `<svg>`.** The race-history chart used to be an inline `<svg>` line
+  chart. Email clients (Gmail and Outlook both) strip `<svg>` elements from
+  HTML bodies outright — the chart just vanished, regardless of styling.
+  Fixed by rendering the same chart as a small rasterizer + pure-JS PNG
+  encoder (`_lib/png.js`, no external dependency — it uses the Workers
+  runtime's built-in `CompressionStream('deflate')` for the zlib-compressed
+  `IDAT` chunk) and embedding it as `<img src="data:image/png;base64,...">`,
+  which every mainstream email client (including Gmail) renders.
+- Flexbox-based layouts (`.legend`, `.state`, `.cmp-tag`) were also
+  converted to plain `inline-block` + margins, since Outlook's Word-based
+  rendering engine has no flexbox support.
+- Not fixed, and not fixable from this side: the Google Fonts `<link>` in
+  `<head>` is ignored by most email clients (external stylesheets/fonts are
+  blocked), so an emailed report always falls back to system fonts. This is
+  cosmetic only — it doesn't affect layout or the chart.
 
 ## Resilience & caching
 
@@ -164,7 +201,9 @@ functions/
     openf1.js         OpenF1 fetch helpers, edge caching, session resolution/validation
     analysis.js        pure computation: classification, fastest lap, tyre strategy,
                         safety-car parsing, race pace, race-history traces
-    report.js          HTML rendering (page shell + section templates + inline SVG chart)
+    report.js          HTML rendering (page shell + section templates + race-history chart)
+    png.js              dependency-free PNG encoder + software rasterizer, used to render
+                        the race-history chart as an email-safe raster <img>
     sections.js         shared `sections` query-param vocabulary + parser (html + json)
     json.js             JSON serialization for format=json (reuses analysis.js's output)
 ```
@@ -205,4 +244,8 @@ repo's `html-validate`/`stylelint`/`pa11y-ci` CI checks (those only scan
 static `*.html`/`*.css` files) — only `functions/**/*.js`'s syntax is
 checked automatically. Changes to `_lib/report.js` need manual verification:
 render a report and eyeball the markup/CSS, e.g. by saving the response body
-to a file and opening it in a browser.
+to a file and opening it in a browser. When touching `_lib/png.js` or the
+race-history chart specifically, also confirm the emitted `<img>`'s
+`data:image/png;base64,...` payload actually decodes to a valid image (e.g.
+extract it, base64-decode it, and open the resulting `.png` file) rather than
+just checking that the HTML string contains the tag.
