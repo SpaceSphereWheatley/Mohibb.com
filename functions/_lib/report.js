@@ -166,7 +166,7 @@ function sectionFastestLap(fl) {
 // without it, one huge gap value flattens every other driver's trace to a
 // near-invisible flat line.
 async function historyChart(history) {
-  const W = 720, H = 300, padL = 44, padR = 12, padT = 12, padB = 28;
+  const W = 720, H = 460, padL = 44, padR = 12, padT = 12, padB = 28;
   const SS = 2; // supersample factor
   const plotW = W - padL - padR, plotH = H - padT - padB;
 
