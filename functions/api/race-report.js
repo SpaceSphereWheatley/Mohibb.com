@@ -93,7 +93,7 @@ export async function onRequestGet({ request }) {
     return jsonResponse(payload, 200, { 'cache-control': cacheControl });
   }
 
-  const html = renderReport({
+  const html = await renderReport({
     session, meeting, classification: classificationWithPace, fastestLap, history, strategy, safetyPeriods, partialFailures, sections,
   });
   return htmlResponse(html, 200, { 'cache-control': cacheControl });
