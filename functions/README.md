@@ -25,6 +25,8 @@ GET /api/race-report?session_key=latest
 | Query param   | Required | Description |
 |---------------|----------|-------------|
 | `session_key` | No       | An [OpenF1](https://api.openf1.org) session key, or the literal string `latest`. **Omitting it entirely defaults to `latest`** — the simplest URL, `/api/race-report`, just works. |
+| `format`      | No       | `html` (default) or `json`. Any other value (including omitting the param) is treated as `html`. See [Response](#response) below. |
+| `sections`    | No       | Comma-separated list selecting which report elements to include, from: `classification`, `fastest_lap`, `race_history`, `tyre_strategy`, `safety_car`. Case-insensitive, whitespace is trimmed. **Omitting it entirely includes all five** (the full, backward-compatible report). If every token is unrecognized (or the param is present but empty), it also falls back to all five rather than yield an empty report. These are the same five names used as JSON top-level keys — see [JSON response shape](#json-response-shape). |
 
 Only `GET` is supported.
 
@@ -35,12 +37,14 @@ the latest meeting, picks the Race, and requires it to have finished.
 
 ## Response
 
-Always `content-type: text/html; charset=utf-8` — success and error
-responses alike. There is no JSON response mode.
+`content-type` is `text/html; charset=utf-8` for `format=html` (the default)
+or `application/json; charset=utf-8` for `format=json` — for both success and
+error responses. `cache-control` is identical between the two formats for the
+same resolved session.
 
 | Status | When |
 |--------|------|
-| `200`  | Report rendered. May still be a *partial* report if one or more OpenF1 endpoints failed to respond after retries — see [Resilience](#resilience--caching) below; a footer note lists which endpoints degraded. |
+| `200`  | Report rendered. May still be a *partial* report if one or more OpenF1 endpoints failed to respond after retries — see [Resilience](#resilience--caching) below; a footer note (html) / `partial_failures` array (json) lists which endpoints degraded. |
 | `404`  | `session_key` doesn't resolve to any session (or `latest`'s meeting has no Race session at all yet). |
 | `409`  | The resolved session is a Race, but it hasn't finished yet. |
 | `422`  | The resolved session exists and has finished, but isn't a Race (e.g. Qualifying, Practice). |
@@ -50,6 +54,36 @@ responses alike. There is no JSON response mode.
 `session_key` (a finished session's data is immutable), `public,
 max-age=300` for `session_key=latest` (a moving target — a new session can
 start at any time).
+
+### JSON response shape
+
+With `format=json`, a `200` response is a single JSON object:
+
+```jsonc
+{
+  "session": { /* raw OpenF1 session object */ },
+  "meeting": { /* raw OpenF1 meeting object, or null if that lookup failed */ },
+  "partial_failures": ["laps"],      // OpenF1 endpoints that degraded, if any
+  "sections_included": ["classification", "fastest_lap"],
+  // then, one key per entry in sections_included:
+  "classification": [ /* … */ ],
+  "fastest_lap": { /* … */ }
+  // "race_history" / "tyre_strategy" / "safety_car" only appear if requested
+}
+```
+
+`sections_included` always lists the *effective* set (post-fallback, in
+canonical order), so a caller can tell whether an unrecognized `sections`
+value fell back to the full default. Each conditional key is the same plain
+data `_lib/analysis.js` computes for the HTML report — `race_history` is the
+raw trace data (no SVG), `tyre_strategy` is `{complete, strategies,
+hasStintRows}`, etc.
+
+An error response (any non-`200` status) with `format=json` looks like:
+
+```json
+{ "error": { "status": 404, "title": "Not Found Error", "message": "…" } }
+```
 
 ## Report contents
 
@@ -108,6 +142,12 @@ curl "https://mohibb.com/api/race-report?session_key=latest"
 
 # a specific past session
 curl "https://mohibb.com/api/race-report?session_key=9158"
+
+# JSON instead of HTML
+curl "https://mohibb.com/api/race-report?format=json"
+
+# JSON, only two of the five sections
+curl "https://mohibb.com/api/race-report?format=json&sections=classification,fastest_lap"
 ```
 
 ## Architecture
@@ -121,6 +161,8 @@ functions/
     analysis.js        pure computation: classification, fastest lap, tyre strategy,
                         safety-car parsing, race pace, race-history traces
     report.js          HTML rendering (page shell + section templates + inline SVG chart)
+    sections.js         shared `sections` query-param vocabulary + parser (html + json)
+    json.js             JSON serialization for format=json (reuses analysis.js's output)
 ```
 
 `_lib/` is excluded from Cloudflare Pages' automatic routing (any
