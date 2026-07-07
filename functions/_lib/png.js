@@ -72,6 +72,7 @@ class Raster {
 // lines out of a plain Bresenham rasterizer (no per-pixel coverage math
 // needed) so the race-history chart doesn't look jagged/blocky at 1x.
 function downsample(src, factor) {
+  if (factor === 1) return src;
   const w = Math.floor(src.width / factor), h = Math.floor(src.height / factor);
   const out = new Raster(w, h, '#000000');
   const area = factor * factor;
@@ -150,18 +151,63 @@ function concat(arrays) {
   return out;
 }
 
-// 8-bit RGB truecolor PNG, filter type 0 (None) on every scanline —
-// simplest correct encoding; the chart's mostly-solid-background content
-// still deflates down small.
+const BPP = 3; // RGB, 8-bit
+
+function paethPredictor(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  return pb <= pc ? b : c;
+}
+
+// Sum of absolute values, treating each byte as a signed delta — the
+// standard "minimum sum of absolute differences" heuristic PNG encoders use
+// to pick a filter per scanline (libpng's default).
+function msad(bytes) {
+  let sum = 0;
+  for (let i = 0; i < bytes.length; i++) { const v = bytes[i]; sum += v < 128 ? v : 256 - v; }
+  return sum;
+}
+
+// Per-scanline adaptive filtering (PNG's None/Sub/Up/Average/Paeth), picking
+// whichever compresses best by the MSAD heuristic. Filtering the raw pixel
+// data before DEFLATE is what actually makes photographic/gradient-heavy
+// content (like our anti-aliased chart lines) compress well — unfiltered
+// data deflates far larger, which matters here because the PNG ships
+// base64-inlined in the report's HTML, and Gmail clips messages over ~102KB.
+function filterScanline(curr, prev, stride) {
+  const sub = new Uint8Array(stride), up = new Uint8Array(stride), avg = new Uint8Array(stride), pae = new Uint8Array(stride);
+  for (let x = 0; x < stride; x++) {
+    const a = x >= BPP ? curr[x - BPP] : 0;
+    const b = prev ? prev[x] : 0;
+    const c = prev && x >= BPP ? prev[x - BPP] : 0;
+    sub[x] = (curr[x] - a) & 0xff;
+    up[x] = (curr[x] - b) & 0xff;
+    avg[x] = (curr[x] - ((a + b) >> 1)) & 0xff;
+    pae[x] = (curr[x] - paethPredictor(a, b, c)) & 0xff;
+  }
+  const candidates = [{ type: 0, bytes: curr }, { type: 1, bytes: sub }, { type: 2, bytes: up }, { type: 3, bytes: avg }, { type: 4, bytes: pae }];
+  let best = candidates[0], bestScore = msad(candidates[0].bytes);
+  for (let i = 1; i < candidates.length; i++) {
+    const score = msad(candidates[i].bytes);
+    if (score < bestScore) { bestScore = score; best = candidates[i]; }
+  }
+  return best;
+}
+
 export async function encodePng(raster) {
   const { width, height, data } = raster;
-  const stride = width * 3;
+  const stride = width * BPP;
   const raw = new Uint8Array(height * (1 + stride));
   let o = 0;
+  let prevRow = null;
   for (let y = 0; y < height; y++) {
-    raw[o++] = 0;
-    raw.set(data.subarray(y * stride, y * stride + stride), o);
+    const curr = data.subarray(y * stride, y * stride + stride);
+    const { type, bytes } = filterScanline(curr, prevRow, stride);
+    raw[o++] = type;
+    raw.set(bytes, o);
     o += stride;
+    prevRow = curr;
   }
   const compressed = await zlibDeflate(raw);
 
