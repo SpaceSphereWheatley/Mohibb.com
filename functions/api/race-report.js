@@ -2,11 +2,11 @@
 /* ============================================================
    GET /api/race-report[?session_key=<key>|latest]
    Returns a standalone HTML race report for a completed F1 Race
-   session (full analysis: classification, fastest lap, race
-   history, tyre strategy + pit stops, safety car/VSC periods,
-   race pace). No session_key defaults to the latest completed
-   Race. On-demand only — no scheduling, no email sending; see
-   CLAUDE.md's "Race Report API" section.
+   session (full analysis: classification with a race-pace column,
+   fastest lap, a top-10 race-history chart, tyre strategy, and
+   safety car/VSC periods). No session_key defaults to the latest
+   completed Race. On-demand only — no scheduling, no email
+   sending; see CLAUDE.md's "Race Report API" section.
    ============================================================ */
 
 import {
@@ -15,7 +15,7 @@ import {
 } from '../_lib/openf1.js';
 import {
   buildDriverMap, buildClassification, fastestLapOfRace, driverStrategies, racePaceSummary,
-  buildHistoryTraces, parseSafety,
+  buildHistoryTraces, parseSafety, mergeResultsWithPace,
 } from '../_lib/analysis.js';
 import { renderReport, renderErrorPage } from '../_lib/report.js';
 
@@ -64,12 +64,13 @@ export async function onRequestGet({ request }) {
   const classification = buildClassification(position, laps, driverMap);
   const fastestLap = fastestLapOfRace(laps, driverMap);
   const safetyPeriods = parseSafety(raceControl);
-  const strategy = driverStrategies(stints, pit, laps, driverMap);
+  const strategy = driverStrategies(stints, laps, driverMap);
   const racePace = racePaceSummary(laps, pit, safetyPeriods, driverMap);
   const history = buildHistoryTraces(laps, pit, safetyPeriods, classification, driverMap);
+  const classificationWithPace = mergeResultsWithPace(classification, racePace);
 
   const html = renderReport({
-    session, meeting, classification, fastestLap, history, strategy, safetyPeriods, racePace, partialFailures,
+    session, meeting, classification: classificationWithPace, fastestLap, history, strategy, safetyPeriods, partialFailures,
   });
 
   const cacheControl = usedLatest ? 'public, max-age=300' : 'public, max-age=86400';

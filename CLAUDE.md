@@ -166,10 +166,10 @@ site's only server-side code — that returns a full-analysis F1 race report
 as a standalone HTML document: `GET /api/race-report` (defaults to the most
 recently completed Race, resolved the same way `pitwall/live` does; pass
 `?session_key=<key>` for a specific past session, or the explicit
-`?session_key=latest`). The report covers classification,
-fastest lap, a race-history (gap-to-winner) chart, tyre strategy + pit
-stops, Safety Car/VSC periods, and a race-pace summary — the same OpenF1
-data and analysis approach as `pitwall/`'s race view, ported into
+`?session_key=latest`). The report covers classification (with a race-pace
+column), fastest lap, a race-history (gap-to-winner) chart capped to the top
+10 classified drivers, tyre strategy, and Safety Car/VSC periods — the same
+OpenF1 data and analysis approach as `pitwall/`'s race view, ported into
 Workers-runtime-safe pure functions (no `window`/`document`/`sessionStorage`)
 in `functions/_lib/openf1.js` and `functions/_lib/analysis.js`.
 `functions/_lib/report.js` renders the page: inline `<style>`, no external
