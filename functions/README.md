@@ -63,6 +63,7 @@ With `format=json`, a `200` response is a single JSON object:
 {
   "session": { /* raw OpenF1 session object */ },
   "meeting": { /* raw OpenF1 meeting object, or null if that lookup failed */ },
+  "pitwall_url": "https://mohibb.com/pitwall/#y=2024&m=1219&s=9158",  // deep link to this race in Pit Wall
   "partial_failures": ["laps"],      // OpenF1 endpoints that degraded, if any
   "sections_included": ["classification", "fastest_lap"],
   // then, one key per entry in sections_included:
@@ -91,7 +92,10 @@ The rendered page is a single self-contained HTML document — inline
 `<style>`, no external stylesheet/CDN, **no `<script>` at all** — so it's
 safe to forward, paste elsewhere, or use as an email body.
 
-1. **Header** — event name, circuit, session date (Europe/Oslo).
+1. **Header** — event name, circuit, session date (Europe/Oslo), and a link
+   to the same race on [Pit Wall](https://mohibb.com/pitwall/) (deep-linked
+   via its `#y=&m=&s=` hash so it opens directly on that session). The JSON
+   response exposes the same link as `pitwall_url`.
 2. **Classification** — final position, driver, team, laps completed, plus
    each driver's median clean-lap pace and gap to the fastest. Sorted by
    position (not re-sorted by pace). Laps completed (rather than a
