@@ -104,11 +104,13 @@ function sectionClassification(classification) {
       ${driverCell(r.driver)}
       <td class="muted">${escapeHtml(r.driver.team)}</td>
       <td class="num">${escapeHtml(String(r.laps))}</td>
+      <td class="num code">${escapeHtml(fmtLap(r.pace?.median))}</td>
+      <td class="num code">${escapeHtml(fmtGap(r.pace?.gap))}</td>
     </tr>`).join('');
   return `<section><h2>Classification</h2>
-    <table class="tbl"><thead><tr><th class="num">Pos</th><th>Driver</th><th>Team</th><th class="num">Laps</th></tr></thead>
+    <table class="tbl"><thead><tr><th class="num">Pos</th><th>Driver</th><th>Team</th><th class="num">Laps</th><th class="num">Median lap</th><th class="num">Gap</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <div class="note">Position is OpenF1's last recorded running order for each driver; laps completed distinguish finishers from retired/lapped cars, since OpenF1's free historical data doesn't include a sourced finish-time gap or classification status.</div>
+    <div class="note">Position is OpenF1's last recorded running order for each driver; laps completed distinguish finishers from retired/lapped cars, since OpenF1's free historical data doesn't include a sourced finish-time gap or classification status. Median lap / gap are the median clean-lap pace (green-flag laps only, excluding pit in/out laps and Safety Car/VSC) — a directional pace guide, not a fuel- or tyre-corrected model.</div>
   </section>`;
 }
 
@@ -183,20 +185,11 @@ function sectionHistory(history) {
   }
   return `<section><h2>Race history</h2>
     ${historySvg(history)}
-    <div class="note">Each car's running gap to the race winner, lap by lap (positive = ahead of the winner's pace at that lap). Shaded bands mark Safety Car (yellow) / Virtual Safety Car (purple) periods; ringed dots mark pit in-laps. Laps with missing timing are estimated from that driver's median lap, so treat sharp one-lap kinks with care.</div>
+    <div class="note">Each car's running gap to the race winner, lap by lap (positive = ahead of the winner's pace at that lap), capped to the top 10 classified drivers for readability. Shaded bands mark Safety Car (yellow) / Virtual Safety Car (purple) periods; ringed dots mark pit in-laps. Laps with missing timing are estimated from that driver's median lap, so treat sharp one-lap kinks with care.</div>
   </section>`;
 }
 
 function sectionStrategy(strategy) {
-  const pitHtml = strategy.pitStops.length
-    ? `<table class="tbl"><thead><tr><th>Driver</th><th class="num">Lap</th><th class="num">Pit time (s)</th></tr></thead>
-        <tbody>${strategy.pitStops.map((p, i) => `<tr style="--team:${(strategy.strategies.find(s => s.n === p.n)?.driver.colour) || 'var(--ink-4)'}">
-          ${driverCell(strategy.strategies.find(s => s.n === p.n)?.driver || { acr: '#' + p.n, name: '—', colour: null })}
-          <td class="num muted">${p.lap ?? '—'}</td>
-          <td class="num code">${p.dur.toFixed(1)}${i === 0 ? ' (fastest)' : ''}</td>
-        </tr>`).join('')}</tbody></table>`
-    : `<div class="state"><span class="badge">No data</span> No pit stops recorded for this session.</div>`;
-
   const stintsHtml = strategy.complete
     ? `<table class="tbl"><thead><tr><th>Driver</th><th>Stints (compound · laps)</th></tr></thead>
         <tbody>${strategy.strategies.map(s => `<tr style="--team:${s.driver.colour || 'var(--ink-4)'}">
@@ -205,10 +198,9 @@ function sectionStrategy(strategy) {
         </tr>`).join('')}</tbody></table>`
     : `<div class="state"><span class="badge">Incomplete data</span> OpenF1's tyre-stint feed for this session is missing stints (gaps or an absent opening stint), so strategy bars would be misleading.</div>`;
 
-  return `<section><h2>Tyre strategy &amp; pit stops</h2>
+  return `<section><h2>Tyre strategy</h2>
     ${stintsHtml}
-    <div class="note" style="margin-bottom:16px;">${strategy.complete ? 'Stint laps are the reconstructed range from OpenF1’s stint feed. ' : ''}Pit time is total time in the pit lane (entry to exit), not just the stationary time.</div>
-    ${pitHtml}
+    ${strategy.complete ? `<div class="note">Stint laps are the reconstructed range from OpenF1’s stint feed.</div>` : ''}
   </section>`;
 }
 
@@ -230,24 +222,7 @@ function sectionSafety(periods) {
   </section>`;
 }
 
-function sectionRacePace(pace) {
-  if (!pace.length) {
-    return `<section><h2>Race pace summary</h2><div class="state"><span class="badge">No data</span> Not enough clean-lap data to build a pace summary.</div></section>`;
-  }
-  const rows = pace.map(r => `<tr style="--team:${r.driver.colour || 'var(--ink-4)'}">
-      ${driverCell(r.driver)}
-      <td class="num code">${escapeHtml(fmtLap(r.median))}</td>
-      <td class="num code">${escapeHtml(fmtGap(r.gap))}</td>
-      <td class="num muted">${r.sampleLaps}</td>
-    </tr>`).join('');
-  return `<section><h2>Race pace summary</h2>
-    <table class="tbl"><thead><tr><th>Driver</th><th class="num">Median clean lap</th><th class="num">Gap</th><th class="num">Sample laps</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <div class="note">Median lap time over green-flag laps only (excludes pit in/out laps and laps under Safety Car / VSC) — a directional pace guide, not a fuel- or tyre-corrected model.</div>
-  </section>`;
-}
-
-export function renderReport({ session, meeting, classification, fastestLap, history, strategy, safetyPeriods, racePace, partialFailures }) {
+export function renderReport({ session, meeting, classification, fastestLap, history, strategy, safetyPeriods, partialFailures }) {
   const gpName = meeting?.meeting_name || session.location || 'Grand Prix';
   const where = [session.circuit_short_name || session.location, session.country_name].filter(Boolean).join(', ');
   const bodyHtml = `
@@ -261,7 +236,6 @@ export function renderReport({ session, meeting, classification, fastestLap, his
     ${sectionHistory(history)}
     ${sectionStrategy(strategy)}
     ${sectionSafety(safetyPeriods)}
-    ${sectionRacePace(racePace)}
     <footer>
       Data: OpenF1 (api.openf1.org).
       ${partialFailures.length ? `Some sections used partial data because these OpenF1 endpoints didn't respond: ${escapeHtml(partialFailures.join(', '))}.` : ''}

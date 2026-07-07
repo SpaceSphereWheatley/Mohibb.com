@@ -4,10 +4,10 @@
    (and pitwall/live/script.js's loadPrevious for the podium
    approach) for use in a Workers runtime — no window/document/
    sessionStorage. Scoped to only what the Race Report needs:
-   classification, fastest lap, race history, tyre strategy + pit
-   stops, safety car/VSC periods, race pace. Quali pace, car-
-   performance ratings, tyre-deg slope modelling, the strategy
-   simulator and undercut calc are out of scope and not ported.
+   classification (+ race pace), fastest lap, race history, tyre
+   strategy, safety car/VSC periods. Quali pace, car-performance
+   ratings, tyre-deg slope modelling, the strategy simulator and
+   undercut calc are out of scope and not ported.
    ============================================================ */
 
 export const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -174,9 +174,11 @@ export function fastestLapOfRace(laps, driverMap) {
   return best;
 }
 
-// Per-driver tyre strategy + pit stops — ported from renderStrategy()'s
-// computation (pitwall/script.js:1829-1860), minus the HTML rendering.
-export function driverStrategies(stints, pit, laps, driverMap) {
+// Per-driver tyre strategy — ported from renderStrategy()'s stint-reconstruction
+// computation (pitwall/script.js:1829-1860), minus the HTML rendering and the
+// separate pit-stop timing table (pit-stop laps still surface as dot markers
+// on the Race History chart via buildHistoryTraces()).
+export function driverStrategies(stints, laps, driverMap) {
   const byDrv = groupByDriver(stints);
   const lapGroups = groupByDriver(laps);
   const lastLapOf = (n) => {
@@ -189,10 +191,7 @@ export function driverStrategies(stints, pit, laps, driverMap) {
   const strategies = complete ? drivers.map(n => ({
     n, driver: driverOf(driverMap, n), stints: reconstructStints(byDrv[n], lastLapOf(n)),
   })) : [];
-  const pitStops = (Array.isArray(pit) ? pit : []).map(p => ({
-    n: num(p.driver_number), lap: num(p.lap_number), dur: num(p.pit_duration) ?? num(p.stop_duration),
-  })).filter(p => p.dur != null).sort((a, b) => a.dur - b.dur);
-  return { complete, strategies, pitStops, hasStintRows: drivers.length > 0 };
+  return { complete, strategies, hasStintRows: drivers.length > 0 };
 }
 
 // Median "clean" (green-flag, non-pit) lap time per driver — a directional
@@ -223,11 +222,21 @@ export function racePaceSummary(laps, pit, safetyPeriods, driverMap) {
   return rows;
 }
 
+// Joins race-pace figures onto the classification rows, keeping
+// classification's own position order (not re-sorted by pace) — used to fold
+// the Race Pace Summary into the Classification table as extra columns.
+export function mergeResultsWithPace(classification, racePace) {
+  const paceByN = new Map(racePace.map(r => [r.n, { median: r.median, gap: r.gap, sampleLaps: r.sampleLaps }]));
+  return classification.map(r => ({ ...r, pace: paceByN.get(r.n) || null }));
+}
+
 // Per-lap gap-to-winner traces — ported from renderHistory()/drawHistory()'s
 // computation (pitwall/script.js:1712-1774), minus the Chart.js rendering.
 // The reference driver is the race winner (from `classification`) rather than
 // re-deriving the "most laps, then least cumulative time" ranking, except as
-// a fallback if the winner's own lap data is unusable.
+// a fallback if the winner's own lap data is unusable. Capped to the top 10
+// classified drivers so the chart stays readable.
+const HISTORY_MAX_DRIVERS = 10;
 export function buildHistoryTraces(laps, pit, safetyPeriods, classification, driverMap) {
   const groups = groupByDriver(laps);
   const drivers = Object.keys(groups).map(Number);
@@ -264,7 +273,23 @@ export function buildHistoryTraces(laps, pit, safetyPeriods, classification, dri
     (pitLaps[n] = pitLaps[n] || new Set()).add(l);
   });
 
-  const traces = ranked.map(n => {
+  // prefer classification's position order for picking + ordering the top
+  // 10; fall back to the lap/time-based `ranked` order if classification is
+  // unavailable, so the chart still degrades gracefully without it
+  const posByN = new Map(classification.map(c => [c.n, c.position]));
+  const keepOrder = classification.length
+    ? ranked.filter(n => posByN.has(n)).sort((a, b) => posByN.get(a) - posByN.get(b))
+    : ranked;
+  const kept = keepOrder.slice(0, HISTORY_MAX_DRIVERS);
+  // a classified driver with no usable lap data (e.g. an early retirement)
+  // wouldn't appear in `ranked` at all — pad from the rest of `ranked` so the
+  // chart still shows up to 10 traces when possible
+  for (const n of ranked) {
+    if (kept.length >= HISTORY_MAX_DRIVERS) break;
+    if (!kept.includes(n)) kept.push(n);
+  }
+
+  const traces = kept.map(n => {
     const map = cum[n], pts = [];
     for (let lap = 1; lap <= refLast; lap++) {
       const rc = refCum.get(lap), dc = map.get(lap);

@@ -166,10 +166,10 @@ site's only server-side code — that returns a full-analysis F1 race report
 as a standalone HTML document: `GET /api/race-report` (defaults to the most
 recently completed Race, resolved the same way `pitwall/live` does; pass
 `?session_key=<key>` for a specific past session, or the explicit
-`?session_key=latest`). The report covers classification,
-fastest lap, a race-history (gap-to-winner) chart, tyre strategy + pit
-stops, Safety Car/VSC periods, and a race-pace summary — the same OpenF1
-data and analysis approach as `pitwall/`'s race view, ported into
+`?session_key=latest`). The report covers classification (with a race-pace
+column), fastest lap, a race-history (gap-to-winner) chart capped to the top
+10 classified drivers, tyre strategy, and Safety Car/VSC periods — the same
+OpenF1 data and analysis approach as `pitwall/`'s race view, ported into
 Workers-runtime-safe pure functions (no `window`/`document`/`sessionStorage`)
 in `functions/_lib/openf1.js` and `functions/_lib/analysis.js`.
 `functions/_lib/report.js` renders the page: inline `<style>`, no external
@@ -187,6 +187,17 @@ string that can be forwarded or pasted elsewhere (e.g. as an email body).
   sections had to degrade because one of the underlying OpenF1 endpoints
   didn't respond (each panel fails independently, same resilience approach
   as `pitwall/script.js`'s per-panel retry).
+- Every OpenF1 call in `functions/_lib/openf1.js` is cached at Cloudflare's
+  edge (the Cache API, `caches.default`) — an hour for historical
+  per-session endpoints (laps/stints/pit/position/race_control/drivers/
+  meetings, immutable once a session's finished, same premise as
+  `pitwall/script.js`'s own hard `sessionStorage` caching), 30s for the
+  `session_key=latest` lookup itself. Without this, every request/refresh
+  is a fresh stateless Function invocation firing 6-8 concurrent OpenF1
+  calls with no browser-side cache to fall back on, which OpenF1 was
+  intermittently rate-limiting (visible as missing driver/team data or a
+  502). Failed fetches retry up to twice with jittered backoff before
+  giving up.
 - Deployed automatically as part of this same Pages project — Cloudflare
   auto-detects the `functions/` directory on push, no `wrangler.toml` or
   extra config needed.
