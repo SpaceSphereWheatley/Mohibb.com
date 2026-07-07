@@ -12,6 +12,7 @@ mohibb-home/
   pitwall/        Pit Wall · Analyse: completed-session analysis, at mohibb.com/pitwall/
   pitwall/live/   Live F1 dashboard, served at mohibb.com/pitwall/live/
   spotkick/       Spotkick penalty analytics, served at mohibb.com/spotkick/
+  functions/      Race Report API (Cloudflare Pages Function), at mohibb.com/api/race-report
   README.md
 ```
 
@@ -78,6 +79,19 @@ and long-run race pace. A companion live dashboard (`pitwall/live/`) shows the
 current/most recent session plus season standings, with an idle next-race
 countdown when no session is live. Data comes from OpenF1 (live session data
 and historical session data) and Jolpica (standings + schedule).
+
+### Race Report API (mohibb.com/api/race-report)
+
+Lives in `functions/` and is deployed automatically as part of this same
+Pages project — Cloudflare auto-detects the `functions/` directory on push,
+no separate Workers project or `wrangler.toml` needed.
+
+The only server-side code in this repo: `GET /api/race-report` returns a
+full-analysis F1 race report (classification, fastest lap, a race-history
+chart, tyre strategy, Safety Car/VSC periods) as a standalone, self-contained
+HTML document — on-demand only, no scheduling, no email-sending. See
+[`functions/README.md`](functions/README.md) for the full API reference
+(endpoints, status codes, examples, architecture).
 
 ### Spotkick (mohibb.com/spotkick)
 
