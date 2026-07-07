@@ -6,11 +6,13 @@
    ============================================================ */
 
 import { SECTION_KEYS } from './sections.js';
+import { pitwallUrl } from './report.js';
 
 export function buildJsonReport({ session, meeting, classification, fastestLap, history, strategy, safetyPeriods, partialFailures, sections }) {
   const out = {
     session,
     meeting,
+    pitwall_url: pitwallUrl(session),
     partial_failures: partialFailures,
     sections_included: SECTION_KEYS.filter(k => sections.has(k)),
   };

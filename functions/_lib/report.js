@@ -15,6 +15,10 @@ const fmtDateTime = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 's
 
 function osloDateTime(iso) { try { return fmtDateTime.format(new Date(iso)); } catch { return '—'; } }
 
+export function pitwallUrl(session) {
+  return `https://mohibb.com/pitwall/#y=${encodeURIComponent(session.year)}&m=${encodeURIComponent(session.meeting_key)}&s=${encodeURIComponent(session.session_key)}`;
+}
+
 function fmtLap(sec) {
   const n = num(sec); if (n == null || n <= 0) return '—';
   const m = Math.floor(n / 60), s = n - m * 60;
@@ -42,6 +46,8 @@ const STYLE = `
   header.banner{border-bottom:2px solid var(--line);padding-bottom:16px;margin-bottom:24px;}
   header.banner h1{font-size:26px;}
   .meta{color:var(--ink-2);font-size:13px;margin-top:6px;font-family:var(--mono);}
+  .pitwall-link{display:inline-block;color:var(--accent-ink);font-size:13px;font-weight:600;text-decoration:none;margin-top:10px;}
+  .pitwall-link:hover{text-decoration:underline;}
   section{margin:0 0 30px;}
   section h2{font-size:15px;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent-ink);border-bottom:1.5px solid var(--line);padding-bottom:8px;margin-bottom:14px;}
   table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;}
@@ -231,6 +237,7 @@ export function renderReport({ session, meeting, classification, fastestLap, his
       <p class="eyebrow">Pit Wall Race Report</p>
       <h1>${escapeHtml(gpName)}</h1>
       <div class="meta">${escapeHtml(session.session_name || 'Race')} &middot; ${escapeHtml(osloDateTime(session.date_start))} (Oslo) &middot; ${escapeHtml(where)}</div>
+      <a class="pitwall-link" href="${escapeHtml(pitwallUrl(session))}">Open this race in Pit Wall &rarr;</a>
     </header>
     ${sections.has('classification') ? sectionClassification(classification) : ''}
     ${sections.has('fastest_lap') ? sectionFastestLap(fastestLap) : ''}
