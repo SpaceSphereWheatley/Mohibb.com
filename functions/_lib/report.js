@@ -8,6 +8,7 @@
    ============================================================ */
 
 import { escapeHtml, num } from './analysis.js';
+import { SECTION_KEYS } from './sections.js';
 
 const TZ = 'Europe/Oslo';
 const fmtDateTime = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -222,7 +223,7 @@ function sectionSafety(periods) {
   </section>`;
 }
 
-export function renderReport({ session, meeting, classification, fastestLap, history, strategy, safetyPeriods, partialFailures }) {
+export function renderReport({ session, meeting, classification, fastestLap, history, strategy, safetyPeriods, partialFailures, sections = new Set(SECTION_KEYS) }) {
   const gpName = meeting?.meeting_name || session.location || 'Grand Prix';
   const where = [session.circuit_short_name || session.location, session.country_name].filter(Boolean).join(', ');
   const bodyHtml = `
@@ -231,11 +232,11 @@ export function renderReport({ session, meeting, classification, fastestLap, his
       <h1>${escapeHtml(gpName)}</h1>
       <div class="meta">${escapeHtml(session.session_name || 'Race')} &middot; ${escapeHtml(osloDateTime(session.date_start))} (Oslo) &middot; ${escapeHtml(where)}</div>
     </header>
-    ${sectionClassification(classification)}
-    ${sectionFastestLap(fastestLap)}
-    ${sectionHistory(history)}
-    ${sectionStrategy(strategy)}
-    ${sectionSafety(safetyPeriods)}
+    ${sections.has('classification') ? sectionClassification(classification) : ''}
+    ${sections.has('fastest_lap') ? sectionFastestLap(fastestLap) : ''}
+    ${sections.has('race_history') ? sectionHistory(history) : ''}
+    ${sections.has('tyre_strategy') ? sectionStrategy(strategy) : ''}
+    ${sections.has('safety_car') ? sectionSafety(safetyPeriods) : ''}
     <footer>
       Data: OpenF1 (api.openf1.org).
       ${partialFailures.length ? `Some sections used partial data because these OpenF1 endpoints didn't respond: ${escapeHtml(partialFailures.join(', '))}.` : ''}
