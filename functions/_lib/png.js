@@ -67,6 +67,32 @@ class Raster {
   }
 }
 
+// Box-filter downsample by an integer factor — draw at N× resolution, then
+// average each NxN block down to one pixel. Cheap way to get anti-aliased
+// lines out of a plain Bresenham rasterizer (no per-pixel coverage math
+// needed) so the race-history chart doesn't look jagged/blocky at 1x.
+function downsample(src, factor) {
+  const w = Math.floor(src.width / factor), h = Math.floor(src.height / factor);
+  const out = new Raster(w, h, '#000000');
+  const area = factor * factor;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let oy = 0; oy < factor; oy++) {
+        for (let ox = 0; ox < factor; ox++) {
+          const i = ((y * factor + oy) * src.width + (x * factor + ox)) * 3;
+          r += src.data[i]; g += src.data[i + 1]; b += src.data[i + 2];
+        }
+      }
+      const oi = (y * w + x) * 3;
+      out.data[oi] = Math.round(r / area);
+      out.data[oi + 1] = Math.round(g / area);
+      out.data[oi + 2] = Math.round(b / area);
+    }
+  }
+  return out;
+}
+
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -158,4 +184,4 @@ export function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
-export { Raster, hexToRgb };
+export { Raster, hexToRgb, downsample };
