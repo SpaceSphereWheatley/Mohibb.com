@@ -9,6 +9,7 @@
 const OPENF1 = 'https://api.openf1.org/v1/';
 const TZ = 'Europe/Oslo';
 const FIRST_YEAR = 2023;                 // OpenF1 history starts in 2023
+if (window.Chart && window.ChartZoom) Chart.register(window.ChartZoom);   // wheel/pinch zoom + drag pan on the race charts
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PACE_WINDOW = 1.07;                // long-run "clean lap" filter: within 107% of the stint's quickest lap
 // Tyre-deg modelling: a car quickens through a stint as its fuel load burns off, which masks tyre wear.
@@ -37,6 +38,7 @@ const state = {
   qualiView: { qpace: 'graph', qtheo: 'graph' },   // per-panel graph/table toggle
   raceTopN: 0,           // race-chart driver filter: 0 = all, else top N by finishing order
   showPits: true,        // race charts: mark each driver's pit stops with a dot
+  lapMode: 'raw',        // Lap Times chart: 'raw' lap seconds, or 'delta' to each driver's own median lap
   renderGen: 0,          // bumped per session load; a scheduled panel retry aborts if it changed
   raceRedraw: {},        // per-chart redraw closures, so the Top-N buttons refresh every race chart at once
   pitLoss: null,         // {meeting, seconds, samples} weekend pit-loss estimate, memoised per meeting
@@ -552,10 +554,12 @@ function showView(kind){
   if (bar){
     if (kind === 'race'){
       bar.innerHTML = `<span class="topbar-label">Pit stops</span>${pitToggle()}`
-        + `<span class="topbar-label topbar-gap">Drivers shown</span>${topToolbar()}`;
+        + `<span class="topbar-label topbar-gap">Drivers shown</span>${topToolbar()}`
+        + `<span class="topbar-label topbar-gap">Zoom</span>${zoomToolbar()}`;
       bar.style.display = '';
       wirePits(bar.querySelector('.seg.pits'));
       wireTopN(bar.querySelector('.seg.topn'));
+      wireZoomReset(bar.querySelector('.seg.zoom'));
     } else { bar.style.display = 'none'; bar.innerHTML = ''; }
   }
   const ids = VIEW_SECTIONS[kind] || [];
@@ -1545,15 +1549,19 @@ async function renderPitLoss(attempt=0){
 
 /* ---------- RACE: lap chart ---------- */
 /* ---------- RACE: shared helpers (SC/VSC shading + Top-N filter) ---------- */
-// Parse OpenF1 race_control into Safety Car / Virtual Safety Car periods.
+// Parse OpenF1 race_control into Safety Car / Virtual Safety Car / Red Flag periods.
 function parseSafety(rc){
   const msgs = (Array.isArray(rc)?rc:[]).filter(r => r.date).slice().sort((a,b)=> new Date(a.date)-new Date(b.date));
-  const periods = []; let open = null;
+  const periods = []; let open = null, openRed = null;
   const close = (m) => { if (open){ open.endDate = m.date; open.endLap = num(m.lap_number); periods.push(open); open = null; } };
+  const closeRed = (m) => { if (openRed){ openRed.endDate = m.date; openRed.endLap = num(m.lap_number); periods.push(openRed); openRed = null; } };
   for (const m of msgs){
     const text = (m.message||'').toUpperCase(), flag = (m.flag||'').toUpperCase();
     const vsc = text.includes('VIRTUAL SAFETY CAR'), sc = text.includes('SAFETY CAR') && !vsc;
-    if ((vsc || sc) && text.includes('DEPLOY')){
+    const red = flag === 'RED' || text.includes('RED FLAG');
+    if (red && !openRed){
+      openRed = { kind: 'RED', startDate: m.date, startLap: num(m.lap_number) };   // tracked independently — a red flag can nest around an SC/VSC period
+    } else if ((vsc || sc) && text.includes('DEPLOY')){
       if (open) close(m);                                   // a new deploy supersedes any open period
       open = { kind: vsc ? 'VSC' : 'SC', startDate: m.date, startLap: num(m.lap_number) };
     } else if (vsc && open && open.kind === 'VSC' && text.includes('END')){
@@ -1561,8 +1569,10 @@ function parseSafety(rc){
     } else if (flag === 'GREEN' && (m.scope||'').toUpperCase() !== 'SECTOR' && open){
       close(m);                                             // track-wide green ends a safety car (ignore local sector greens)
     }
+    if (openRed && !red && flag === 'GREEN' && (m.scope||'').toUpperCase() !== 'SECTOR') closeRed(m);   // track-wide green also ends a red-flag stoppage
   }
   if (open) periods.push(open);                             // unterminated — keep what we have
+  if (openRed) periods.push(openRed);
   return periods;
 }
 const safetyByLap  = (periods) => periods.filter(p => p.startLap!=null).map(p => ({ x0: p.startLap, x1: p.endLap ?? p.startLap, kind: p.kind }));
@@ -1572,7 +1582,10 @@ const safetyByTime = (periods, t0) => periods.filter(p => p.startDate).map(p => 
   kind: p.kind,
 }));
 
-// Chart.js inline plugin: shade SC/VSC bands behind the data (reads options.plugins.scShade.periods).
+// band fill/label colours per race-control period kind — SC/VSC amber, Red Flag in the site's F1-red accent
+const SC_BAND_FILL  = { SC: 'rgba(242,193,78,0.30)', VSC: 'rgba(242,193,78,0.16)', RED: 'rgba(225,6,0,0.22)' };
+const SC_BAND_LABEL = { SC: 'rgba(120,86,0,0.85)',   VSC: 'rgba(120,86,0,0.85)',   RED: 'rgba(122,8,3,0.9)' };
+// Chart.js inline plugin: shade SC/VSC/Red-Flag bands behind the data (reads options.plugins.scShade.periods).
 const scShadePlugin = {
   id: 'scShade',
   beforeDatasetsDraw(chart, _args, opts){
@@ -1586,10 +1599,10 @@ const scShadePlugin = {
       const left = Math.max(area.left, Math.min(a, b));
       let right = Math.min(area.right, Math.max(a, b));
       if (right - left < 2) right = Math.min(area.right, left + 2);   // keep a one-lap band visible
-      ctx.fillStyle = p.kind === 'VSC' ? 'rgba(242,193,78,0.16)' : 'rgba(242,193,78,0.30)';
+      ctx.fillStyle = SC_BAND_FILL[p.kind] || SC_BAND_FILL.SC;
       ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
       if (right - left > 24){
-        ctx.fillStyle = 'rgba(120,86,0,0.85)';
+        ctx.fillStyle = SC_BAND_LABEL[p.kind] || SC_BAND_LABEL.SC;
         ctx.font = "600 9px 'IBM Plex Mono', ui-monospace, monospace";
         ctx.textBaseline = 'top';
         ctx.fillText(p.kind, left + 3, area.top + 3);
@@ -1651,6 +1664,17 @@ function wirePits(seg){
     redrawRaceCharts();
   });
 }
+// zoom-reset action, shared across the three race charts (each keeps its own zoom/pan state until this is pressed)
+function zoomToolbar(){
+  return `<div class="seg zoom"><button type="button" data-action="reset-zoom">Reset zoom</button></div>`;
+}
+function wireZoomReset(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    if (!e.target.closest('button[data-action="reset-zoom"]')) return;
+    ['lap','hist','pos'].forEach(k => { const c = state.charts[k]; if (c && typeof c.resetZoom === 'function') c.resetZoom(); });
+  });
+}
 // pit dot styling, shared so every race chart marks stops the same way
 const PIT_DOT = { fill: '#F7F3EA', ring: '#211D17' };
 function redrawRaceCharts(){
@@ -1682,8 +1706,17 @@ async function renderLapChart(session_key, attempt=0){
     const yMin = Math.max(0, (Math.min(...all)||med) - 0.8);
     const yMax = med * 1.25;            // shows green-flag pace + most pit laps, clips SC/red-flag spikes
 
-    body.innerHTML = `<div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods. Use the Top buttons to preset a group of drivers, then add or hide any driver from the legend; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable.</div>`;
+    // each driver's own median clean lap, for the "Delta" view — centres each trace on its own pace
+    const ownMed = {};
+    drivers.forEach(n => { ownMed[n] = median(groups[n].map(l => num(l.lap_duration)).filter(v => v!=null && v>0)) || med; });
+    const allDeltas = laps.map(l => { const n = num(l.driver_number), d = num(l.lap_duration); return (d!=null && d>0 && ownMed[n]!=null) ? d - ownMed[n] : null; }).filter(v => v!=null);
+    const deltaSpread = median(allDeltas.map(Math.abs)) || 0.3;
+    const deltaBound = Math.max(2, deltaSpread * 5);   // symmetric ±bound; clips SC/red-flag/pit-lap spikes the same way the raw view's yMax does
+
+    body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><span class="hist-ref">View ${lapModeToolbar()}</span></div>
+      <div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods, a <b>red band</b> marks a Red Flag stoppage. Use the Top buttons to preset a group of drivers, then add or hide any driver from the legend; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable. Switch to <b>Delta</b> to centre each driver on their own median lap, which makes pace trends and tyre degradation easier to read than the raw-seconds view. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
+    wireLapMode(body.querySelector('.seg.lapmode'));
 
     const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
     const redraw = () => {
@@ -1691,24 +1724,41 @@ async function renderLapChart(session_key, attempt=0){
       host.innerHTML = '<canvas id="lapCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
       const showP = state.showPits;
+      const delta = state.lapMode === 'delta';
       const datasets = drivers.slice().sort((a,b)=> a-b).map(n => {
         const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
         const colour = drvColour(n);
         const mark = (l) => showP && isPit(n,l);
+        const y = (l) => { const d = num(l.lap_duration); return delta ? (d!=null ? d - ownMed[n] : null) : d; };
         return {
-          label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: num(l.lap_duration) })),
+          label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: y(l) })),
           borderColor: colour, backgroundColor: colour, borderWidth: 1.5, tension: 0.25, spanGaps: true,
           pointRadius: ls.map(l => mark(l)?4:0), pointHoverRadius: 5,
           pointBorderColor: ls.map(l => mark(l)?PIT_DOT.ring:colour), pointBorderWidth: 1.5,
           pointBackgroundColor: ls.map(l => mark(l)?PIT_DOT.fill:colour),
           hidden: !!set && !set.has(n),
+          _driverN: n, _baseColour: colour, _baseWidth: 1.5,
         };
       });
-      drawLapChart(datasets, yMin, yMax, bands);
+      drawLapChart(datasets, delta ? -deltaBound : yMin, delta ? deltaBound : yMax, bands, delta);
     };
     state.raceRedraw.lap = redraw;
     redraw();
   } catch (e){ panelRetry('lap chart', e, body, attempt, () => renderLapChart(session_key, attempt+1), stateBox('Unavailable', 'Couldn’t load lap data.', 'error')); }
+}
+// Lap Times view toggle: raw lap seconds, or each driver's delta to their own median lap
+function lapModeToolbar(){
+  return `<div class="seg lapmode">${[['raw','Absolute'],['delta','Delta']].map(([v,l]) => `<button type="button" data-lapmode="${v}" class="${state.lapMode===v?'active':''}">${l}</button>`).join('')}</div>`;
+}
+function wireLapMode(seg){
+  if (!seg) return;
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-lapmode]'); if (!b) return;
+    const mode = b.dataset.lapmode; if (state.lapMode === mode) return;
+    state.lapMode = mode;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.lapmode === mode));
+    if (state.raceRedraw.lap) state.raceRedraw.lap();
+  });
 }
 
 /* ---------- RACE: race-history trace (gap to a reference car) ---------- */
@@ -1746,7 +1796,7 @@ async function renderHistory(session_key, attempt=0){
     const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
     body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
       <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
-      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care.</div>`;
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods, a <b>red band</b> marks a Red Flag stoppage. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
     $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
     state.raceRedraw.hist = drawHistory;
     drawHistory();
@@ -1765,14 +1815,15 @@ function drawHistory(){
       if (rc==null || dc==null) continue;
       pts.push({ x: lap, y: rc - dc });           // ahead of the reference => positive => above the line
     }
-    const colour = drvColour(n);
+    const colour = drvColour(n), width = n===refN ? 2.5 : 1.5;
     const pits = (state.showPits && H.pitLaps && H.pitLaps[n]) || null;   // dot the pit in-laps
     return { label: drv(n).acr, data: pts, borderColor: colour, backgroundColor: colour,
-      borderWidth: n===refN ? 2.5 : 1.5, tension: 0.2, spanGaps: true,
+      borderWidth: width, tension: 0.2, spanGaps: true,
       pointRadius: pts.map(p => pits && pits.has(p.x) ? 4 : 0), pointHoverRadius: 5,
       pointBackgroundColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.fill : colour),
       pointBorderColor: pts.map(p => pits && pits.has(p.x) ? PIT_DOT.ring : colour), pointBorderWidth: 1.5,
-      hidden: !!set && !set.has(n) && n!==refN };
+      hidden: !!set && !set.has(n) && n!==refN,
+      _driverN: n, _baseColour: colour, _baseWidth: width };
   });
   drawHistoryChart(datasets, H.bands);
 }
@@ -1791,6 +1842,7 @@ function drawHistoryChart(datasets, bands){
       plugins:{
         scShade:{ periods: bands || [] },
         baseline:{ axis:'y', color:'#211D17', width:1.5 },
+        zoom: ZOOM_OPTS,
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtGap(it.parsed.y)}s` } },
@@ -1803,30 +1855,37 @@ function drawHistoryChart(datasets, bands){
       }
     })
   });
+  installLineHighlight(state.charts.hist);
 }
-function drawLapChart(datasets, yMin, yMax, bands){
+function drawLapChart(datasets, yMin, yMax, bands, delta){
   if (!window.Chart) return;
   destroyChart('lap');
   const ctx = $('lapCanvas'); if (!ctx) return;
+  const signed = (v)=> (v>0?'+':v<0?'−':'') + Math.abs(v).toFixed(0) + 's';
   state.charts.lap = new Chart(ctx, {
     type:'line',
     data:{ datasets },
-    plugins:[scShadePlugin],
+    plugins: delta ? [scShadePlugin, baselinePlugin] : [scShadePlugin],
     options: Object.assign(chartBase({ xTitle:'Lap', yTitle:'Lap time (s)' }), {
       parsing:false,
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
         scShade:{ periods: bands || [] },
+        zoom: ZOOM_OPTS,
+        ...(delta ? { baseline:{ axis:'y', color:'#211D17', width:1.5 } } : {}),
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
-          callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> `${it.dataset.label}  ${fmtLap(it.parsed.y)}` } },
+          callbacks:{ title:(it)=> 'Lap ' + (it[0]?.parsed.x ?? ''), label:(it)=> delta ? `${it.dataset.label}  ${fmtGap(it.parsed.y)}s` : `${it.dataset.label}  ${fmtLap(it.parsed.y)}` } },
       },
       scales:{
         x:{ type:'linear', grid:{ color:'transparent' }, ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, precision:0, maxTicksLimit:14 }, title:{ display:true, text:'Lap', color:'#8C8475', font:{size:10} } },
-        y:{ min:yMin, max:yMax, grid:{ color:'#C9C0AE' }, ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback:(v)=> fmtLap(v) }, title:{ display:true, text:'Lap time', color:'#8C8475', font:{size:10} } },
+        y:{ min:yMin, max:yMax, grid:{ color:'#C9C0AE' },
+            ticks:{ color:'#8C8475', font:{family:"'IBM Plex Mono',monospace",size:10}, callback:(v)=> delta ? signed(v) : fmtLap(v) },
+            title:{ display:true, text: delta ? 'Δ to own median (s)' : 'Lap time', color:'#8C8475', font:{size:10} } },
       }
     })
   });
+  installLineHighlight(state.charts.lap);
 }
 
 /* ---------- RACE: tyre strategy + pit stops ---------- */
@@ -1930,7 +1989,7 @@ async function renderPosition(session_key, attempt=0){
     });
 
     body.innerHTML = `<div class="chart-box" id="posHost"><canvas id="posCanvas"></canvas></div>
-      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Each line runs to that car's final lap, so finishers reach the flag and retirements stop where they ended. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Use the Top buttons to preset a group of drivers, then toggle any driver in the legend, to follow a recovery drive or an early-stop undercut.</div>`;
+      <div class="panel-note">Track position through the session against elapsed time (minutes). Lower is better — P1 sits at the top. Each line runs to that car's final lap, so finishers reach the flag and retirements stop where they ended. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods, a <b>red band</b> marks a Red Flag stoppage. Dots mark each driver's pit stops (toggle with <b>Pit stops</b>). Use the Top buttons to preset a group of drivers, then toggle any driver in the legend, to follow a recovery drive or an early-stop undercut. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
     const redraw = () => {
       const host = $('posHost'); if (!host) return;
       host.innerHTML = '<canvas id="posCanvas"></canvas>';
@@ -1938,7 +1997,8 @@ async function renderPosition(session_key, attempt=0){
       const shown = order.filter(n => !set || set.has(n));
       const datasets = order.map(n => {
         const colour = drvColour(n);
-        return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0, hidden: !!set && !set.has(n) };
+        return { label: drv(n).acr, data: series[n], borderColor: colour, backgroundColor: colour, borderWidth:1.5, stepped:'before', pointRadius:0, pointHoverRadius:4, tension:0, hidden: !!set && !set.has(n),
+          _driverN: n, _baseColour: colour, _baseWidth: 1.5 };
       });
       if (state.showPits){
         const marks = shown.flatMap(n => pitMarks[n] || []);
@@ -1964,6 +2024,7 @@ function drawPositionChart(datasets, maxPos, bands){
       interaction:{ mode:'nearest', intersect:false },
       plugins:{
         scShade:{ periods: bands || [] },
+        zoom: ZOOM_OPTS,
         legend:{ display:true, position:'top', labels:{ usePointStyle:true, boxWidth:8, boxHeight:8, color:'#5C554A', font:{family:"'IBM Plex Mono',monospace", size:10}, padding:8 } },
         tooltip:{ backgroundColor:'#F7F3EA', borderColor:'#211D17', borderWidth:1, titleColor:'#211D17', bodyColor:'#5C554A', bodyFont:{family:"'IBM Plex Mono',monospace"},
           callbacks:{ title:(it)=> (it[0]?.parsed.x ?? 0).toFixed(0) + ' min', label:(it)=> `${it.dataset.label}  P${it.parsed.y}` } },
@@ -1974,9 +2035,15 @@ function drawPositionChart(datasets, maxPos, bands){
       }
     })
   });
+  installLineHighlight(state.charts.pos);
 }
 
 /* ---------- Chart.js shared theme ---------- */
+// wheel/pinch to zoom, drag to pan — lap/time reads left-to-right, so x-only; "Reset zoom" clears it.
+// Spliced into each chart's own `plugins` object at the call site rather than chartBase(), since every
+// caller replaces `options.plugins` wholesale via Object.assign (a shallow merge — a key nested inside
+// chartBase()'s plugins would otherwise be silently overwritten).
+const ZOOM_OPTS = { pan:{ enabled:true, mode:'x' }, zoom:{ wheel:{ enabled:true }, pinch:{ enabled:true }, mode:'x' }, limits:{ x:{ min:'original', max:'original' } } };
 function chartBase(opts){
   opts = opts || {};
   return {
@@ -1988,6 +2055,31 @@ function chartBase(opts){
 }
 function destroyChart(key){ if (state.charts[key]){ try{ state.charts[key].destroy(); }catch{} state.charts[key]=null; } }
 function destroyAllCharts(){ Object.keys(state.charts).forEach(destroyChart); }
+
+// dim every line but the hovered one — legend hover and direct nearest-line hover both call this.
+// Only borderColor/borderWidth are touched (not point colours), since pit-dot markers on these
+// charts use per-point colour arrays that a single dimmed colour would otherwise clobber.
+function withAlpha(hex, a){
+  const m = /^#([0-9a-f]{6})$/i.exec(hex||''); if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+function installLineHighlight(chart){
+  if (!chart) return;
+  const setHighlight = (idx) => {
+    chart.data.datasets.forEach((ds, i) => {
+      if (ds._driverN == null) return;                 // e.g. the Position chart's "Pit stops" marker dataset
+      const dim = idx != null && i !== idx;
+      ds.borderColor = dim ? withAlpha(ds._baseColour, 0.12) : ds._baseColour;
+      ds.borderWidth = (idx === i ? 1 : 0) + ds._baseWidth;
+    });
+    chart.update('none');
+  };
+  chart.options.plugins.legend.onHover = (_evt, item) => setHighlight(item.datasetIndex);
+  chart.options.plugins.legend.onLeave = () => setHighlight(null);
+  chart.options.onHover = (_evt, active) => setHighlight(active.length ? active[0].datasetIndex : null);
+  chart.canvas.addEventListener('mouseleave', () => setHighlight(null));
+}
 
 /* graph / table segmented toggle (used by the qualifying panels) */
 function segToolbar(panel, mode){
