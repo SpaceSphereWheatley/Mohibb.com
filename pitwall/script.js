@@ -1715,7 +1715,7 @@ async function renderLapChart(session_key, attempt=0){
 
     body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><span class="hist-ref">View ${lapModeToolbar()}</span></div>
       <div class="chart-box" id="lapHost"><canvas id="lapCanvas"></canvas></div>
-      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. Ringed points are pit in-laps and out-laps (toggle with <b>Pit stops</b>). <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods, a <b>red band</b> marks a Red Flag stoppage. Use the Top buttons to preset a group of drivers, then add or hide any driver from the legend; very slow laps (safety car, red flags) sit above the visible range to keep the racing pace readable. Switch to <b>Delta</b> to centre each driver on their own median lap, which makes pace trends and tyre degradation easier to read than the raw-seconds view. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
+      <div class="panel-note">Lap time per lap, per driver — pace trends, traffic and the undercut/overcut all show here. <b>Yellow bands</b> mark Safety Car (darker) and Virtual Safety Car (lighter) periods, a <b>red band</b> marks a Red Flag stoppage. Pit in/out laps and laps far slower than the pack's pace (Safety Car, Red Flag) are left out of the line so it stays readable — see the Race History or Position chart above for exactly when each pit stop happened. Use the Top buttons to preset a group of drivers, then add or hide any driver from the legend. Switch to <b>Delta</b> to centre each driver on their own median lap, which makes pace trends and tyre degradation easier to read than the raw-seconds view. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
     wireLapMode(body.querySelector('.seg.lapmode'));
 
     const isPit = (n, l) => (l.is_pit_out_lap || pitSet.has(`${n}-${num(l.lap_number)}`));
@@ -1723,19 +1723,19 @@ async function renderLapChart(session_key, attempt=0){
       const host = $('lapHost'); if (!host) return;
       host.innerHTML = '<canvas id="lapCanvas"></canvas>';
       const set = topNSet(order, state.raceTopN);
-      const showP = state.showPits;
       const delta = state.lapMode === 'delta';
       const datasets = drivers.slice().sort((a,b)=> a-b).map(n => {
         const ls = groups[n].slice().filter(l => num(l.lap_number)!=null).sort((a,b)=> a.lap_number-b.lap_number);
         const colour = drvColour(n);
-        const mark = (l) => showP && isPit(n,l);
-        const y = (l) => { const d = num(l.lap_duration); return delta ? (d!=null ? d - ownMed[n] : null) : d; };
+        const y = (l) => {
+          const d = num(l.lap_duration);
+          if (d == null || d > yMax || isPit(n, l)) return null;   // pit in/out laps and SC/VSC/red-flag laps: omit rather than distort the pace trend
+          return delta ? d - ownMed[n] : d;
+        };
         return {
           label: drv(n).acr, data: ls.map(l => ({ x: num(l.lap_number), y: y(l) })),
           borderColor: colour, backgroundColor: colour, borderWidth: 1.5, tension: 0.25, spanGaps: true,
-          pointRadius: ls.map(l => mark(l)?4:0), pointHoverRadius: 5,
-          pointBorderColor: ls.map(l => mark(l)?PIT_DOT.ring:colour), pointBorderWidth: 1.5,
-          pointBackgroundColor: ls.map(l => mark(l)?PIT_DOT.fill:colour),
+          pointRadius: 0, pointHoverRadius: 5,
           hidden: !!set && !set.has(n),
           _driverN: n, _baseColour: colour, _baseWidth: 1.5,
         };
