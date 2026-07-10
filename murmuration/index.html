@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="A murmuration of boids — hundreds of independent flyers following three simple rules (separation, alignment, cohesion) that add up to lifelike flocking. Click and hold to pull the swarm toward your cursor, with a built-in primer on the algorithm.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/murmuration/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Murmuration — Boid Flocking | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Murmuration — Boid Flocking">
+<meta property="og:description" content="Hundreds of boids, each just watching its nearest neighbors, obey three simple rules and flock like starlings. Click and hold to pull the swarm toward your cursor.">
+<meta property="og:url" content="https://mohibb.com/murmuration/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Murmuration — Boid Flocking">
+<meta name="twitter:description" content="Hundreds of boids, each just watching its nearest neighbors, obey three simple rules and flock like starlings. Click and hold to pull the swarm toward your cursor.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Murmuration",
+  "url": "https://mohibb.com/murmuration/",
+  "description": "A murmuration of boids — hundreds of independent flyers following three simple rules (separation, alignment, cohesion) that add up to lifelike flocking. Click and hold to pull the swarm toward your cursor, with a built-in primer on the algorithm.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<meta name="theme-color" content="#EDE8DD">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <nav class="toprule-nav">
+    <button class="learn-cta" id="learnBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="learnPanel" title="Open the flocking primer">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>
+      Learn the rules<span class="arr" aria-hidden="true">&rarr;</span>
+    </button>
+    <a class="back" href="/">All projects &rarr;</a>
+  </nav>
+</div>
+
+<main class="wrap">
+
+  <section class="intro">
+    <p class="eyebrow">emergent flocking, in your browser</p>
+    <h1>Murmuration</h1>
+    <p class="lede">Hundreds of boids, each one only aware of its nearest
+      neighbors, follow three simple rules &mdash; separation, alignment,
+      cohesion &mdash; and the whole flock wheels and swirls like a
+      starling murmuration. Click and hold anywhere over the flock to pull
+      it toward your cursor. Tune the rules below.</p>
+  </section>
+
+  <!-- ---------- the render stage ---------- -->
+  <section class="stage" aria-label="Boid flock render">
+    <canvas id="flock" role="img" aria-label="A flock of triangular boids wheeling across a dark sky, each leaving a faint fading trail as the swarm turns together.">
+      Your browser does not support canvas, which is required to display this
+      simulation.
+    </canvas>
+    <div class="stage-hint" id="stageHint" aria-hidden="true">click &amp; hold to pull the flock</div>
+    <div class="stage-readout" id="fpsReadout" aria-hidden="true">– fps</div>
+  </section>
+
+  <!-- ---------- controls ---------- -->
+  <section class="controls" aria-label="Controls">
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">01</span> Flock</h2>
+      <div class="field">
+        <label for="boidCount">Boid count</label>
+        <div class="field-row">
+          <input type="range" id="boidCount" min="20" max="1500" step="10" value="150">
+          <output for="boidCount" id="boidCountOut">150</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="perception">Perception radius <span class="unit">(px)</span></label>
+        <div class="field-row">
+          <input type="range" id="perception" min="10" max="150" step="5" value="55">
+          <output for="perception" id="perceptionOut">55</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="separation">Separation</label>
+        <div class="field-row">
+          <input type="range" id="separation" min="0" max="3" step="0.1" value="1.5">
+          <output for="separation" id="separationOut">1.5</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="alignment">Alignment</label>
+        <div class="field-row">
+          <input type="range" id="alignment" min="0" max="3" step="0.1" value="1.0">
+          <output for="alignment" id="alignmentOut">1.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="cohesion">Cohesion</label>
+        <div class="field-row">
+          <input type="range" id="cohesion" min="0" max="3" step="0.1" value="1.0">
+          <output for="cohesion" id="cohesionOut">1.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="maxSpeed">Max speed</label>
+        <div class="field-row">
+          <input type="range" id="maxSpeed" min="1" max="8" step="0.5" value="4">
+          <output for="maxSpeed" id="maxSpeedOut">4.0</output>
+        </div>
+      </div>
+      <p class="panel-note">Each boid only looks at neighbors inside its own
+        perception radius &mdash; the flock's shape is a side effect of many
+        local decisions, not a single global plan.</p>
+    </div>
+
+    <div class="panel panel-physics">
+      <h2 class="panel-head"><span class="idx">02</span> Environment &amp; interaction</h2>
+      <div class="field">
+        <label for="trailFade">Trail fade <span class="unit">(lower = longer trails)</span></label>
+        <div class="field-row">
+          <input type="range" id="trailFade" min="0.02" max="0.5" step="0.01" value="0.08">
+          <output for="trailFade" id="trailFadeOut">0.08</output>
+        </div>
+      </div>
+      <div class="field check">
+        <input type="checkbox" id="wallToggle" checked>
+        <label for="wallToggle">Wall avoidance</label>
+      </div>
+      <div class="field" id="wallAvoidanceGroup">
+        <label for="wallAvoidance">Avoidance strength</label>
+        <div class="field-row">
+          <input type="range" id="wallAvoidance" min="0" max="5" step="0.1" value="2">
+          <output for="wallAvoidance" id="wallAvoidanceOut">2.0</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="attraction">Pull strength <span class="unit">(click &amp; hold)</span></label>
+        <div class="field-row">
+          <input type="range" id="attraction" min="0.2" max="3" step="0.1" value="1.5">
+          <output for="attraction" id="attractionOut">1.5</output>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">03</span> Seed</h2>
+      <div class="field">
+        <label for="seedInput">Seed</label>
+        <div class="field-row">
+          <input type="number" id="seedInput" min="1" step="1" value="12345">
+        </div>
+      </div>
+      <div class="field-row btn-row">
+        <button type="button" class="btn" id="prevSeedBtn">&larr; Prev</button>
+        <button type="button" class="btn" id="nextSeedBtn">Next &rarr;</button>
+      </div>
+      <div class="field-row btn-row btn-row-tight">
+        <button type="button" class="btn" id="randomSeedBtn">&#8635; Random seed</button>
+      </div>
+      <p class="panel-note">The seed fixes every boid's starting position and
+        heading, so the same seed always spawns the same flock.</p>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-head"><span class="idx">04</span> Appearance</h2>
+      <div class="field">
+        <label for="boidColor">Boid color</label>
+        <div class="field-row">
+          <input type="color" id="boidColor" value="#b4471f">
+          <output for="boidColor" id="boidColorOut">#b4471f</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="bgColor">Background</label>
+        <div class="field-row">
+          <input type="color" id="bgColor" value="#0b0d12">
+          <output for="bgColor" id="bgColorOut">#0b0d12</output>
+        </div>
+      </div>
+      <div class="field-row btn-row">
+        <button type="button" class="btn" id="regenBtn">&#8635; Regenerate</button>
+        <button type="button" class="btn" id="resetBtn">Reset</button>
+      </div>
+      <div class="field-row btn-row btn-row-tight">
+        <button type="button" class="btn" id="downloadBtn">&#8681; Download PNG</button>
+      </div>
+    </div>
+
+  </section>
+
+  <p class="footnote">A 2D flocking simulation after Craig Reynolds' 1986
+    Boids model &mdash; separation, alignment and cohesion, plus wall
+    avoidance and an interactive pull force, all computed on a spatial grid
+    so it stays fast at up to 1500 boids. For the vectors behind every rule,
+    open <button type="button" class="inline-link" id="learnBtn2">the
+    primer</button>.</p>
+
+</main>
+
+<!-- ---------- Learn / algorithm primer overlay ---------- -->
+<div class="learn-overlay" id="learnOverlay" hidden>
+  <div class="learn-panel" id="learnPanel" role="dialog" aria-modal="true" aria-labelledby="learnTitle" tabindex="-1">
+    <header class="learn-top">
+      <h2 id="learnTitle">The rules, end to end</h2>
+      <button type="button" class="learn-close" id="learnClose" aria-label="Close the primer">&times;</button>
+    </header>
+    <div class="learn-body" id="learnBody">
+
+      <p class="learn-lede">Everything this simulator computes, term by
+        term &mdash; with the vector behind each rule and where it shows up
+        on screen. Every boid \(i\) has a position \(\mathbf{p}_i\) and
+        velocity \(\mathbf{v}_i\); \(N_i\) is the set of neighbors within its
+        perception radius \(r\).</p>
+
+      <article>
+        <h3>One flock, three rules</h3>
+        <p>Craig Reynolds' original 1986 Boids model showed that convincing
+          flocking needs no leader and no global plan &mdash; just three
+          local steering rules, evaluated independently by every boid every
+          frame, each producing a desired-velocity correction that gets
+          added to that boid's acceleration:</p>
+        <p>$$\mathbf{a}_i=\mathbf{a}_{\text{sep}}+\mathbf{a}_{\text{align}}+\mathbf{a}_{\text{coh}}$$</p>
+        <p>Nobody decides the flock should turn left. Enough boids reacting
+          only to their own neighbors is what makes the turn look
+          decided.</p>
+      </article>
+
+      <article>
+        <h3>Separation</h3>
+        <p>Steer away from neighbors that are too close, weighted more
+          heavily the closer they are (inverse-square, so a boid right on
+          top of you dominates the correction):</p>
+        <p>$$\mathbf{a}_{\text{sep}}=k_{\text{sep}}\sum_{j\in N_i}\frac{\mathbf{p}_i-\mathbf{p}_j}{\lVert\mathbf{p}_i-\mathbf{p}_j\rVert^2}$$</p>
+        <p>This is the rule that keeps the flock from collapsing into a
+          single point &mdash; it's a short-range repulsion inside the
+          longer-range perception radius.</p>
+      </article>
+
+      <article>
+        <h3>Alignment</h3>
+        <p>Steer toward the average heading of nearby neighbors, so a boid
+          tends to match the direction the local crowd is already flying:</p>
+        <p>$$\mathbf{a}_{\text{align}}=k_{\text{align}}\left(\frac{1}{|N_i|}\sum_{j\in N_i}\mathbf{v}_j-\mathbf{v}_i\right)$$</p>
+        <p>This is what makes the flock move as one body instead of a cloud
+          of boids darting in random directions.</p>
+      </article>
+
+      <article>
+        <h3>Cohesion</h3>
+        <p>Steer toward the average position (the local center of mass) of
+          nearby neighbors, so a boid drifts back in if it strays too far
+          from the group:</p>
+        <p>$$\mathbf{a}_{\text{coh}}=k_{\text{coh}}\left(\frac{1}{|N_i|}\sum_{j\in N_i}\mathbf{p}_j-\mathbf{p}_i\right)$$</p>
+        <p>The <em>Separation</em>, <em>Alignment</em> and <em>Cohesion</em>
+          sliders are exactly \(k_{\text{sep}}\), \(k_{\text{align}}\) and
+          \(k_{\text{coh}}\) &mdash; every steering force is also clamped to
+          a fixed maximum, so no single rule can ever overpower the others
+          in one frame.</p>
+      </article>
+
+      <article>
+        <h3>Walls and your cursor</h3>
+        <p>Two more forces feed into the same acceleration. Wall avoidance
+          rises steeply only once a boid is genuinely close to an edge (a
+          hyperbolic falloff, not a linear one), so boids fly straight until
+          the last moment and then bank away hard. Click-and-hold adds a
+          steering force toward the cursor, strong from a distance and
+          gentle up close so the flock swarms around your finger rather than
+          collapsing onto it.</p>
+      </article>
+
+      <article>
+        <h3>Why it stays fast: a spatial grid</h3>
+        <p>Checking every boid against every other boid is
+          \(O(n^2)\) &mdash; fine for a few dozen, too slow for a thousand.
+          Instead, every boid is bucketed into a grid cell sized to the
+          perception radius; each frame only asks the 3&times;3 block of
+          cells around a boid for candidates, which is close to
+          \(O(n)\) in practice. That's what keeps this responsive up to
+          1500 boids.</p>
+      </article>
+
+      <article class="learn-caveat">
+        <h3>What's simplified</h3>
+        <p>Velocity and position are integrated with plain (explicit Euler)
+          steps each frame, not a higher-order integrator &mdash; accurate
+          enough at this timestep, but not the kind of precision a physics
+          engine would use.</p>
+        <p>Every boid has full 360&deg; perception; a real starling has a
+          blind spot behind it and weights motion cues more than raw
+          distance. There's also no predator-evasion or obstacle-avoidance
+          term here &mdash; only the three flocking rules plus walls and the
+          cursor.</p>
+        <p>The three rules are evaluated over the same neighbor set and
+          radius for every boid; real flocks likely use different effective
+          ranges for repulsion versus alignment. Reynolds' original model
+          and most murmuration research treat that as an open, tunable
+          parameter &mdash; which is exactly why it's a slider here rather
+          than a constant.</p>
+      </article>
+
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./script.js"></script>
+</body>
+</html>
