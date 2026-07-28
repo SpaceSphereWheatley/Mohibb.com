@@ -167,13 +167,14 @@ const fetchPit      = (sk) => cachedJSON(`pwa.${sk}.pit`,      `${OPENF1}pit?ses
 const fetchPosition = (sk) => cachedJSON(`pwa.${sk}.position`, `${OPENF1}position?session_key=${sk}`);
 const fetchDrivers  = (sk) => cachedJSON(`pwa.${sk}.drivers`,  `${OPENF1}drivers?session_key=${sk}`);
 const fetchRC       = (sk) => cachedJSON(`pwa.${sk}.rc`,       `${OPENF1}race_control?session_key=${sk}`, slimRC);
+const fetchResult   = (sk) => cachedJSON(`pwa.${sk}.result`,   `${OPENF1}session_result?session_key=${sk}`);
 // one driver's telemetry for a single lap (date-range bounded, so each request stays small)
 const fetchCarData  = (sk, n, dateStart, dateEnd) => cachedJSON(`pwa.${sk}.car.${n}.${dateStart}`,
   `${OPENF1}car_data?session_key=${sk}&driver_number=${n}&date>=${encodeURIComponent(dateStart)}&date<${encodeURIComponent(dateEnd)}`);
 
 /* clear every cache entry for a session (used by Reload) */
 function clearSessionCache(sk){
-  ['laps','stints','pit','position','drivers','rc'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
+  ['laps','stints','pit','position','drivers','rc','result'].forEach(ep => { try { sessionStorage.removeItem(`pwa.${sk}.${ep}`); } catch {} });
   try {
     for (let i = sessionStorage.length - 1; i >= 0; i--){
       const k = sessionStorage.key(i);
@@ -526,12 +527,12 @@ function sessionKind(s){
 function isSprintWeekend(){
   return state.sessions.some(s => /sprint/i.test(`${s?.session_name || ''} ${s?.session_type || ''}`));
 }
-const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-scwhatif','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
+const ALL_SECTIONS = ['sec-theoretical','sec-longrun','sec-qpace','sec-qtheo','sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-scwhatif','sec-results','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart','sec-pitloss'];
 const VIEW_SECTIONS = {
   practice:   ['sec-theoretical','sec-longrun','sec-pitloss'],
   qualifying: ['sec-qpace','sec-qtheo','sec-carperf'],                    // raw quali-session analysis
   prerace:    ['sec-rpi','sec-tyredeg','sec-strategysim','sec-undercut','sec-scwhatif','sec-pitloss'],  // forward-looking race predictors
-  race:       ['sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
+  race:       ['sec-results','sec-history','sec-strategy','sec-position','sec-carperf','sec-lapchart'],
 };
 // the qualifying weekend offers two tabs; the rest are single-view
 const QUALI_TABS = [['qualifying','Qualifying'],['prerace','Pre-Race']];
@@ -603,6 +604,7 @@ function dispatchView(view, s, session_key){
     renderSCWhatif(s);
     renderPitLoss();
   } else {
+    renderResults(s);
     renderLapChart(session_key);
     renderHistory(session_key);
     renderStrategy(session_key);
@@ -1759,6 +1761,107 @@ function wireLapMode(seg){
     seg.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.lapmode === mode));
     if (state.raceRedraw.lap) state.raceRedraw.lap();
   });
+}
+
+/* ---------- RACE: results (qualifying + race classification, side by side) ---------- */
+// race time as h:mm:ss.SSS (or m:ss.SSS under an hour) — race totals can run past 60 minutes
+function fmtRaceTime(sec){
+  const n = num(sec); if (n == null || n <= 0) return '—';
+  const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), s = n - h * 3600 - m * 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${s.toFixed(3).padStart(6,'0')}`;
+  return `${m}:${s.toFixed(3).padStart(6,'0')}`;
+}
+// session_result's `duration` is a single number for a race/sprint, or a [Q1,Q2,Q3]-style array for a
+// qualifying session — a driver's official time is their last non-null (furthest-reached) segment.
+function resultDuration(v){
+  if (Array.isArray(v)){
+    for (let i = v.length - 1; i >= 0; i--){ const n = num(v[i]); if (n != null) return n; }
+    return null;
+  }
+  return num(v);
+}
+function isSprintSession(s){ return /sprint/i.test(s?.session_name || ''); }
+// the qualifying session that set this race's grid: the main "Qualifying" for a Grand Prix,
+// or "Sprint Qualifying"/"Sprint Shootout" for a Sprint — both live in state.sessions (same weekend)
+function meetingQualiSession(raceSession){
+  const qs = state.sessions.filter(s => sessionKind(s) === 'qualifying');
+  if (!qs.length) return null;
+  if (isSprintSession(raceSession)) return qs.find(s => isSprintSession(s)) || qs[qs.length-1];
+  return qs.find(s => (s.session_name || '').toLowerCase() === 'qualifying') || qs.find(s => !isSprintSession(s)) || qs[qs.length-1];
+}
+function raceResultRows(rawRows){
+  const rows = (Array.isArray(rawRows) ? rawRows : []).map(r => ({
+    n: num(r.driver_number), pos: posInt(r.position), pts: num(r.points) ?? 0,
+    dnf: !!r.dnf, dns: !!r.dns, dsq: !!r.dsq, duration: resultDuration(r.duration), gap: r.gap_to_leader,
+  })).filter(r => r.n != null);
+  rows.sort((a,b) => (a.pos!=null && b.pos!=null) ? a.pos-b.pos : (a.pos!=null ? -1 : (b.pos!=null ? 1 : 0)));
+  return rows;
+}
+function qualiResultRows(rawRows){
+  const rows = (Array.isArray(rawRows) ? rawRows : []).map(r => ({
+    n: num(r.driver_number), pos: posInt(r.position), time: resultDuration(r.duration),
+  })).filter(r => r.n != null);
+  rows.sort((a,b) => (a.pos!=null && b.pos!=null) ? a.pos-b.pos : (a.pos!=null ? -1 : (b.pos!=null ? 1 : (a.time ?? Infinity)-(b.time ?? Infinity))));
+  return rows;
+}
+function raceTimeCell(r, isLeader){
+  if (r.dsq) return '<span class="muted">DSQ</span>';
+  if (r.dns) return '<span class="muted">DNS</span>';
+  if (r.dnf) return '<span class="muted">DNF</span>';
+  if (isLeader) return `<b>${fmtRaceTime(r.duration)}</b>`;
+  if (typeof r.gap === 'string' && r.gap.trim()) return esc(r.gap.trim());
+  const g = num(r.gap);
+  if (g != null) return fmtGap(g);
+  return r.duration != null ? fmtRaceTime(r.duration) : '—';
+}
+function resultsTable(rawRows, kind){
+  if (kind === 'race'){
+    const rows = raceResultRows(rawRows);
+    if (!rows.length) return stateBox('No data', 'No official classification available for this session.');
+    return `<div class="tbl-scroll"><table class="tbl">
+      <thead><tr><th>#</th><th>Driver</th><th class="tar">Time / Gap</th><th class="tar">Pts</th></tr></thead>
+      <tbody>${rows.map((r,i)=> `<tr class="${i===0?'best':''}" style="--team:${drvColour(r.n)}">
+        <td class="pos">${r.pos ?? '—'}</td>
+        ${drvCell(r.n)}
+        <td class="num tar">${raceTimeCell(r, i===0)}</td>
+        <td class="num tar muted">${r.pts}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+  const rows = qualiResultRows(rawRows);
+  if (!rows.length) return stateBox('No data', 'No official classification available for this session.');
+  const pole = rows[0].time;
+  return `<div class="tbl-scroll"><table class="tbl">
+    <thead><tr><th>#</th><th>Driver</th><th class="tar">Time</th><th class="tar">Gap</th></tr></thead>
+    <tbody>${rows.map((r,i)=> `<tr class="${i===0?'best':''}" style="--team:${drvColour(r.n)}">
+      <td class="pos">${r.pos ?? '—'}</td>
+      ${drvCell(r.n)}
+      <td class="num tar"><b>${fmtLap(r.time)}</b>${i===0?'<span class="best-badge">Pole</span>':''}</td>
+      <td class="num tar ${i===0?'muted':''}">${(r.time==null || pole==null) ? '—' : (i===0?'—':fmtGap(r.time-pole))}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+async function renderResults(session, attempt=0){
+  const body = $('resultsBody'); if (!body) return;
+  body.innerHTML = loadingBox('Loading session classification…');
+  try {
+    const qSession = meetingQualiSession(session);
+    const [raceRaw, qualiRaw] = await Promise.all([
+      fetchResult(session.session_key),
+      qSession ? fetchResult(qSession.session_key) : Promise.resolve(null),
+    ]);
+    const qualiHtml = qSession ? resultsTable(qualiRaw, 'qualifying') : stateBox('No qualifying', 'No qualifying session found for this weekend’s data.');
+    const raceHtml = resultsTable(raceRaw, 'race');
+    body.innerHTML = `<div class="two-col">
+      <div class="pane">
+        <div class="pane-head">Qualifying${qSession ? ' · ' + esc(qSession.session_name) : ''}</div>
+        ${qualiHtml}
+      </div>
+      <div class="pane">
+        <div class="pane-head">Race${session?.session_name ? ' · ' + esc(session.session_name) : ''}</div>
+        ${raceHtml}
+      </div>
+    </div>
+    <div class="panel-note">Official classification from OpenF1. Qualifying time is each driver's best lap in the final segment they reached; race gap is to the winner, or the reason they weren't classified.</div>`;
+  } catch (e){ panelRetry('results', e, body, attempt, () => renderResults(session, attempt+1), stateBox('Unavailable', 'Couldn’t load session results.', 'error')); }
 }
 
 /* ---------- RACE: race-history trace (gap to a reference car) ---------- */
