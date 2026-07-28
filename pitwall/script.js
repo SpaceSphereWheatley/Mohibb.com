@@ -1868,7 +1868,7 @@ async function renderResults(session, attempt=0){
 async function renderHistory(session_key, attempt=0){
   const body = $('historyBody'); body.innerHTML = loadingBox('Building the race-history trace…');
   try {
-    const [laps, pit, rc] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]) ]);
+    const [laps, pit, rc, resultRaw] = await Promise.all([ fetchLaps(session_key), fetchPit(session_key).catch(()=>[]), fetchRC(session_key).catch(()=>[]), fetchResult(session_key).catch(()=>[]) ]);
     const groups = groupByDriver(laps);
     const drivers = Object.keys(groups).map(Number);
     if (!drivers.length){ body.innerHTML = stateBox('No data', 'No lap times recorded for this session.'); return; }
@@ -1885,12 +1885,17 @@ async function renderHistory(session_key, attempt=0){
       });
       cum[n] = map; lastLap[n] = last;
     });
-    // reference defaults to the winner: most laps completed, then least cumulative time
-    const ranked = drivers.filter(n => lastLap[n] > 0).sort((a,b)=> {
+    const withLaps = drivers.filter(n => lastLap[n] > 0);
+    if (!withLaps.length){ body.innerHTML = stateBox('No data', 'Not enough lap timing to build the trace.'); return; }
+    // order (and default reference) matches the official end result — the same classification
+    // shown in the Results section above — not a heuristic re-derived from raw lap sums; a driver
+    // with lap-timing gaps but no official result (session_result unavailable) is appended last
+    const officialOrder = raceResultRows(resultRaw).map(r => r.n).filter(n => withLaps.includes(n));
+    const lapOrder = withLaps.slice().sort((a,b)=> {
       if (lastLap[b] !== lastLap[a]) return lastLap[b] - lastLap[a];
       return (cum[a].get(lastLap[a]) ?? Infinity) - (cum[b].get(lastLap[b]) ?? Infinity);
     });
-    if (!ranked.length){ body.innerHTML = stateBox('No data', 'Not enough lap timing to build the trace.'); return; }
+    const ranked = officialOrder.length ? officialOrder.concat(lapOrder.filter(n => !officialOrder.includes(n))) : lapOrder;
     // pit in-laps per driver, to dot the trace where each car stopped
     const pitLaps = {};
     (Array.isArray(pit)?pit:[]).forEach(p => { const n = num(p.driver_number), l = num(p.lap_number); if (n==null || l==null) return; (pitLaps[n] = pitLaps[n] || new Set()).add(l); });
@@ -1899,7 +1904,7 @@ async function renderHistory(session_key, attempt=0){
     const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
     body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
       <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
-      <div class="panel-note">Each car’s running gap to the reference driver (default: the winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods, a <b>red band</b> marks a Red Flag stoppage. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the official race winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods, a <b>red band</b> marks a Red Flag stoppage. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
     $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
     state.raceRedraw.hist = drawHistory;
     drawHistory();
