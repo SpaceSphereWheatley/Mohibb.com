@@ -1797,6 +1797,21 @@ function raceResultRows(rawRows){
   rows.sort((a,b) => (a.pos!=null && b.pos!=null) ? a.pos-b.pos : (a.pos!=null ? -1 : (b.pos!=null ? 1 : 0)));
   return rows;
 }
+// seconds behind the official race leader, from session_result — used to anchor the Race History
+// trace's endpoint to the true finishing gap, since raw lap-time sums (unlike the official
+// classification) don't reflect post-race time penalties
+function officialGapSeconds(rawRows){
+  const rows = raceResultRows(rawRows);
+  const map = new Map();
+  if (!rows.length || rows[0].pos !== 1) return map;   // no usable classification — leave uncorrected
+  rows.forEach(r => {
+    if (r.dnf || r.dns || r.dsq) return;
+    if (r.pos === 1){ map.set(r.n, 0); return; }
+    const g = num(r.gap);   // ignore non-numeric gaps ("+1 LAP" etc.) — not a simple time delta
+    if (g != null) map.set(r.n, g);
+  });
+  return map;
+}
 function qualiResultRows(rawRows){
   const rows = (Array.isArray(rawRows) ? rawRows : []).map(r => ({
     n: num(r.driver_number), pos: posInt(r.position), time: resultDuration(r.duration),
@@ -1899,12 +1914,12 @@ async function renderHistory(session_key, attempt=0){
     // pit in-laps per driver, to dot the trace where each car stopped
     const pitLaps = {};
     (Array.isArray(pit)?pit:[]).forEach(p => { const n = num(p.driver_number), l = num(p.lap_number); if (n==null || l==null) return; (pitLaps[n] = pitLaps[n] || new Set()).add(l); });
-    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0], pitLaps };
+    state.history = { cum, lastLap, drivers: ranked, bands: safetyByLap(parseSafety(rc)), ref: ranked[0], pitLaps, officialGap: officialGapSeconds(resultRaw) };
 
     const opts = ranked.map(n => `<option value="${n}">${esc(drv(n).acr)} — ${esc(drv(n).name)}</option>`).join('');
     body.innerHTML = `<div class="panel-toolbar" style="justify-content:flex-end"><label class="hist-ref">Reference <select id="histRef" class="sel sel-ref">${opts}</select></label></div>
       <div class="chart-box" id="histHost"><canvas id="histCanvas"></canvas></div>
-      <div class="panel-note">Each car’s running gap to the reference driver (default: the official race winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods, a <b>red band</b> marks a Red Flag stoppage. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care. Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
+      <div class="panel-note">Each car’s running gap to the reference driver (default: the official race winner), lap by lap. The bold zero line is the reference’s own race — a trace <span class="gain">above</span> it was ahead of the reference at that lap, <span class="loss">below</span> was behind. <b>Yellow bands</b> mark Safety Car / Virtual Safety Car periods, a <b>red band</b> marks a Red Flag stoppage. Dots mark each car's pit in-laps (toggle with <b>Pit stops</b>). Overtakes, undercuts, safety-car bunching and a backmarker being lapped all read straight off the shape. Laps with missing timing are estimated from that driver’s median, so treat sharp one-lap kinks with care. Where the official result is known, each trace is anchored to end at the true finishing gap (raw lap sums don’t capture post-race time penalties). Scroll or pinch to zoom, drag to pan, use <b>Reset zoom</b> to return; hover a driver (in the legend or on the chart) to isolate their line.</div>`;
     $('histRef').addEventListener('change', () => { state.history.ref = Number($('histRef').value); drawHistory(); });
     state.raceRedraw.hist = drawHistory;
     drawHistory();
@@ -1916,12 +1931,22 @@ function drawHistory(){
   if (!refCum || !refLast) return;
   const host = $('histHost'); if (host) host.innerHTML = '<canvas id="histCanvas"></canvas>';
   const set = topNSet(H.drivers, state.raceTopN);
+  const refOfficial = H.officialGap && H.officialGap.get(refN);
   const datasets = H.drivers.map(n => {
     const map = H.cum[n], pts = [];
     for (let lap = 1; lap <= refLast; lap++){
       const rc = refCum.get(lap), dc = map.get(lap);
       if (rc==null || dc==null) continue;
       pts.push({ x: lap, y: rc - dc });           // ahead of the reference => positive => above the line
+    }
+    // anchor the endpoint to the official finishing gap when it's known: raw lap-time sums don't
+    // reflect post-race time penalties, which could otherwise leave a penalised driver's trace
+    // ending "ahead" of a reference who officially finished ahead of them. A constant shift keeps
+    // the in-race shape (overtakes, undercuts) intact and just corrects the absolute baseline.
+    if (pts.length && n !== refN && refOfficial != null && H.officialGap.has(n)){
+      const officialGapToRef = refOfficial - H.officialGap.get(n);
+      const correction = officialGapToRef - pts[pts.length-1].y;
+      pts.forEach(p => { p.y += correction; });
     }
     const colour = drvColour(n), width = n===refN ? 2.5 : 1.5;
     const pits = (state.showPits && H.pitLaps && H.pitLaps[n]) || null;   // dot the pit in-laps
