@@ -87,6 +87,13 @@
           "description": "Merge, split, and convert PDF files to Markdown — entirely in the browser. Nothing is uploaded.",
           "url": "/pdf/",
           "status": "live"
+        },
+        {
+          "name": "Room Planner",
+          "category": "Utility · floorplan",
+          "description": "A top-down floorplan tool — set room dimensions, drag and rotate furniture, add windows. Everything saves automatically in your browser.",
+          "url": "/roomplanner/",
+          "status": "live"
         }
       ]
     },

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="author" content="Mohibb Malik">
+<meta name="description" content="Room Planner — a free top-down floorplan tool. Set room dimensions, drag and rotate furniture, add windows, and everything saves automatically in your browser. No upload, no signup.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://mohibb.com/roomplanner/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Room Planner — Top-Down Floorplan Tool | Mohibb Malik</title>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mohibb Malik">
+<meta property="og:title" content="Room Planner — Top-Down Floorplan Tool">
+<meta property="og:description" content="A free top-down floorplan tool — set room dimensions, drag and rotate furniture, add windows. Everything saves automatically in your browser.">
+<meta property="og:url" content="https://mohibb.com/roomplanner/">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Room Planner — Top-Down Floorplan Tool">
+<meta name="twitter:description" content="A free top-down floorplan tool — set room dimensions, drag and rotate furniture, add windows. Everything saves automatically in your browser.">
+
+<meta name="theme-color" content="#1b2733">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Room Planner",
+  "url": "https://mohibb.com/roomplanner/",
+  "description": "A top-down floorplan tool — set room dimensions, drag and rotate furniture, add windows. Everything saves automatically in the browser. No upload required.",
+  "applicationCategory": "Utility",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Mohibb Malik",
+    "url": "https://mohibb.com/"
+  }
+}
+</script>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<!-- Laget av Mohibb Malik, 2026 -->
+
+<div class="toprule">
+  <a class="name" href="/">MOHIBB MALIK</a>
+  <a class="back" href="/">&larr; All projects</a>
+</div>
+
+<div class="app">
+  <div id="sidebar">
+    <h1>Room Planner</h1>
+    <div class="sub">Top-down floorplan &middot; scale 80px/m</div>
+
+    <section>
+      <h2>Room</h2>
+      <div class="row2">
+        <div>
+          <label for="roomW">Width (m)</label>
+          <input type="number" id="roomW" step="0.01" min="0.5" inputmode="decimal">
+        </div>
+        <div>
+          <label for="roomH">Depth (m)</label>
+          <input type="number" id="roomH" step="0.01" min="0.5" inputmode="decimal">
+        </div>
+      </div>
+      <label for="roomLabel">Floor label</label>
+      <input type="text" id="roomLabel" placeholder="e.g. Living Room">
+      <label for="roomColor">Floor colour</label>
+      <input type="color" id="roomColor">
+      <button type="button" class="secondary" id="applyRoom">Apply</button>
+    </section>
+
+    <section>
+      <h2>Items</h2>
+      <div id="itemList"></div>
+      <button type="button" id="addItemBtn">+ Add item</button>
+
+      <div id="itemEditor" class="editor" hidden>
+        <label for="edLabel">Label</label>
+        <input type="text" id="edLabel">
+        <div class="row2">
+          <div><label for="edW">Width (m)</label><input type="number" id="edW" step="0.01" min="0.05" inputmode="decimal"></div>
+          <div><label for="edH">Depth (m)</label><input type="number" id="edH" step="0.01" min="0.05" inputmode="decimal"></div>
+        </div>
+        <div class="row2">
+          <div><label for="edX">X centre (m)</label><input type="number" id="edX" step="0.01" inputmode="decimal"></div>
+          <div><label for="edY">Y centre (m)</label><input type="number" id="edY" step="0.01" inputmode="decimal"></div>
+        </div>
+        <label for="edRot">Rotation (&deg;)</label>
+        <input type="number" id="edRot" step="1" inputmode="decimal">
+        <label for="edColor">Colour</label>
+        <input type="color" id="edColor">
+        <button type="button" class="danger" id="deleteItemBtn">Delete item</button>
+      </div>
+      <div class="hint">Drag items to move. Drag the small circle above a selected item to rotate, or type an exact angle above.</div>
+    </section>
+
+    <section>
+      <h2>Windows</h2>
+      <div id="windowList"></div>
+      <label for="winWall">Wall</label>
+      <select id="winWall">
+        <option value="top">Top</option>
+        <option value="right">Right</option>
+        <option value="bottom">Bottom</option>
+        <option value="left">Left</option>
+      </select>
+      <div class="row2">
+        <div><label for="winOffset">Offset from corner (m)</label><input type="number" id="winOffset" step="0.01" min="0" value="0.5" inputmode="decimal"></div>
+        <div><label for="winWidth">Width (m)</label><input type="number" id="winWidth" step="0.01" min="0.1" value="1.2" inputmode="decimal"></div>
+      </div>
+      <button type="button" id="addWinBtn">+ Add window</button>
+      <div class="hint">Offset is measured from the wall's left/top corner (top &amp; bottom walls measure left&rarr;right, side walls measure top&rarr;bottom).</div>
+    </section>
+
+    <section>
+      <h2>Local save</h2>
+      <div id="saveStatus" class="hint" aria-live="polite">&nbsp;</div>
+      <button type="button" class="secondary" id="clearSavedBtn">Clear saved room</button>
+    </section>
+
+    <footer class="note">Everything here is a straight top-down 2D plan &mdash; no perspective or 3D at any point.</footer>
+  </div>
+
+  <div id="canvasWrap">
+    <div id="zoomBar">
+      <button type="button" id="zoomOutBtn" class="secondary zoom-btn" title="Zoom out" aria-label="Zoom out">&minus;</button>
+      <span id="zoomLabel">100%</span>
+      <button type="button" id="zoomInBtn" class="secondary zoom-btn" title="Zoom in" aria-label="Zoom in">+</button>
+      <button type="button" id="zoomResetBtn" class="secondary zoom-btn" title="Reset zoom">Reset</button>
+    </div>
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Top-down room floorplan"></svg>
+  </div>
+</div>
+
+<script src="./script.js"></script>
+</body>
+</html>
