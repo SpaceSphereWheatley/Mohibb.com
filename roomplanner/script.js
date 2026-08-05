@@ -129,14 +129,28 @@
   // canvas itself has touch-action:none, so a single finger on empty room background
   // does nothing — only two fingers move/zoom the room.
   const activePointers = new Map();
-  let pinchStartDist = null;
-  let pinchStartZoom = 1;
-  let pinchLastMid = null;
+  // Pointers currently driving an item move/rotate are never counted toward the
+  // room pan/zoom gesture — otherwise a stray second finger touching down while
+  // one finger is mid-item-drag would read as "two fingers" and pan the room out
+  // from under the drag. Room panning only arms when two *free* fingers are down.
+  const itemDragPointerIds = new Set();
 
   function pointerDist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
   function pointerMid(a, b){ return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
 
+  function excludeFromRoomGesture(pointerId){
+    itemDragPointerIds.add(pointerId);
+    activePointers.delete(pointerId);
+    if(activePointers.size < 2){ pinchStartDist = null; pinchLastMid = null; }
+  }
+  function releaseItemDragPointer(pointerId){ itemDragPointerIds.delete(pointerId); }
+
+  let pinchStartDist = null;
+  let pinchStartZoom = 1;
+  let pinchLastMid = null;
+
   canvasWrap.addEventListener("pointerdown", (e) => {
+    if(itemDragPointerIds.has(e.pointerId)) return;
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if(activePointers.size === 2){
       const pts = Array.from(activePointers.values());
@@ -542,6 +556,7 @@
     e.preventDefault();
     selectItem(item.id);
     try{ svg.setPointerCapture(e.pointerId); }catch(err){}
+    excludeFromRoomGesture(e.pointerId); // this finger is moving an item now — it must never also pan/zoom the room
     const startClientX = e.clientX, startClientY = e.clientY;
     const startX = item.x, startY = item.y;
 
@@ -560,6 +575,7 @@
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onUp);
       try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+      releaseItemDragPointer(e.pointerId);
       renderItemEditor();
       persistNow();
     }
@@ -574,6 +590,7 @@
     e.stopPropagation();
     e.preventDefault();
     try{ svg.setPointerCapture(e.pointerId); }catch(err){}
+    excludeFromRoomGesture(e.pointerId); // this finger is rotating an item now — it must never also pan/zoom the room
     function angleFromEvent(ev){
       const rect = svg.getBoundingClientRect();
       const px = ev.clientX - rect.left - MARGIN;
@@ -596,6 +613,7 @@
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onUp);
       try{ svg.releasePointerCapture(e.pointerId); }catch(err){}
+      releaseItemDragPointer(e.pointerId);
       renderItemEditor();
       persistNow();
     }
