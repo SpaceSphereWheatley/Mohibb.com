@@ -209,7 +209,7 @@ button.danger:hover{ background:#fbeeee; }
     linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 20px 20px,
     #fbfaf6;
   padding:40px;
-  touch-action:pan-x pan-y; /* allow panning to scroll; pinch is handled by JS, scoped to the room */
+  touch-action:none; /* no native touch scrolling at all — one finger drags items, two fingers pan/zoom (both handled in JS) */
 }
 svg{
   display:block;
