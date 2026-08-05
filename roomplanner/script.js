@@ -178,6 +178,18 @@
     document.getElementById("roomColor").value = state.room.floorColor;
   }
 
+  // Keep an item's (rotated) bounding box fully inside the walls — items collide with
+  // walls instead of being draggable/resizable/rotatable out of the room.
+  function clampItemToRoom(item){
+    const rad = item.rot * Math.PI / 180;
+    const halfW = Math.abs(item.w/2 * Math.cos(rad)) + Math.abs(item.h/2 * Math.sin(rad));
+    const halfH = Math.abs(item.w/2 * Math.sin(rad)) + Math.abs(item.h/2 * Math.cos(rad));
+    const minX = halfW, maxX = state.room.w - halfW;
+    const minY = halfH, maxY = state.room.h - halfH;
+    item.x = minX > maxX ? state.room.w / 2 : Math.min(maxX, Math.max(minX, item.x));
+    item.y = minY > maxY ? state.room.h / 2 : Math.min(maxY, Math.max(minY, item.y));
+  }
+
   // Drop/clamp windows that no longer fit once the room has been resized smaller.
   function reconcileWindowsToRoom(){
     state.windows = state.windows.reduce((keep, w) => {
@@ -198,6 +210,8 @@
     state.room.floorLabel = document.getElementById("roomLabel").value;
     state.room.floorColor = document.getElementById("roomColor").value;
     reconcileWindowsToRoom();
+    state.items.forEach(clampItemToRoom);
+    renderItemEditor();
     render();
     persistNow();
   });
@@ -210,6 +224,7 @@
       w: 1, h: 0.6, rot: 0,
       color: "#c9b79c", label: "Item " + id
     });
+    clampItemToRoom(getItem(id));
     selectItem(id);
     render();
     persistNow();
@@ -280,7 +295,8 @@
   }
 
   function bindEditorField(fieldId, prop, isNumber){
-    document.getElementById(fieldId).addEventListener("input", (e) => {
+    const field = document.getElementById(fieldId);
+    field.addEventListener("input", (e) => {
       const item = getItem(state.selectedItemId);
       if(!item) return;
       if(isNumber){
@@ -289,10 +305,17 @@
       } else {
         item[prop] = e.target.value;
       }
+      // Clamp the item silently (the canvas reflects the real, wall-collided position);
+      // resyncing every field on every keystroke would fight the user mid-type (e.g. typing "-2.5").
+      clampItemToRoom(item);
       render();
       renderItemList();
       persistDebounced();
     });
+    // Once editing finishes, snap the displayed value to whatever actually stuck after clamping.
+    if(isNumber){
+      field.addEventListener("change", () => { renderItemEditor(); });
+    }
   }
   bindEditorField("edLabel", "label", false);
   bindEditorField("edW", "w", true);
@@ -517,6 +540,7 @@
       const dy = (ev.clientY - startClientY) / SCALE;
       item.x = startX + dx;
       item.y = startY + dy;
+      clampItemToRoom(item); // slide along the wall instead of dragging out of the room
       render();
     }
     function onUp(ev){
@@ -552,6 +576,7 @@
       let deg = angleFromEvent(ev);
       if(ev.shiftKey) deg = Math.round(deg / 15) * 15;
       item.rot = Math.round(deg);
+      clampItemToRoom(item); // keep the rotated footprint inside the walls
       render();
     }
     function onUp(ev){
@@ -571,6 +596,7 @@
   // ---------- Init ----------
   bindClearSaved();
   const hadSaved = loadSaved();
+  state.items.forEach(clampItemToRoom); // self-heal any item saved out-of-bounds by an older version
   loadRoomInputs();
   render();
   showSaveStatus(
