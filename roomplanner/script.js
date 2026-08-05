@@ -123,13 +123,18 @@
     setZoom(zoom * factor, e.clientX, e.clientY);
   }, { passive: false });
 
-  // Pinch zoom (touch) — scoped to the canvas area only, using capture phase
-  // so it still sees both touches even if an item's own drag handler stops propagation.
+  // Two-finger pan + pinch zoom (touch) — scoped to the canvas area only, using capture
+  // phase so it still sees both touches even if an item's own drag handler stops
+  // propagation. One finger is reserved for dragging items (see startItemDrag); the
+  // canvas itself has touch-action:none, so a single finger on empty room background
+  // does nothing — only two fingers move/zoom the room.
   const activePointers = new Map();
   let pinchStartDist = null;
   let pinchStartZoom = 1;
+  let pinchLastMid = null;
 
   function pointerDist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
+  function pointerMid(a, b){ return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
 
   canvasWrap.addEventListener("pointerdown", (e) => {
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -137,6 +142,7 @@
       const pts = Array.from(activePointers.values());
       pinchStartDist = pointerDist(pts[0], pts[1]);
       pinchStartZoom = zoom;
+      pinchLastMid = pointerMid(pts[0], pts[1]);
     }
   }, { capture: true });
 
@@ -147,14 +153,19 @@
       e.preventDefault();
       const pts = Array.from(activePointers.values());
       const d = pointerDist(pts[0], pts[1]);
-      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      const mid = pointerMid(pts[0], pts[1]);
       setZoom(pinchStartZoom * (d / pinchStartDist), mid.x, mid.y);
+      if(pinchLastMid){
+        canvasWrap.scrollLeft -= (mid.x - pinchLastMid.x);
+        canvasWrap.scrollTop -= (mid.y - pinchLastMid.y);
+      }
+      pinchLastMid = mid;
     }
   }, { capture: true });
 
   function releasePointer(e){
     activePointers.delete(e.pointerId);
-    if(activePointers.size < 2){ pinchStartDist = null; }
+    if(activePointers.size < 2){ pinchStartDist = null; pinchLastMid = null; }
   }
   canvasWrap.addEventListener("pointerup", releasePointer, { capture: true });
   canvasWrap.addEventListener("pointercancel", releasePointer, { capture: true });
