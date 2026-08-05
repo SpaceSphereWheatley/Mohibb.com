@@ -20,6 +20,7 @@
     "http://localhost:8123/pendulum/",
     "http://localhost:8123/waves/",
     "http://localhost:8123/murmuration/",
-    "http://localhost:8123/betting/"
+    "http://localhost:8123/betting/",
+    "http://localhost:8123/roomplanner/"
   ]
 }
