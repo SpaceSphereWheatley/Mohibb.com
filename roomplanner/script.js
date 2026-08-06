@@ -11,6 +11,7 @@
     items: [],
     windows: [],
     selectedItemId: null,
+    selectedWindowId: null,
     nextId: 1
   };
 
@@ -78,7 +79,7 @@
       try{ localStorage.removeItem(STORAGE_KEY); }catch(err){}
       state = {
         room: { w:5, h:4, floorColor:"#e8e4da", floorLabel:"Room" },
-        items: [], windows: [], selectedItemId: null, nextId: 1
+        items: [], windows: [], selectedItemId: null, selectedWindowId: null, nextId: 1
       };
       loadRoomInputs();
       renderItemEditor();
@@ -235,6 +236,10 @@
     state.room.floorLabel = document.getElementById("roomLabel").value;
     state.room.floorColor = document.getElementById("roomColor").value;
     reconcileWindowsToRoom();
+    if(state.selectedWindowId != null && !getWindow(state.selectedWindowId)){
+      state.selectedWindowId = null;
+      resetWinForm();
+    }
     state.items.forEach(clampItemToRoom);
     renderItemEditor();
     render();
@@ -355,7 +360,46 @@
   });
 
   // ---------- Windows ----------
-  function addWindow(){
+  function getWindow(id){ return state.windows.find(w => w.id === id); }
+
+  // The add-window fields double as the edit form: selecting a window (from the
+  // list or the plan) loads its values in and repurposes "+ Add window" into
+  // "Save changes", instead of forcing delete-and-recreate to change one.
+  function resetWinForm(){
+    document.getElementById("winWall").value = "top";
+    document.getElementById("winOffset").value = 0.5;
+    document.getElementById("winWidth").value = 1.2;
+    updateWinFormMode();
+  }
+
+  function updateWinFormMode(){
+    const editing = state.selectedWindowId != null;
+    document.getElementById("addWinBtn").textContent = editing ? "Save changes" : "+ Add window";
+    document.getElementById("cancelWinEditBtn").hidden = !editing;
+    document.getElementById("deleteWinBtn").hidden = !editing;
+  }
+
+  function selectWindow(id){
+    const w = getWindow(id);
+    if(!w) return;
+    state.selectedWindowId = id;
+    document.getElementById("winWall").value = w.wall;
+    document.getElementById("winOffset").value = w.offset;
+    document.getElementById("winWidth").value = w.width;
+    updateWinFormMode();
+    renderWindowList();
+    render();
+  }
+
+  function deselectWindow(){
+    state.selectedWindowId = null;
+    resetWinForm();
+    renderWindowList();
+    render();
+  }
+  document.getElementById("cancelWinEditBtn").addEventListener("click", deselectWindow);
+
+  function addOrUpdateWindow(){
     const wall = document.getElementById("winWall").value;
     const offset = parseFloat(document.getElementById("winOffset").value);
     const width = parseFloat(document.getElementById("winWidth").value);
@@ -365,15 +409,30 @@
       alert("Window doesn't fit on that wall (wall is " + wallLen.toFixed(2) + "m long).");
       return;
     }
-    state.windows.push({ id: newId(), wall, offset, width });
+    const editing = getWindow(state.selectedWindowId);
+    if(editing){
+      editing.wall = wall;
+      editing.offset = offset;
+      editing.width = width;
+    } else {
+      state.windows.push({ id: newId(), wall, offset, width });
+    }
     render();
     renderWindowList();
     persistNow();
   }
-  document.getElementById("addWinBtn").addEventListener("click", addWindow);
+  document.getElementById("addWinBtn").addEventListener("click", addOrUpdateWindow);
+  document.getElementById("deleteWinBtn").addEventListener("click", () => {
+    if(state.selectedWindowId != null) deleteWindow(state.selectedWindowId);
+  });
 
   function deleteWindow(id){
+    const wasSelected = state.selectedWindowId === id;
     state.windows = state.windows.filter(w => w.id !== id);
+    if(wasSelected){
+      state.selectedWindowId = null;
+      resetWinForm();
+    }
     render();
     renderWindowList();
     persistNow();
@@ -391,7 +450,7 @@
     }
     state.windows.forEach(w => {
       const row = document.createElement("div");
-      row.className = "list-item";
+      row.className = "list-item" + (w.id === state.selectedWindowId ? " active" : "");
       row.innerHTML = `<span class="name">${capitalize(w.wall)} &middot; ${w.offset.toFixed(2)}m in &middot; ${w.width.toFixed(2)}m wide</span>`;
       const del = document.createElement("button");
       del.type = "button";
@@ -399,8 +458,9 @@
       del.textContent = "✕";
       del.title = "Delete";
       del.setAttribute("aria-label", "Delete window on " + w.wall + " wall");
-      del.addEventListener("click", () => deleteWindow(w.id));
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteWindow(w.id); });
       row.appendChild(del);
+      row.addEventListener("click", () => selectWindow(w.id));
       list.appendChild(row);
     });
   }
@@ -482,10 +542,20 @@
     else if(w.wall === "left"){ x1=0; y1=off; x2=0; y2=off+len; }
     else { x1=RW; y1=off; x2=RW; y2=off+len; }
 
+    const g = el("g", {
+      class: "window-group" + (w.id === state.selectedWindowId ? " window-selected" : "")
+    });
+    roomG.appendChild(g);
+
     const mark = el("line", { x1,y1,x2,y2, class:"window-mark" });
-    roomG.appendChild(mark);
+    g.appendChild(mark);
     const inner = el("line", { x1,y1,x2,y2, class:"window-inner" });
-    roomG.appendChild(inner);
+    g.appendChild(inner);
+
+    // wider invisible line so the window is easy to tap/click to select
+    const hit = el("line", { x1,y1,x2,y2, class:"window-hit" });
+    hit.addEventListener("pointerdown", (e) => { e.stopPropagation(); selectWindow(w.id); });
+    g.appendChild(hit);
 
     // label, offset outward from the wall
     const midX = (x1+x2)/2, midY=(y1+y2)/2;
@@ -497,7 +567,7 @@
     else { lx += pad; anchor="start"; }
     const label = el("text", { x:lx, y:ly, class:"window-label", "text-anchor":anchor, "dominant-baseline":"middle" });
     label.textContent = w.width.toFixed(2) + "m";
-    roomG.appendChild(label);
+    g.appendChild(label);
   }
 
   function drawItem(roomG, item){

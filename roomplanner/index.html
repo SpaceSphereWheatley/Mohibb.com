@@ -119,8 +119,12 @@
         <div><label for="winOffset">Offset from corner (m)</label><input type="number" id="winOffset" step="0.01" min="0" value="0.5" inputmode="decimal"></div>
         <div><label for="winWidth">Width (m)</label><input type="number" id="winWidth" step="0.01" min="0.1" value="1.2" inputmode="decimal"></div>
       </div>
-      <button type="button" id="addWinBtn">+ Add window</button>
-      <div class="hint">Offset is measured from the wall's left/top corner (top &amp; bottom walls measure left&rarr;right, side walls measure top&rarr;bottom).</div>
+      <div class="row2">
+        <button type="button" id="addWinBtn">+ Add window</button>
+        <button type="button" class="secondary" id="cancelWinEditBtn" hidden>Cancel</button>
+      </div>
+      <button type="button" class="danger" id="deleteWinBtn" hidden>Delete window</button>
+      <div class="hint">Offset is measured from the wall's left/top corner (top &amp; bottom walls measure left&rarr;right, side walls measure top&rarr;bottom). Click a window in the list or on the plan to edit it.</div>
     </section>
 
     <section>
