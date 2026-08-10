@@ -12,6 +12,8 @@
     windows: [],
     selectedItemId: null,
     selectedWindowId: null,
+    measureMode: false,
+    measureIds: [],
     nextId: 1
   };
 
@@ -79,7 +81,8 @@
       try{ localStorage.removeItem(STORAGE_KEY); }catch(err){}
       state = {
         room: { w:5, h:4, floorColor:"#e8e4da", floorLabel:"Room" },
-        items: [], windows: [], selectedItemId: null, selectedWindowId: null, nextId: 1
+        items: [], windows: [], selectedItemId: null, selectedWindowId: null,
+        measureMode: false, measureIds: [], nextId: 1
       };
       loadRoomInputs();
       renderItemEditor();
@@ -276,6 +279,7 @@
   function deleteItem(id){
     state.items = state.items.filter(i => i.id !== id);
     if(state.selectedItemId === id) state.selectedItemId = null;
+    state.measureIds = state.measureIds.filter(mid => mid !== id);
     renderItemEditor();
     render();
     persistNow();
@@ -295,8 +299,10 @@
     }
     state.items.forEach(item => {
       const row = document.createElement("div");
-      row.className = "list-item" + (item.id === state.selectedItemId ? " active" : "");
-      row.innerHTML = `<span><span class="swatch" style="background:${item.color}"></span><span class="name">${escapeHtml(item.label)}</span></span>`;
+      const measureIdx = state.measureIds.indexOf(item.id);
+      row.className = "list-item" + (item.id === state.selectedItemId ? " active" : "") + (measureIdx !== -1 ? " measured" : "");
+      const tagHtml = measureIdx !== -1 ? `<span class="measure-tag">${measureIdx === 0 ? "A" : "B"}</span>` : "";
+      row.innerHTML = `<span><span class="swatch" style="background:${item.color}"></span><span class="name">${escapeHtml(item.label)}</span>${tagHtml}</span>`;
       const del = document.createElement("button");
       del.type = "button";
       del.className = "del";
@@ -465,6 +471,154 @@
     });
   }
 
+  // ---------- Measure ----------
+  function setMeasureMode(on){
+    state.measureMode = on;
+    if(on){
+      // measuring and item-editing are mutually exclusive selections
+      state.selectedItemId = null;
+      renderItemEditor();
+    }
+    updateMeasureToggle();
+    render();
+  }
+
+  function updateMeasureToggle(){
+    const btn = document.getElementById("measureToggleBtn");
+    btn.classList.toggle("active", state.measureMode);
+    btn.textContent = state.measureMode ? "📏 Measuring — click 2 items" : "📏 Measure distance";
+  }
+  document.getElementById("measureToggleBtn").addEventListener("click", () => setMeasureMode(!state.measureMode));
+
+  // Clicking an already-picked item drops it; clicking a third item bumps
+  // the oldest pick out, so there are always at most two (A/B) selected.
+  function toggleMeasureItem(id){
+    const idx = state.measureIds.indexOf(id);
+    if(idx !== -1){
+      state.measureIds.splice(idx, 1);
+    } else {
+      state.measureIds.push(id);
+      if(state.measureIds.length > 2) state.measureIds.shift();
+    }
+    render();
+  }
+
+  function clearMeasure(){
+    state.measureIds = [];
+    render();
+  }
+
+  function renderMeasurePanel(){
+    const hint = document.getElementById("measureHint");
+    const result = document.getElementById("measureResult");
+    const a = getItem(state.measureIds[0]);
+    const b = getItem(state.measureIds[1]);
+
+    if(a && b){
+      hint.textContent = "Click either item again to swap it out, or clear the selection.";
+    } else if(a){
+      hint.textContent = `Pick a second item to measure against "${a.label}".`;
+    } else {
+      hint.textContent = "Click two items on the plan to measure the shortest distance between them.";
+    }
+
+    if(a && b){
+      const { dist } = closestPointsBetweenItems(a, b);
+      result.hidden = false;
+      result.innerHTML = `
+        <div class="pair">${escapeHtml(a.label)} &harr; ${escapeHtml(b.label)}</div>
+        <div class="dist">${dist.toFixed(2)}<span class="unit">m</span></div>
+        <button type="button" class="secondary clear-measure" id="clearMeasureBtn">Clear selection</button>
+      `;
+      document.getElementById("clearMeasureBtn").addEventListener("click", clearMeasure);
+    } else {
+      result.hidden = true;
+      result.innerHTML = "";
+    }
+  }
+
+  // World-space (room-metre) corners of an item's rotated rectangle.
+  function itemCorners(item){
+    const rad = item.rot * Math.PI / 180;
+    const hw = item.w / 2, hh = item.h / 2;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    return [
+      { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }
+    ].map(p => ({
+      x: item.x + p.x * cos - p.y * sin,
+      y: item.y + p.x * sin + p.y * cos
+    }));
+  }
+
+  function clamp01(v){ return Math.min(1, Math.max(0, v)); }
+
+  // Closest points between two line segments (p1-p2 and p3-p4); dist is 0
+  // when the segments cross. Standard closest-point-between-segments method.
+  function closestPointsSegSeg(p1, p2, p3, p4){
+    const d1x = p2.x - p1.x, d1y = p2.y - p1.y;
+    const d2x = p4.x - p3.x, d2y = p4.y - p3.y;
+    const rx = p1.x - p3.x, ry = p1.y - p3.y;
+    const a = d1x * d1x + d1y * d1y;
+    const e = d2x * d2x + d2y * d2y;
+    const f = d2x * rx + d2y * ry;
+    let s, t;
+    if(a <= 1e-9 && e <= 1e-9){
+      s = 0; t = 0;
+    } else if(a <= 1e-9){
+      s = 0;
+      t = clamp01(f / e);
+    } else {
+      const c = d1x * rx + d1y * ry;
+      if(e <= 1e-9){
+        t = 0;
+        s = clamp01(-c / a);
+      } else {
+        const b = d1x * d2x + d1y * d2y;
+        const denom = a * e - b * b;
+        s = denom !== 0 ? clamp01((b * f - c * e) / denom) : 0;
+        t = (b * s + f) / e;
+        if(t < 0){ t = 0; s = clamp01(-c / a); }
+        else if(t > 1){ t = 1; s = clamp01((b - c) / a); }
+      }
+    }
+    const q1 = { x: p1.x + d1x * s, y: p1.y + d1y * s };
+    const q2 = { x: p3.x + d2x * t, y: p3.y + d2y * t };
+    return { dist: Math.hypot(q1.x - q2.x, q1.y - q2.y), p1: q1, p2: q2 };
+  }
+
+  function pointInPolygon(pt, poly){
+    let inside = false;
+    for(let i = 0, j = poly.length - 1; i < poly.length; j = i++){
+      const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+      const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+        (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+      if(intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // Shortest distance between two (possibly rotated) rectangles, plus the
+  // pair of closest points — checked over every edge pair, with a
+  // containment check for one rectangle sitting fully inside the other
+  // (where no edges cross, so the edge-pair scan alone would miss the overlap).
+  function closestPointsBetweenItems(itemA, itemB){
+    const cornersA = itemCorners(itemA);
+    const cornersB = itemCorners(itemB);
+    if(pointInPolygon({ x: itemA.x, y: itemA.y }, cornersB) || pointInPolygon({ x: itemB.x, y: itemB.y }, cornersA)){
+      return { dist: 0, pa: { x: itemA.x, y: itemA.y }, pb: { x: itemB.x, y: itemB.y } };
+    }
+    let best = null;
+    for(let i = 0; i < 4; i++){
+      const a1 = cornersA[i], a2 = cornersA[(i + 1) % 4];
+      for(let j = 0; j < 4; j++){
+        const b1 = cornersB[j], b2 = cornersB[(j + 1) % 4];
+        const r = closestPointsSegSeg(a1, a2, b1, b2);
+        if(!best || r.dist < best.dist) best = r;
+      }
+    }
+    return { dist: best.dist, pa: best.p1, pb: best.p2 };
+  }
+
   // ---------- Helpers ----------
   function round2(n){ return Math.round(n * 100) / 100; }
   function escapeHtml(s){
@@ -527,8 +681,35 @@
     // Items
     state.items.forEach(item => drawItem(roomG, item));
 
+    // Measured distance, drawn on top of everything else
+    if(state.measureIds.length === 2){
+      const a = getItem(state.measureIds[0]);
+      const b = getItem(state.measureIds[1]);
+      if(a && b) drawMeasureLine(roomG, a, b);
+    }
+
     renderItemList();
     renderWindowList();
+    renderMeasurePanel();
+  }
+
+  function drawMeasureLine(roomG, itemA, itemB){
+    const { pa, pb, dist } = closestPointsBetweenItems(itemA, itemB);
+    const x1 = pa.x * SCALE, y1 = pa.y * SCALE;
+    const x2 = pb.x * SCALE, y2 = pb.y * SCALE;
+
+    roomG.appendChild(el("line", { x1, y1, x2, y2, class: "measure-line" }));
+    roomG.appendChild(el("circle", { cx: x1, cy: y1, r: 3.5, class: "measure-endpoint" }));
+    roomG.appendChild(el("circle", { cx: x2, cy: y2, r: 3.5, class: "measure-endpoint" }));
+
+    const text = dist.toFixed(2) + " m";
+    const labelW = Math.max(46, text.length * 7.2 + 14);
+    const g = el("g", { transform: `translate(${(x1+x2)/2},${(y1+y2)/2})` });
+    g.appendChild(el("rect", { class: "measure-label-bg", x: -labelW/2, y: -11, width: labelW, height: 22, rx: 4 }));
+    const label = el("text", { class: "measure-label", x: 0, y: 0.5 });
+    label.textContent = text;
+    g.appendChild(label);
+    roomG.appendChild(g);
   }
 
   function drawWindow(roomG, w){
@@ -570,9 +751,22 @@
     g.appendChild(label);
   }
 
+  // Item clicks pick items for measuring while measure mode is on, instead
+  // of the normal select/drag behaviour.
+  function onItemPointerDown(e, item){
+    if(state.measureMode){
+      e.stopPropagation();
+      e.preventDefault();
+      toggleMeasureItem(item.id);
+      return;
+    }
+    startItemDrag(e, item);
+  }
+
   function drawItem(roomG, item){
     const cx = item.x * SCALE, cy = item.y * SCALE;
     const w = item.w * SCALE, h = item.h * SCALE;
+    const measureIdx = state.measureIds.indexOf(item.id);
     const g = el("g", {
       class: "item-group" + (item.id === state.selectedItemId ? " item-selected" : ""),
       transform: `translate(${cx},${cy}) rotate(${item.rot})`,
@@ -580,7 +774,7 @@
     });
 
     const rect = el("rect", {
-      class: "item-rect",
+      class: "item-rect" + (measureIdx === 0 ? " measure-a" : measureIdx === 1 ? " measure-b" : ""),
       x: -w/2, y: -h/2, width: w, height: h,
       fill: item.color
     });
@@ -590,9 +784,9 @@
     label.textContent = item.label;
     g.appendChild(label);
 
-    rect.addEventListener("pointerdown", (e) => startItemDrag(e, item));
-    label.addEventListener("pointerdown", (e) => startItemDrag(e, item));
-    g.addEventListener("pointerdown", () => selectItem(item.id));
+    rect.addEventListener("pointerdown", (e) => onItemPointerDown(e, item));
+    label.addEventListener("pointerdown", (e) => onItemPointerDown(e, item));
+    g.addEventListener("pointerdown", () => { if(!state.measureMode) selectItem(item.id); });
 
     roomG.appendChild(g);
 
