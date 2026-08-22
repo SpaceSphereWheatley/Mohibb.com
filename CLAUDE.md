@@ -22,6 +22,7 @@ index.html              page shell markup, plus a #groups mount point
 style.css, script.js    page shell styles and render logic
 projects.json           the project list (edit this to update the page)
 pdf/                     PDF Merger tool, served at mohibb.com/pdf/
+renovation/              Renovation Planner, served at mohibb.com/renovation/
 pitwall/                 Pit Wall · Analyse: completed-session analysis, served at mohibb.com/pitwall/
 pitwall/live/            Pit Wall companion: live F1 dashboard, at mohibb.com/pitwall/live/
 spotkick/                Spotkick penalty analytics, served at mohibb.com/spotkick/
@@ -68,6 +69,42 @@ nothing is uploaded.
 It's served at `mohibb.com/pdf/` automatically as part of this same Pages
 deployment (output directory `/` includes `pdf/`) — no separate project or
 domain needed.
+
+## Renovation Planner (mohibb.com/renovation)
+
+`renovation/` is a self-contained, client-side planner for organising a home
+renovation room by room: `index.html` (markup) plus sibling `style.css`/`script.js`,
+no dependencies. It is the *organisational* counterpart to `roomplanner/` — that one
+is spatial (a top-down floorplan), this one is the list side: what colour each room
+is being painted, what still needs buying, what it costs, and which jobs are left.
+The two cross-link from each other's top bar.
+
+Each room holds a status (`planning`/`progress`/`done`), start and target dates, a
+budget, a colour palette (per-surface swatch + paint name/code + finish + litres), a
+buy-list (qty, estimated and actual price each, store, link, bought flag), a job
+checklist (`todo`/`doing`/`done` cycled by one button, with due dates and an overdue
+marker), free-text notes and inspiration links. Money is **NOK**, formatted with
+`toLocaleString("nb-NO")`; measurements are metric.
+
+- **State** is a single `localStorage` slot, `renovationPlannerState_v1`, holding the
+  whole plan. It follows the `roomplanner/script.js` persistence pattern: a
+  `storageAvailable()` probe, debounced writes, an `aria-live` save status, and a
+  clear-everything button behind a `confirm()`. `loadSaved()` runs every field through
+  `normaliseRoom()`, so a partial or older saved blob can never throw. All ids come
+  from one monotonic `state.nextId`.
+- **Rendering** is `render()` = summary + room rail + detail, rebuilt from state.
+  While someone is typing, the `input` handler instead calls `refreshLight()`, which
+  redraws the summary and rail and rewrites only the *derived* read-outs in the detail
+  pane (`refreshDerived()`: line totals, the money totals row, the jobs progress bar).
+  This is deliberate — a full re-render mid-keystroke would destroy the focused input
+  and drop the caret. Only structural changes (add/delete/toggle) and committed
+  `select`/`date` changes trigger a full `render()`.
+- **Events** are delegated from `#roomList` and `#roomDetail` on `data-act` /
+  `data-field` / `data-id` attributes, so dynamically built rows emit **no `id`
+  attributes** (ids must stay unique for html-validate) and are labelled with
+  `aria-label` instead of `<label for>`.
+- Served at `mohibb.com/renovation/` as part of this same Pages deployment — no
+  separate project needed.
 
 ## Pit Wall (mohibb.com/pitwall)
 

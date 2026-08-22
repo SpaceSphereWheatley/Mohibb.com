@@ -450,3 +450,5 @@ footer.note{
     right:max(12px, env(safe-area-inset-right));
   }
 }
+
+.toprule-links{display:flex;gap:14px;align-items:center;}

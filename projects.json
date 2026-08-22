@@ -94,6 +94,13 @@
           "description": "A top-down floorplan tool — set room dimensions, drag and rotate furniture, add windows. Everything saves automatically in your browser.",
           "url": "/roomplanner/",
           "status": "live"
+        },
+        {
+          "name": "Renovation Planner",
+          "category": "Utility · home",
+          "description": "Organise a renovation room by room — colour palettes, things to buy, budgets, jobs and notes. Everything saves automatically in your browser.",
+          "url": "/renovation/",
+          "status": "live"
         }
       ]
     },
