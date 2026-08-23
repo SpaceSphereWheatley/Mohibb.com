@@ -102,7 +102,10 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:po
 .row-main{flex:1;min-width:0;}
 .row-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .swatch-lg{width:46px;height:46px;border:1.5px solid var(--line);flex:none;}
-.colour-hex{font-family:var(--mono);font-size:11px;color:var(--ink-3);text-transform:uppercase;}
+.code-input{font-family:var(--mono);text-transform:uppercase;}
+.code-input.invalid{border-color:var(--red);}
+.code-note{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:4px;text-transform:uppercase;letter-spacing:0.02em;}
+.code-note.bad{color:var(--red);}
 .item-done .row-main{opacity:0.5;}
 .item-done .item-name{text-decoration:line-through;}
 .item-name{font-weight:600;font-size:14px;}

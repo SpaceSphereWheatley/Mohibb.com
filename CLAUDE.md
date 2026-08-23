@@ -23,6 +23,7 @@ style.css, script.js    page shell styles and render logic
 projects.json           the project list (edit this to update the page)
 pdf/                     PDF Merger tool, served at mohibb.com/pdf/
 renovation/              Renovation Planner, served at mohibb.com/renovation/
+                         (ral.js = RAL Classic code→hex lookup)
 pitwall/                 Pit Wall · Analyse: completed-session analysis, served at mohibb.com/pitwall/
 pitwall/live/            Pit Wall companion: live F1 dashboard, at mohibb.com/pitwall/live/
 spotkick/                Spotkick penalty analytics, served at mohibb.com/spotkick/
@@ -80,7 +81,7 @@ is being painted, what still needs buying, what it costs, and which jobs are lef
 The two cross-link from each other's top bar.
 
 Each room holds a status (`planning`/`progress`/`done`), start and target dates, a
-budget, a colour palette (per-surface swatch + paint name/code + finish + litres), a
+budget, a colour palette (per-surface swatch + colour code + paint product + finish + litres), a
 buy-list (qty, estimated and actual price each, store, link, bought flag), a job
 checklist (`todo`/`doing`/`done` cycled by one button, with due dates and an overdue
 marker), free-text notes and inspiration links. Money is **NOK**, formatted with
@@ -99,6 +100,17 @@ marker), free-text notes and inspiration links. Money is **NOK**, formatted with
   This is deliberate — a full re-render mid-keystroke would destroy the focused input
   and drop the caret. Only structural changes (add/delete/toggle) and committed
   `select`/`date` changes trigger a full `render()`.
+- **Colour codes**: each swatch has a free-text code field accepting **RAL Classic**
+  (`RAL 9010`, `ral9010`, `RAL-9010`), hex (`#EDE8DD`, `EDE8DD`, `#abc`), rgb
+  (`rgb(237, 232, 221)`, `237,232,221`, `237 232 221`) and CSS names (`seagreen`).
+  `parseColour()` handles RAL via the `RAL_CLASSIC` table in `renovation/ral.js`
+  (213 codes, loaded as a plain `<script src>` before `script.js`); everything else
+  goes to `cssToHex()`, which sets the value on a hidden probe element and reads back
+  `getComputedStyle().color` — so the browser's own CSS parser does the work and
+  invalid input is rejected for free. The resolved hex drives the swatch, the colour
+  picker and the rail; picking from the picker writes the hex back into the code
+  field. Unrecognised input keeps the last good colour and flags the field.
+  RAL hexes are approximate sRGB renderings of a physical standard — the UI says so.
 - **Events** are delegated from `#roomList` and `#roomDetail` on `data-act` /
   `data-field` / `data-id` attributes, so dynamically built rows emit **no `id`
   attributes** (ids must stay unique for html-validate) and are labelled with
