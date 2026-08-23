@@ -21,6 +21,7 @@
     "http://localhost:8123/waves/",
     "http://localhost:8123/murmuration/",
     "http://localhost:8123/betting/",
-    "http://localhost:8123/roomplanner/"
+    "http://localhost:8123/roomplanner/",
+    "http://localhost:8123/renovation/"
   ]
 }
