@@ -65,9 +65,11 @@
       budget: num(r.budget),
       notes: str(r.notes),
       colours: arr(r.colours).map(function(c){
+        var hex = /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? c.hex.toUpperCase() : "#D8D2C4";
         return {
           id: typeof c.id === "number" ? c.id : ids(),
-          name: str(c.name), hex: /^#[0-9a-f]{6}$/i.test(str(c.hex)) ? c.hex : "#d8d2c4",
+          name: str(c.name), hex: hex,
+          code: str(c.code) || hex,
           paint: str(c.paint),
           finish: FINISHES.indexOf(c.finish) >= 0 ? c.finish : "Matt",
           litres: num(c.litres)
@@ -167,6 +169,46 @@
     }).join("");
   }
 
+  // ---------- Colour codes: RAL / hex / rgb / CSS names ----------
+  // A hidden probe lets the browser's own CSS parser resolve anything it knows
+  // (#abc, #aabbcc, rgb(), hsl(), "seagreen"), so only RAL needs a lookup table.
+  var probe = document.createElement("span");
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+
+  function cssToHex(value){
+    probe.style.color = "";
+    probe.style.color = value;               // the CSSOM drops anything invalid
+    if(!probe.style.color) return null;
+    var computed = window.getComputedStyle(probe).color;
+    var m = computed.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if(!m) return null;
+    return "#" + [1, 2, 3].map(function(i){
+      return ("0" + parseInt(m[i], 10).toString(16)).slice(-2);
+    }).join("").toUpperCase();
+  }
+
+  // Returns { hex, label } for a recognised code, or null.
+  function parseColour(input){
+    var raw = String(input == null ? "" : input).trim();
+    if(!raw) return null;
+
+    var ral = raw.match(/^ral\s*[-\s]?\s*(\d{3,4})$/i);
+    if(ral){
+      var hex = RAL_CLASSIC[ral[1]];
+      return hex ? { hex: hex, label: "RAL " + ral[1] } : null;
+    }
+
+    var css = raw;
+    if(/^([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw)) css = "#" + raw;          // bare hex
+    else if(/^\d{1,3}\s*[,\s]\s*\d{1,3}\s*[,\s]\s*\d{1,3}$/.test(raw)) {   // bare r,g,b
+      css = "rgb(" + raw.replace(/\s*[,\s]\s*/g, ",") + ")";
+    }
+    var resolved = cssToHex(css);
+    return resolved ? { hex: resolved, label: null } : null;
+  }
+
   // ---------- Rendering: whole-project summary ----------
   function renderSummary(){
     var est = 0, spent = 0, remaining = 0, budget = 0, hasBudget = false, doneRooms = 0;
@@ -251,18 +293,21 @@
 
   function coloursSection(room){
     var rows = room.colours.map(function(c){
+      var parsed = parseColour(c.code);
       return '<div class="row" data-id="' + c.id + '">' +
         '<span class="swatch-lg" style="background:' + esc(c.hex) + '"></span>' +
         '<div class="row-main">' +
           '<div class="grid-3">' +
             field("Surface", '<input type="text" value="' + esc(c.name) + '" placeholder="Walls" data-act="colour-field" data-field="name" aria-label="Surface name">') +
-            field("Paint / code", '<input type="text" value="' + esc(c.paint) + '" placeholder="Jotun 1024" data-act="colour-field" data-field="paint" aria-label="Paint name or code">') +
-            field("Colour", '<input type="color" value="' + esc(c.hex) + '" data-act="colour-field" data-field="hex" aria-label="Colour">') +
+            field("Paint / product", '<input type="text" value="' + esc(c.paint) + '" placeholder="Jotun Lady Pure Colour" data-act="colour-field" data-field="paint" aria-label="Paint name or product">') +
+            field("Colour code", '<input type="text" class="code-input' + (parsed ? "" : " invalid") + '" value="' + esc(c.code) +
+              '" placeholder="RAL 9010" data-act="colour-field" data-field="code" aria-label="Colour code — RAL, hex or rgb">' +
+              '<div class="code-note' + (parsed ? "" : " bad") + '">' + esc(codeNote(c.code, parsed)) + "</div>") +
           "</div>" +
           '<div class="grid-3">' +
             field("Finish", '<select data-act="colour-field" data-field="finish" aria-label="Paint finish">' + optionsHtml(FINISHES, c.finish) + "</select>") +
             field("Litres needed", '<input type="number" min="0" step="0.5" value="' + (c.litres === null ? "" : c.litres) + '" data-act="colour-field" data-field="litres" aria-label="Litres needed">') +
-            '<div class="field"><span class="lbl">Hex</span><div class="colour-hex mt-8">' + esc(c.hex) + "</div></div>" +
+            field("Or pick", '<input type="color" value="' + esc(c.hex) + '" data-act="colour-field" data-field="hex" aria-label="Pick a colour">') +
           "</div>" +
         "</div>" +
         '<button type="button" class="btn-x" data-act="delete-colour" aria-label="Delete this colour">&times;</button>' +
@@ -272,7 +317,21 @@
       '<div class="sec-head"><h3 class="sec-title">Colours</h3>' +
       '<button type="button" class="btn-sm" data-act="add-colour">+ Add colour</button></div>' +
       (rows || '<p class="empty-hint">No colours picked yet &mdash; add one per surface (walls, trim, ceiling).</p>') +
+      '<p class="hint mt-12">Colour codes accept RAL Classic (RAL 9010), hex (#EDE8DD or EDE8DD), ' +
+      'rgb(237, 232, 221) or 237,232,221, and CSS names like seagreen. RAL swatches are an ' +
+      'approximate on-screen match &mdash; check a physical fan deck before you buy.</p>' +
       "</div>";
+  }
+
+  function syncSwatch(row, hex){
+    var swatch = row.querySelector(".swatch-lg");
+    if(swatch) swatch.style.background = hex;
+  }
+
+  function codeNote(code, parsed){
+    if(!String(code || "").trim()) return "Empty — using the picked colour.";
+    if(!parsed) return "Not recognised.";
+    return parsed.label ? parsed.label + " · " + parsed.hex : parsed.hex;
   }
 
   function itemsSection(room, t){
@@ -451,7 +510,7 @@
       state.rooms = state.rooms.filter(function(r){ return r.id !== room.id; });
       state.selectedRoomId = state.rooms.length ? state.rooms[0].id : null;
     } else if(act === "add-colour"){
-      room.colours.push({ id: nextId(), name: "", hex: "#d8d2c4", paint: "", finish: "Matt", litres: null });
+      room.colours.push({ id: nextId(), name: "", hex: "#D8D2C4", code: "#D8D2C4", paint: "", finish: "Matt", litres: null });
     } else if(act === "delete-colour"){
       room.colours = room.colours.filter(function(c){ return c.id !== rowId(el); });
     } else if(act === "add-item"){
@@ -507,12 +566,42 @@
 
     // Update the bits that can change under a keystroke without re-rendering
     // the pane the caret lives in.
-    if(el.getAttribute("data-act") === "colour-field" && el.getAttribute("data-field") === "hex"){
+    if(el.getAttribute("data-act") === "colour-field"){
+      var fieldName = el.getAttribute("data-field");
       var row = el.closest("[data-id]");
-      var swatch = row && row.querySelector(".swatch-lg");
-      var hexLabel = row && row.querySelector(".colour-hex");
-      if(swatch) swatch.style.background = el.value;
-      if(hexLabel) hexLabel.textContent = el.value;
+      var colour = row && findIn(room.colours, parseInt(row.getAttribute("data-id"), 10));
+
+      if(colour && fieldName === "code"){
+        // Typed a code: resolve it, and keep the swatch and picker in step.
+        var parsed = parseColour(colour.code);
+        if(parsed) colour.hex = parsed.hex;
+        el.classList.toggle("invalid", !parsed && colour.code.trim() !== "");
+        var note = row.querySelector(".code-note");
+        if(note){
+          note.textContent = codeNote(colour.code, parsed);
+          note.classList.toggle("bad", !parsed && colour.code.trim() !== "");
+        }
+        syncSwatch(row, colour.hex);
+        var picker = row.querySelector('input[type="color"]');
+        if(picker && parsed) picker.value = colour.hex;
+      }
+
+      if(colour && fieldName === "hex"){
+        // Picked from the swatch: mirror it back into the code field as hex.
+        colour.hex = String(el.value).toUpperCase();
+        colour.code = colour.hex;
+        var codeInput = row.querySelector(".code-input");
+        if(codeInput){
+          codeInput.value = colour.hex;
+          codeInput.classList.remove("invalid");
+        }
+        var hexNote = row.querySelector(".code-note");
+        if(hexNote){
+          hexNote.textContent = colour.hex;
+          hexNote.classList.remove("bad");
+        }
+        syncSwatch(row, colour.hex);
+      }
     }
     if(el.getAttribute("data-act") === "room-field" && el.getAttribute("data-field") === "name"){
       var title = detail.querySelector(".detail-title");
