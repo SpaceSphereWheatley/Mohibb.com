@@ -2,3 +2,13 @@ node_modules/
 .statsbomb-cache/
 .DS_Store
 .wrangler/
+
+# Atlas (atlas-src/) is a Next.js app that builds into /atlas at deploy time.
+# The published output is generated, never committed.
+/atlas/
+atlas-src/.next/
+atlas-src/out/
+# Written by `next dev`; this repo keeps its agent instructions at the root.
+atlas-src/AGENTS.md
+atlas-src/CLAUDE.md
+atlas-src/*.tsbuildinfo
