@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/*
+ * Engineering palette. Deliberately desaturated everywhere except the two car
+ * colours and the compound swatches, so that the only saturated pixels on
+ * screen are the ones carrying data.
+ */
+@theme {
+  --color-surface: #090a0f;
+  --color-panel: #12151e;
+  --color-panel-2: #171b27;
+  --color-edge: #1f2433;
+  --color-edge-soft: #191d29;
+
+  --color-ink: #e6eaf2;
+  --color-ink-2: #9aa4bb;
+  --color-ink-3: #5f6880;
+
+  --color-ref: #38bdf8;
+  --color-cmp: #f87171;
+
+  --color-soft: #ef4444;
+  --color-medium: #eab308;
+  --color-hard: #ffffff;
+  --color-inter: #10b981;
+  --color-wet: #3b82f6;
+
+  --color-good: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #fb7185;
+
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-tabular), ui-monospace, "SFMono-Regular", monospace;
+}
+
+/*
+ * Every numeral in the interface is tabular. Without this, scrubbing a
+ * telemetry cursor makes each readout twitch as digit widths change, which is
+ * both ugly and genuinely hard to read at speed.
+ */
+:root {
+  color-scheme: dark;
+  font-variant-numeric: tabular-nums;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+table,
+input,
+select,
+button {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border: 2px solid var(--color-surface);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2b3245;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ref);
+  outline-offset: 1px;
+}
+
+/* react-grid-layout ------------------------------------------------------- */
+
+.react-grid-item.react-grid-placeholder {
+  background: color-mix(in srgb, var(--color-ref) 18%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--color-ref) 55%, transparent);
+  border-radius: 4px;
+  opacity: 1;
+  transition-duration: 80ms;
+}
+
+.react-grid-item > .react-resizable-handle {
+  width: 16px;
+  height: 16px;
+  right: 2px;
+  bottom: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 0.65;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: var(--color-ink-3);
+  border-bottom-color: var(--color-ink-3);
+  width: 7px;
+  height: 7px;
+  right: 4px;
+  bottom: 4px;
+}
+
+.grid-locked .react-grid-item > .react-resizable-handle {
+  display: none;
+}
+
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging {
+  z-index: 20;
+}
+
+/* uPlot ------------------------------------------------------------------- */
+
+.uplot,
+.uplot * {
+  font-family: var(--font-mono);
+}
+
+.u-select {
+  background: color-mix(in srgb, var(--color-ref) 14%, transparent);
+}
+
+.u-cursor-x,
+.u-cursor-y {
+  border-color: color-mix(in srgb, var(--color-ink) 45%, transparent);
+}
+
+.u-axis {
+  color: var(--color-ink-3);
+}
