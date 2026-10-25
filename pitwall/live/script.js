@@ -265,7 +265,7 @@ const TEAM_COLOURS = {
   'aston martin':'#229971','alpine':'#0093CC','alpine f1 team':'#0093CC','williams':'#64C4FF',
   'rb':'#6692FF','rb f1 team':'#6692FF','racing bulls':'#6692FF','haas':'#B6BABD','haas f1 team':'#B6BABD',
   'sauber':'#52E252','kick sauber':'#52E252','alfa romeo':'#52E252',
-  'audi':'#009B3A','cadillac':'#B89B5E',
+  'audi':'#FF2D00','cadillac':'#444444',
 };
 function teamColourByName(name){
   const k = (name||'').toLowerCase();
