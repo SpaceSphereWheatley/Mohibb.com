@@ -306,6 +306,23 @@ const seasonState = {
 const teamHex = (name) => { const c = teamColourByName(name); return c.startsWith('#') ? c : '#8C8475'; };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+/* short x-axis label for a round, from its country */
+function roundCode(race){
+  const country = race.Circuit?.Location?.country || '';
+  return COUNTRY_CODES[country] || country.slice(0, 3).toUpperCase() || ('R' + race.round);
+}
+/* short end-of-line label for a constructor (full names stay in the legend and tooltip) */
+const TEAM_CODES = [
+  ['red bull','RBR'],['racing bulls','RB'],['rb f1','RB'],['mclaren','MCL'],['ferrari','FER'],
+  ['mercedes','MER'],['aston martin','AMR'],['alpine','ALP'],['williams','WIL'],['haas','HAA'],
+  ['sauber','SAU'],['audi','AUD'],['cadillac','CAD'],
+];
+function teamCode(name){
+  const k = (name || '').toLowerCase();
+  const hit = TEAM_CODES.find(([key]) => k.includes(key)) || (k === 'rb' && ['rb', 'RB']);
+  return hit ? hit[1] : (name || '').slice(0, 3).toUpperCase();
+}
+
 /* fetch every page of a results endpoint, merging races split across pages */
 async function fetchSeasonResults(season, kind){
   const key = kind === 'sprint' ? 'SprintResults' : 'Results';
@@ -331,10 +348,9 @@ function buildSeason(season, races, sprints, dList, cList, calendar){
   const roundNums = [...new Set([...races.keys(), ...sprints.keys()])].sort((a, b) => a - b);
   const rounds = roundNums.map(r => {
     const race = (races.get(r) || sprints.get(r)).race;
-    const country = race.Circuit?.Location?.country || '';
     return {
       round: r,
-      code: COUNTRY_CODES[country] || country.slice(0, 3).toUpperCase() || ('R' + r),
+      code: roundCode(race),
       name: race.raceName || ('Round ' + r),
       sprint: sprints.has(r),
       race: races.has(r),
@@ -385,7 +401,7 @@ function buildSeason(season, races, sprints, dList, cList, calendar){
     return race || sprint ? [{ round: c.round, name: c.name, race, sprint }] : [];
   }) : null;
 
-  return { season, rounds, drivers: dOrdered, constructors: cOrdered, mismatch, remaining };
+  return { season, rounds, drivers: dOrdered, constructors: cOrdered, mismatch, remaining, calendar };
 }
 
 /* the season calendar: [{round, name, sprint}] */
@@ -393,6 +409,7 @@ async function fetchSeasonCalendar(season){
   const j = await getJSON(JOLPI + season + '.json');
   return (j?.MRData?.RaceTable?.Races || []).map(r => ({
     round: num(r.round), name: r.raceName || ('Round ' + r.round), sprint: !!r.Sprint,
+    code: roundCode(r),
   })).filter(c => c.round != null);
 }
 
@@ -407,7 +424,7 @@ async function loadSeason(dList, cList){
   if (seasonState.sig === sig && seasonState.data) return;   // nothing changed since last render
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(SEASON_CACHE_KEY)); } catch {}
-  if (cached?.sig === sig && cached.data && 'remaining' in cached.data){
+  if (cached?.sig === sig && cached.data && 'calendar' in cached.data){
     setSeasonData(cached.data, sig);
     return;
   }
@@ -505,7 +522,7 @@ function clinchSummary(data, who){
   // clinching needs a lead greater than what's left once the next round is done
   const next = data.remaining[0], w = eventPts(who, next);
   const need = (left - w) + 1 - gap;             // points to gain on P2 at the next round
-  const rest = alive > 1 ? ' and stays out of reach of the rest' : '';
+  const rest = alive > 1 ? ' and staying out of reach of the rest' : '';
   if (need <= 0){
     text += `${L} clinches at the ${esc(next.name)} unless ${S} outscores them there by ${1 - need} or more.`;
   } else if (need <= w){
@@ -531,7 +548,10 @@ function renderSeason(animate = true){
 
   document.querySelectorAll('[data-season-who]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.seasonWho === who)));
   document.querySelectorAll('[data-season-measure]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.seasonMeasure === measure)));
-  $('seasonTitle').textContent = data.season + ' season so far · ' + data.rounds.length + (data.rounds.length === 1 ? ' round' : ' rounds');
+  const done = data.rounds.filter(r => r.race).length;
+  $('seasonTitle').textContent = data.calendar
+    ? `${data.season} season · ${done} of ${data.calendar.length} rounds`
+    : `${data.season} season so far · ${done} round${done === 1 ? '' : 's'}`;
 
   $('seasonLegend').innerHTML = list.map(e => {
     const label = who === 'drivers' ? e.code : e.name;
@@ -584,13 +604,21 @@ function drawSeasonChart(list, series, hl, animate){
   const { data, who, measure } = seasonState;
   const ctx = $('seasonChart'); if (!ctx) return;
   const anyHl = hl.size > 0;
+
+  // x axis is the whole calendar (when known), so every view shares it and the season's length is visible;
+  // ri[x] maps an axis slot to its completed round in data.rounds, or -1 for rounds still to come
+  const axis = data.calendar?.length ? data.calendar : data.rounds;
+  const byRound = new Map(data.rounds.map((r, i) => [r.round, i]));
+  const ri = axis.map(a => byRound.get(a.round) ?? -1);
+  const onAxis = (arr) => ri.map(i => i < 0 ? null : arr[i]);
+
   const datasets = list.map((e, i) => {
     const on = hl.has(e.id);
     const colour = teamHex(who === 'drivers' ? e.team : e.name);
     return {
       label: who === 'drivers' ? e.code : e.name,
-      data: series[i],
-      _id: e.id, _hl: on, _short: who === 'drivers' ? e.code : e.name.replace(/ F1 Team$/, ''),
+      data: onAxis(series[i]),
+      _id: e.id, _hl: on, _short: who === 'drivers' ? e.code : teamCode(e.name),
       borderColor: on || !anyHl ? colour : SEASON_MUTED,
       backgroundColor: on || !anyHl ? colour : SEASON_MUTED,
       borderWidth: on ? 2.25 : 1.25,
@@ -602,14 +630,18 @@ function drawSeasonChart(list, series, hl, animate){
   });
 
   // elimination line: the leader's total minus everything still up for grabs — anyone below it can't win
-  const left = pointsLeftAfter(data, who);
+  // points still available after each axis slot; future rounds count down to 0 at the finale
+  const doneLeft = pointsLeftAfter(data, who);
+  const left = doneLeft && axis.map((a, x) => ri[x] >= 0 ? doneLeft[ri[x]]
+    : data.remaining.filter(ev => ev.round > a.round).reduce((t, ev) => t + eventPts(who, ev), 0));
   let floor = 0;
   if (left){
     const leader = data.rounds.map((_, i) => Math.max(...series.map(s => s[i] ?? -Infinity)));
     if (measure === 'gap') floor = Math.min(...series.flat().filter(v => v != null));
     datasets.push({
       label: 'Out of reach', _limit: true, _short: 'OUT ↓',
-      data: left.map((l, i) => (measure === 'gap' ? 0 : leader[i]) - l),
+      // gap view: the funnel runs to the finale; points view: the leader's future total is unknown, so stop at today
+      data: left.map((l, x) => measure === 'gap' ? -l : (ri[x] >= 0 ? leader[ri[x]] - l : null)),
       borderColor: '#B4471F', backgroundColor: 'rgba(180,71,31,0.07)', fill: 'start',
       borderWidth: 1.5, borderDash: [2, 3], pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0,
       tension: 0, order: 2,     // behind every driver line
@@ -619,11 +651,12 @@ function drawSeasonChart(list, series, hl, animate){
   const base = chartBase({ yTitle: measure === 'gap' ? 'pts behind leader' : 'points' });
   // the elimination line starts far below everyone early in the season — don't let it set the scale
   base.scales.y.min = measure === 'gap' ? Math.floor(Math.min(floor, -1) / 50) * 50 : 0;
-  base.layout = { padding: { right: who === 'drivers' ? 34 : 84, top: 6 } };
+  base.layout = { padding: { right: 40, top: 6 } };
+  base.scales.y.afterFit = (scale) => { scale.width = 52; };   // fixed, so every view lines the rounds up identically
   if (!animate) base.animation = false;
   base.interaction = { mode: 'index', intersect: false };
   base.scales.x.grid.color = 'transparent';
-  base.scales.x.ticks.callback = (_, i) => data.rounds[i] ? data.rounds[i].code + (data.rounds[i].sprint ? '*' : '') : '';
+  base.scales.x.ticks.callback = (_, i) => axis[i] ? axis[i].code + (axis[i].sprint ? '*' : '') : '';
   base.scales.y.ticks.precision = 0;
   base.plugins.tooltip = {
     ...base.plugins.tooltip,
@@ -632,10 +665,10 @@ function drawSeasonChart(list, series, hl, animate){
     footerColor: '#8F371A', footerFont: { family: "'IBM Plex Mono',monospace", size: 11, weight: '600' },
     callbacks: {
       footer: (items) => left && items.length ? `Max points left: ${left[items[0].dataIndex]}` : '',
-      title: (items) => { const r = data.rounds[items[0].dataIndex]; return r ? `R${r.round} · ${r.name}${r.sprint ? ' (+ sprint)' : ''}` : ''; },
+      title: (items) => { const r = axis[items[0].dataIndex]; return r ? `R${r.round} · ${r.name}${r.sprint ? ' (+ sprint)' : ''}` : ''; },
       label: (item) => {
         const e = list[item.datasetIndex];
-        const gained = e.pts[item.dataIndex] || 0;
+        const gained = e.pts[ri[item.dataIndex]] || 0;
         const v = item.parsed.y;
         return ` ${item.dataset.label}  ${measure === 'gap' ? (v === 0 ? 'leader' : v) : v}  (+${gained} this round)`;
       },
@@ -648,7 +681,7 @@ function drawSeasonChart(list, series, hl, animate){
   };
 
   destroyChart('season');
-  state.charts.season = new Chart(ctx, { type: 'line', data: { labels: data.rounds.map(r => r.round), datasets }, options: base, plugins: [seasonEndLabels] });
+  state.charts.season = new Chart(ctx, { type: 'line', data: { labels: axis.map(r => r.round), datasets }, options: base, plugins: [seasonEndLabels] });
 }
 
 function toggleSeasonHighlight(id){

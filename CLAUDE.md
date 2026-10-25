@@ -161,7 +161,9 @@ projection, estimated pit loss), toggled by `#viewTabs`.
     a sentence above the chart says what the leader needs to clinch (strict
     "lead > points left" — ties go to countback), and a dashed elimination
     line (leader minus max points still available, `MAX_PTS`) shades the
-    out-of-reach zone.
+    out-of-reach zone. The x axis is always the full calendar (future rounds
+    empty), with a fixed y-axis width and right padding so every view lines
+    up identically.
   - Liveness: `sessions?session_key=latest` decides LIVE (now between
     `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case
     and is a designed screen (next-race countdown in Europe/Oslo time), not
