@@ -283,6 +283,11 @@ const SEASON_CACHE_KEY = 'pitwall.season';
 const SEASON_PAGE = 100;                 // Jolpica's max page size (counts result rows, not races)
 const SEASON_HIGHLIGHT = 5;              // series shown in colour by default
 const SEASON_MUTED = '#C9C0AE';
+// most points one entry can take from a single race / sprint (no fastest-lap point since 2025)
+const MAX_PTS = {
+  drivers:      { race: 25, sprint: 8 },
+  constructors: { race: 25 + 18, sprint: 8 + 7 },
+};
 const COUNTRY_CODES = {
   'Australia':'AUS','China':'CHN','Japan':'JPN','Bahrain':'BHR','Saudi Arabia':'KSA',
   'USA':'USA','United States':'USA','Italy':'ITA','Monaco':'MON','Spain':'ESP','Canada':'CAN',
@@ -322,7 +327,7 @@ async function fetchSeasonResults(season, kind){
 }
 
 /* turn raw results into per-round points for every driver/constructor, ordered by the standings */
-function buildSeason(season, races, sprints, dList, cList){
+function buildSeason(season, races, sprints, dList, cList, calendar){
   const roundNums = [...new Set([...races.keys(), ...sprints.keys()])].sort((a, b) => a - b);
   const rounds = roundNums.map(r => {
     const race = (races.get(r) || sprints.get(r)).race;
@@ -332,6 +337,7 @@ function buildSeason(season, races, sprints, dList, cList){
       code: COUNTRY_CODES[country] || country.slice(0, 3).toUpperCase() || ('R' + r),
       name: race.raceName || ('Round ' + r),
       sprint: sprints.has(r),
+      race: races.has(r),
     };
   });
   const drivers = new Map(), teams = new Map();
@@ -373,7 +379,21 @@ function buildSeason(season, races, sprints, dList, cList){
   const official = new Map((dList.DriverStandings || []).map(s => [s.Driver?.driverId, num(s.points)]));
   const mismatch = dOrdered.filter(e => official.has(e.id) && Math.abs(official.get(e.id) - total(e)) > 0.01).length;
 
-  return { season, rounds, drivers: dOrdered, constructors: cOrdered, mismatch };
+  // races/sprints still to run, from the season calendar; null if the calendar couldn't be loaded
+  const remaining = calendar ? calendar.flatMap(c => {
+    const race = !races.has(c.round), sprint = c.sprint && !sprints.has(c.round);
+    return race || sprint ? [{ round: c.round, name: c.name, race, sprint }] : [];
+  }) : null;
+
+  return { season, rounds, drivers: dOrdered, constructors: cOrdered, mismatch, remaining };
+}
+
+/* the season calendar: [{round, name, sprint}] */
+async function fetchSeasonCalendar(season){
+  const j = await getJSON(JOLPI + season + '.json');
+  return (j?.MRData?.RaceTable?.Races || []).map(r => ({
+    round: num(r.round), name: r.raceName || ('Round ' + r.round), sprint: !!r.Sprint,
+  })).filter(c => c.round != null);
 }
 
 /* signature of the standings — changes whenever any points are scored or adjusted */
@@ -387,7 +407,7 @@ async function loadSeason(dList, cList){
   if (seasonState.sig === sig && seasonState.data) return;   // nothing changed since last render
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(SEASON_CACHE_KEY)); } catch {}
-  if (cached?.sig === sig && cached.data){
+  if (cached?.sig === sig && cached.data && 'remaining' in cached.data){
     setSeasonData(cached.data, sig);
     return;
   }
@@ -395,7 +415,10 @@ async function loadSeason(dList, cList){
     const races = await fetchSeasonResults(dList.season, 'race');
     const sprints = await fetchSeasonResults(dList.season, 'sprint');
     if (!races.size && !sprints.size) throw new Error('no results');
-    const data = buildSeason(dList.season, races, sprints, dList, cList);
+    let calendar = null;
+    try { calendar = await fetchSeasonCalendar(dList.season); }
+    catch (e){ logError('season calendar', e); }     // chart still works, just without the clinch maths
+    const data = buildSeason(dList.season, races, sprints, dList, cList, calendar);
     setSeasonData(data, sig);
     try { localStorage.setItem(SEASON_CACHE_KEY, JSON.stringify({ sig, data, at: Date.now() })); } catch {}
   } catch (e){
@@ -438,6 +461,67 @@ function seasonSeries(){
   return series;
 }
 
+/* ---------- title maths: what the leader needs to clinch ---------- */
+const eventPts = (who, ev) => (ev.race ? MAX_PTS[who].race : 0) + (ev.sprint ? MAX_PTS[who].sprint : 0);
+
+/* most points one entry can still score after each completed round (index-aligned with data.rounds) */
+function pointsLeftAfter(data, who){
+  if (!data.remaining) return null;
+  const tail = data.remaining.reduce((a, ev) => a + eventPts(who, ev), 0);
+  const out = new Array(data.rounds.length);
+  let acc = tail;
+  for (let i = data.rounds.length - 1; i >= 0; i--){
+    out[i] = acc;
+    acc += eventPts(who, data.rounds[i]);   // that round's completed race/sprint was still to come before it
+  }
+  return out;
+}
+
+/* one-sentence title picture for the current view, or null if the calendar is unknown */
+function clinchSummary(data, who){
+  if (!data.remaining) return null;
+  const total = (e) => e.pts.reduce((a, b) => a + (b || 0), 0);
+  const ranked = data[who].map(e => ({ name: e.name, pts: total(e) })).sort((a, b) => b.pts - a.pts);
+  const [lead, second] = ranked;
+  if (!lead || !second) return null;
+  const left = data.remaining.reduce((a, ev) => a + eventPts(who, ev), 0);
+  const gap = lead.pts - second.pts;
+  const cup = who === 'drivers' ? 'drivers’ title' : 'constructors’ title';
+  const L = `<b>${esc(lead.name)}</b>`, S = esc(second.name);
+
+  if (gap > left){
+    return left === 0
+      ? `${L} won the ${esc(data.season)} ${cup}.`
+      : `${L} has clinched the ${cup}: ${gap} points clear with only ${left} left.`;
+  }
+  if (left === 0) return `${L} and ${S} finished level on points, so the ${cup} goes to countback (most wins).`;
+
+  const nR = data.remaining.filter(ev => ev.race).length, nS = data.remaining.filter(ev => ev.sprint).length;
+  const alive = ranked.filter(x => x.pts + left >= lead.pts).length - 1;
+  let text = `${L} leads ${S} by <b>${gap}</b> with <b>${left}</b> points left `
+    + `(${nR} race${nR === 1 ? '' : 's'}${nS ? `, ${nS} sprint${nS === 1 ? '' : 's'}` : ''})`
+    + (alive > 1 ? `, and ${alive} rivals can still win it. ` : '. ');
+
+  // clinching needs a lead greater than what's left once the next round is done
+  const next = data.remaining[0], w = eventPts(who, next);
+  const need = (left - w) + 1 - gap;             // points to gain on P2 at the next round
+  const rest = alive > 1 ? ' and stays out of reach of the rest' : '';
+  if (need <= 0){
+    text += `${L} clinches at the ${esc(next.name)} unless ${S} outscores them there by ${1 - need} or more.`;
+  } else if (need <= w){
+    text += `${L} can clinch at the ${esc(next.name)} by outscoring ${S} by <b>${need}</b> or more${rest}.`;
+  } else {
+    // earliest round where even a perfect run (max gain every event) would do it
+    let gained = 0, earliest = null;
+    for (const ev of data.remaining){
+      gained += eventPts(who, ev);
+      if (gap + gained > left - gained){ earliest = ev; break; }
+    }
+    if (earliest) text += `The earliest ${L} could clinch is the ${esc(earliest.name)}.`;
+  }
+  return text;
+}
+
 function renderSeason(animate = true){
   const { data, who, measure } = seasonState;
   if (!data) return;
@@ -459,8 +543,13 @@ function renderSeason(animate = true){
   if (data.rounds.some(r => r.sprint)) notes.push('* sprint weekend (race + sprint points)');
   notes.push('Tap a name or a line to highlight it.');
   if (data.mismatch) notes.push(`Totals for ${data.mismatch} driver${data.mismatch === 1 ? '' : 's'} differ from the official standings (likely post-race penalties); the chart uses race-by-race results.`);
+  if (data.remaining) notes.push('Below the dashed rust line, the title is out of reach. A tie on points goes to countback (most wins), so “clinch” here means certain on points alone.');
   if (seasonState.stale) notes.push('Showing cached data — Jolpica unreachable.');
   $('seasonNote').textContent = notes.join(' ');
+
+  const clinch = clinchSummary(data, who);
+  $('seasonClinch').innerHTML = clinch || '';
+  $('seasonClinch').style.display = clinch ? '' : 'none';
 
   $('seasonChart').setAttribute('aria-label', `${measure === 'gap' ? 'Points gap to the leader' : 'Cumulative points'} per round for ${data.season} ${who}. Leader after round ${data.rounds.at(-1)?.round}: ${list[0]?.name || '—'}. Full totals are in the standings tables above.`);
 
@@ -474,19 +563,18 @@ const seasonEndLabels = {
     const { ctx } = chart;
     const labels = [];
     chart.data.datasets.forEach((ds, i) => {
-      if (!ds._hl) return;
+      if (!ds._hl && !ds._limit) return;
       const meta = chart.getDatasetMeta(i);
       for (let k = ds.data.length - 1; k >= 0; k--){
-        if (ds.data[k] != null){ const pt = meta.data[k]; labels.push({ x: pt.x, y: pt.y, text: ds._short }); break; }
+        if (ds.data[k] != null){ const pt = meta.data[k]; labels.push({ x: pt.x, y: pt.y, text: ds._short, colour: ds._limit ? '#8F371A' : '#211D17' }); break; }
       }
     });
     labels.sort((a, b) => a.y - b.y);
     for (let k = 1; k < labels.length; k++){ if (labels[k].y - labels[k - 1].y < 12) labels[k].y = labels[k - 1].y + 12; }
     ctx.save();
     ctx.font = "700 10px 'IBM Plex Mono',monospace";
-    ctx.fillStyle = '#211D17';
     ctx.textBaseline = 'middle';
-    labels.forEach(l => ctx.fillText(l.text, l.x + 6, l.y));
+    labels.forEach(l => { ctx.fillStyle = l.colour; ctx.fillText(l.text, l.x + 6, l.y); });
     ctx.restore();
   }
 };
@@ -513,7 +601,24 @@ function drawSeasonChart(list, series, hl, animate){
     };
   });
 
+  // elimination line: the leader's total minus everything still up for grabs — anyone below it can't win
+  const left = pointsLeftAfter(data, who);
+  let floor = 0;
+  if (left){
+    const leader = data.rounds.map((_, i) => Math.max(...series.map(s => s[i] ?? -Infinity)));
+    if (measure === 'gap') floor = Math.min(...series.flat().filter(v => v != null));
+    datasets.push({
+      label: 'Out of reach', _limit: true, _short: 'OUT ↓',
+      data: left.map((l, i) => (measure === 'gap' ? 0 : leader[i]) - l),
+      borderColor: '#B4471F', backgroundColor: 'rgba(180,71,31,0.07)', fill: 'start',
+      borderWidth: 1.5, borderDash: [2, 3], pointRadius: 0, pointHoverRadius: 0, pointHitRadius: 0,
+      tension: 0, order: 2,     // behind every driver line
+    });
+  }
+
   const base = chartBase({ yTitle: measure === 'gap' ? 'pts behind leader' : 'points' });
+  // the elimination line starts far below everyone early in the season — don't let it set the scale
+  base.scales.y.min = measure === 'gap' ? Math.floor(Math.min(floor, -1) / 50) * 50 : 0;
   base.layout = { padding: { right: who === 'drivers' ? 34 : 84, top: 6 } };
   if (!animate) base.animation = false;
   base.interaction = { mode: 'index', intersect: false };
@@ -523,8 +628,10 @@ function drawSeasonChart(list, series, hl, animate){
   base.plugins.tooltip = {
     ...base.plugins.tooltip,
     itemSort: (a, b) => b.parsed.y - a.parsed.y,
-    filter: (item) => !anyHl || item.dataset._hl,
+    filter: (item) => !item.dataset._limit && (!anyHl || item.dataset._hl),
+    footerColor: '#8F371A', footerFont: { family: "'IBM Plex Mono',monospace", size: 11, weight: '600' },
     callbacks: {
+      footer: (items) => left && items.length ? `Max points left: ${left[items[0].dataIndex]}` : '',
       title: (items) => { const r = data.rounds[items[0].dataIndex]; return r ? `R${r.round} · ${r.name}${r.sprint ? ' (+ sprint)' : ''}` : ''; },
       label: (item) => {
         const e = list[item.datasetIndex];
@@ -536,7 +643,8 @@ function drawSeasonChart(list, series, hl, animate){
   };
   base.onClick = (evt, _els, chart) => {
     const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false)[0];
-    if (hit) toggleSeasonHighlight(chart.data.datasets[hit.datasetIndex]._id);
+    const id = hit && chart.data.datasets[hit.datasetIndex]._id;
+    if (id) toggleSeasonHighlight(id);
   };
 
   destroyChart('season');

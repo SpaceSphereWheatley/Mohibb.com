@@ -157,6 +157,11 @@ projection, estimated pit loss), toggled by `#viewTabs`.
     (paginated, not per-round standings) and cached in localStorage
     (`pitwall.season`) keyed on a standings signature — only re-fetched when
     the standings change. Not spoiler-gated, same as the standings table.
+    Also fetches the season calendar (`{season}.json`) to know what's left:
+    a sentence above the chart says what the leader needs to clinch (strict
+    "lead > points left" — ties go to countback), and a dashed elimination
+    line (leader minus max points still available, `MAX_PTS`) shades the
+    out-of-reach zone.
   - Liveness: `sessions?session_key=latest` decides LIVE (now between
     `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case
     and is a designed screen (next-race countdown in Europe/Oslo time), not
