@@ -28,7 +28,9 @@ changes).
   highlight others). Built from `{season}/results.json` + `sprint.json`
   (paginated, ~8 requests) and cached in localStorage keyed on a standings
   signature (season, round, total points), so it's only re-fetched when the
-  standings actually change.
+  standings actually change. It also loads the season calendar to show what
+  the leader needs to clinch the title, plus a dashed elimination line (the
+  leader's total minus the most points still available).
 - **Liveness**: `sessions?session_key=latest` decides LIVE (now between
   `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case and
   is a designed screen (next-race countdown in Europe/Oslo time), not an

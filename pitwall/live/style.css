@@ -123,6 +123,8 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .seg button+button{border-left:1.5px solid var(--line);}
 .seg button:hover{color:var(--accent);}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--card);}
+.season-clinch{padding:8px 16px 0;font-family:'Newsreader',serif;font-size:15px;line-height:1.45;color:var(--ink-2);}
+.season-clinch b{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;color:var(--ink);}
 .season-chart{height:clamp(260px,52vw,400px);position:relative;padding:8px 8px 4px 16px;}
 .season-legend{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 10px;}
 .sl-chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border:1px solid var(--line-soft);border-radius:999px;background:transparent;color:var(--ink-3);cursor:pointer;transition:border-color .12s,color .12s,background .12s;}
