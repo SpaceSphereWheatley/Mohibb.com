@@ -136,6 +136,24 @@
       <div class="split" id="standingsBody">
         <div class="state"><span class="badge">Loading</span><span class="msg">Fetching championship standings…</span></div>
       </div>
+      <div class="season" id="seasonBox" style="display:none">
+        <div class="season-head">
+          <div class="pane-head" id="seasonTitle">Season so far</div>
+          <div class="season-ctrls">
+            <div class="seg" role="group" aria-label="Championship">
+              <button type="button" data-season-who="drivers" aria-pressed="true">Drivers</button>
+              <button type="button" data-season-who="constructors" aria-pressed="false">Constructors</button>
+            </div>
+            <div class="seg" role="group" aria-label="Measure">
+              <button type="button" data-season-measure="points" aria-pressed="true">Points</button>
+              <button type="button" data-season-measure="gap" aria-pressed="false">Gap to leader</button>
+            </div>
+          </div>
+        </div>
+        <div class="season-chart"><canvas id="seasonChart" role="img" aria-label="Cumulative championship points per round"></canvas></div>
+        <div class="season-legend" id="seasonLegend" role="group" aria-label="Highlight series"></div>
+        <p class="season-note" id="seasonNote"></p>
+      </div>
     </div>
   </section>
 

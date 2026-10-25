@@ -25,7 +25,7 @@ const state = {
   schedule: [],          // [{name, start, end}] parsed from Jolpica, so we can tell a session is live even when OpenF1 is locked/unreachable
   scheduleLoadedAt: null,
   lockedSession: null,   // the scheduled session we believe is live while OpenF1 is locked
-  charts: { ot: null, wx: null },
+  charts: { ot: null, wx: null, season: null },
   standingsLoaded: false,
   standingsLoadedAt: null,
 };
@@ -243,6 +243,7 @@ async function loadStandings(){
     state.standingsLoadedAt = Date.now();
     note.textContent = label + ' · loaded ' + fmtClock.format(new Date(state.standingsLoadedAt));
     try { localStorage.setItem('pitwall.standings', JSON.stringify({ html, label, at: state.standingsLoadedAt })); } catch {}
+    loadSeason(dList, cList);
   } catch (e){
     logError('standings', e);
     // fall back to the last successfully loaded standings, if any, rather than blanking the panel
@@ -251,6 +252,7 @@ async function loadStandings(){
     if (cached?.html){
       body.innerHTML = cached.html;
       note.textContent = cached.label + ' · cached ' + fmtClock.format(new Date(cached.at)) + ' (Jolpica unreachable, tap refresh to retry)';
+      renderSeasonFromCache();
     } else {
       body.innerHTML = stateBox('Unavailable', 'Standings unavailable — Jolpica API not responding. Tap refresh to retry.', 'error');
     }
@@ -263,12 +265,297 @@ const TEAM_COLOURS = {
   'aston martin':'#229971','alpine':'#0093CC','alpine f1 team':'#0093CC','williams':'#64C4FF',
   'rb':'#6692FF','rb f1 team':'#6692FF','racing bulls':'#6692FF','haas':'#B6BABD','haas f1 team':'#B6BABD',
   'sauber':'#52E252','kick sauber':'#52E252','alfa romeo':'#52E252',
+  'audi':'#FF2D00','cadillac':'#444444',
 };
 function teamColourByName(name){
   const k = (name||'').toLowerCase();
   for (const key in TEAM_COLOURS){ if (k.includes(key)) return TEAM_COLOURS[key]; }
   return 'var(--ink-4)';
 }
+
+/* ============================================================
+   1b. SEASON SO FAR  (Jolpica — cumulative points per round)
+   Built from race + sprint results rather than per-round standings,
+   so the whole season costs a handful of paginated requests instead
+   of one per round. Only re-fetched when the standings change.
+   ============================================================ */
+const SEASON_CACHE_KEY = 'pitwall.season';
+const SEASON_PAGE = 100;                 // Jolpica's max page size (counts result rows, not races)
+const SEASON_HIGHLIGHT = 5;              // series shown in colour by default
+const SEASON_MUTED = '#C9C0AE';
+const COUNTRY_CODES = {
+  'Australia':'AUS','China':'CHN','Japan':'JPN','Bahrain':'BHR','Saudi Arabia':'KSA',
+  'USA':'USA','United States':'USA','Italy':'ITA','Monaco':'MON','Spain':'ESP','Canada':'CAN',
+  'Austria':'AUT','UK':'GBR','United Kingdom':'GBR','Belgium':'BEL','Hungary':'HUN',
+  'Netherlands':'NED','Azerbaijan':'AZE','Singapore':'SGP','Mexico':'MEX','Brazil':'BRA',
+  'Qatar':'QAT','UAE':'UAE','United Arab Emirates':'UAE','France':'FRA','Portugal':'POR',
+  'Germany':'GER','Russia':'RUS','Turkey':'TUR','Vietnam':'VNM','Argentina':'ARG',
+};
+const seasonState = {
+  data: null,            // compact season model (see buildSeason)
+  sig: null,             // standings signature the data was built against
+  who: 'drivers',        // 'drivers' | 'constructors'
+  measure: 'points',     // 'points' | 'gap'
+  hl: { drivers: null, constructors: null },   // Set of highlighted ids per view
+};
+const teamHex = (name) => { const c = teamColourByName(name); return c.startsWith('#') ? c : '#8C8475'; };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* fetch every page of a results endpoint, merging races split across pages */
+async function fetchSeasonResults(season, kind){
+  const key = kind === 'sprint' ? 'SprintResults' : 'Results';
+  const byRound = new Map();
+  let offset = 0, total = 1;
+  while (offset < total){
+    if (offset) await sleep(300);        // Jolpica is volunteer-run — don't burst
+    const j = await getJSON(JOLPI + season + '/' + (kind === 'sprint' ? 'sprint' : 'results') + '.json?limit=' + SEASON_PAGE + '&offset=' + offset);
+    const mr = j?.MRData;
+    total = num(mr?.total) ?? 0;
+    for (const race of mr?.RaceTable?.Races || []){
+      const r = num(race.round); if (r == null) continue;
+      if (!byRound.has(r)) byRound.set(r, { race, rows: [] });
+      byRound.get(r).rows.push(...(race[key] || []));
+    }
+    offset += SEASON_PAGE;
+  }
+  return byRound;
+}
+
+/* turn raw results into per-round points for every driver/constructor, ordered by the standings */
+function buildSeason(season, races, sprints, dList, cList){
+  const roundNums = [...new Set([...races.keys(), ...sprints.keys()])].sort((a, b) => a - b);
+  const rounds = roundNums.map(r => {
+    const race = (races.get(r) || sprints.get(r)).race;
+    const country = race.Circuit?.Location?.country || '';
+    return {
+      round: r,
+      code: COUNTRY_CODES[country] || country.slice(0, 3).toUpperCase() || ('R' + r),
+      name: race.raceName || ('Round ' + r),
+      sprint: sprints.has(r),
+    };
+  });
+  const drivers = new Map(), teams = new Map();
+  const ensure = (map, id, init) => { if (!map.has(id)) map.set(id, { id, ...init, pts: rounds.map(() => null) }); return map.get(id); };
+  roundNums.forEach((r, i) => {
+    for (const src of [races.get(r), sprints.get(r)]){
+      for (const row of src?.rows || []){
+        const p = num(row.points) ?? 0;
+        const d = row.Driver || {}, c = row.Constructor || {};
+        if (d.driverId){
+          const e = ensure(drivers, d.driverId, {});
+          e.code = d.code || (d.familyName || '').slice(0, 3).toUpperCase();
+          e.name = `${d.givenName || ''} ${d.familyName || ''}`.trim();
+          e.team = c.name || e.team || '';          // latest team wins, for mid-season swaps
+          e.pts[i] = (e.pts[i] || 0) + p;
+        }
+        if (c.constructorId){
+          const e = ensure(teams, c.constructorId, { name: c.name || c.constructorId });
+          e.pts[i] = (e.pts[i] || 0) + p;
+        }
+      }
+    }
+  });
+
+  // order by official standings; anything missing from them goes last by total
+  const total = (e) => e.pts.reduce((a, b) => a + (b || 0), 0);
+  const order = (map, list, idOf) => {
+    const pos = new Map((list || []).map(s => [idOf(s), num(s.position) ?? 999]));
+    return [...map.values()].sort((a, b) => (pos.get(a.id) ?? 999) - (pos.get(b.id) ?? 999) || total(b) - total(a));
+  };
+  const dOrdered = order(drivers, dList.DriverStandings, s => s.Driver?.driverId);
+  const cOrdered = order(teams, cList.ConstructorStandings, s => s.Constructor?.constructorId);
+
+  // teammates share a colour, so the lower-placed one gets a dashed line
+  const seenTeam = new Set();
+  dOrdered.forEach(e => { e.dash = seenTeam.has(e.team); seenTeam.add(e.team); });
+
+  // reconcile against the official totals (post-race penalties etc. can make them differ)
+  const official = new Map((dList.DriverStandings || []).map(s => [s.Driver?.driverId, num(s.points)]));
+  const mismatch = dOrdered.filter(e => official.has(e.id) && Math.abs(official.get(e.id) - total(e)) > 0.01).length;
+
+  return { season, rounds, drivers: dOrdered, constructors: cOrdered, mismatch };
+}
+
+/* signature of the standings — changes whenever any points are scored or adjusted */
+function standingsSig(dList){
+  const pts = (dList.DriverStandings || []).reduce((a, s) => a + (num(s.points) || 0), 0);
+  return [dList.season, dList.round, pts].join('|');
+}
+
+async function loadSeason(dList, cList){
+  const sig = standingsSig(dList);
+  if (seasonState.sig === sig && seasonState.data) return;   // nothing changed since last render
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(SEASON_CACHE_KEY)); } catch {}
+  if (cached?.sig === sig && cached.data){
+    setSeasonData(cached.data, sig);
+    return;
+  }
+  try {
+    const races = await fetchSeasonResults(dList.season, 'race');
+    const sprints = await fetchSeasonResults(dList.season, 'sprint');
+    if (!races.size && !sprints.size) throw new Error('no results');
+    const data = buildSeason(dList.season, races, sprints, dList, cList);
+    setSeasonData(data, sig);
+    try { localStorage.setItem(SEASON_CACHE_KEY, JSON.stringify({ sig, data, at: Date.now() })); } catch {}
+  } catch (e){
+    logError('season', e);
+    if (cached?.data) setSeasonData(cached.data, null, true);   // stale but better than nothing
+    else if (!seasonState.data) $('seasonBox').style.display = 'none';
+  }
+}
+function renderSeasonFromCache(){
+  if (seasonState.data) return;
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(SEASON_CACHE_KEY)); } catch {}
+  if (cached?.data) setSeasonData(cached.data, null, true);
+}
+
+function setSeasonData(data, sig, stale){
+  if (seasonState.data?.season !== data.season){
+    seasonState.hl.drivers = new Set(data.drivers.slice(0, SEASON_HIGHLIGHT).map(e => e.id));
+    seasonState.hl.constructors = new Set(data.constructors.slice(0, SEASON_HIGHLIGHT).map(e => e.id));
+  }
+  seasonState.data = data;
+  seasonState.sig = sig;
+  seasonState.stale = !!stale;
+  $('seasonBox').style.display = '';
+  renderSeason();
+}
+
+/* cumulative series for the current view; null until an entry's first result (mid-season debuts) */
+function seasonSeries(){
+  const { data, who, measure } = seasonState;
+  const list = data[who];
+  const series = list.map(e => {
+    let acc = null;
+    return e.pts.map(p => (p == null && acc == null) ? null : (acc = (acc || 0) + (p || 0)));
+  });
+  if (measure === 'gap'){
+    const leader = data.rounds.map((_, i) => Math.max(...series.map(s => s[i] ?? -Infinity)));
+    return series.map(s => s.map((v, i) => v == null ? null : v - leader[i]));
+  }
+  return series;
+}
+
+function renderSeason(animate = true){
+  const { data, who, measure } = seasonState;
+  if (!data) return;
+  const list = data[who];
+  const hl = seasonState.hl[who];
+  const series = seasonSeries();
+
+  document.querySelectorAll('[data-season-who]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.seasonWho === who)));
+  document.querySelectorAll('[data-season-measure]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.seasonMeasure === measure)));
+  $('seasonTitle').textContent = data.season + ' season so far · ' + data.rounds.length + (data.rounds.length === 1 ? ' round' : ' rounds');
+
+  $('seasonLegend').innerHTML = list.map(e => {
+    const label = who === 'drivers' ? e.code : e.name;
+    const team = who === 'drivers' ? e.team : e.name;
+    return `<button type="button" class="sl-chip${e.dash ? ' dash' : ''}" data-season-id="${esc(e.id)}" aria-pressed="${hl.has(e.id)}" title="${esc(who === 'drivers' ? e.name + ' · ' + e.team : e.name)}" style="--team:${teamHex(team)}"><i></i>${esc(label)}</button>`;
+  }).join('');
+
+  const notes = [];
+  if (data.rounds.some(r => r.sprint)) notes.push('* sprint weekend (race + sprint points)');
+  notes.push('Tap a name or a line to highlight it.');
+  if (data.mismatch) notes.push(`Totals for ${data.mismatch} driver${data.mismatch === 1 ? '' : 's'} differ from the official standings (likely post-race penalties); the chart uses race-by-race results.`);
+  if (seasonState.stale) notes.push('Showing cached data — Jolpica unreachable.');
+  $('seasonNote').textContent = notes.join(' ');
+
+  $('seasonChart').setAttribute('aria-label', `${measure === 'gap' ? 'Points gap to the leader' : 'Cumulative points'} per round for ${data.season} ${who}. Leader after round ${data.rounds.at(-1)?.round}: ${list[0]?.name || '—'}. Full totals are in the standings tables above.`);
+
+  drawSeasonChart(list, series, hl, animate);
+}
+
+/* draws each highlighted series' code at its last point, nudged apart so labels don't collide */
+const seasonEndLabels = {
+  id: 'seasonEndLabels',
+  afterDatasetsDraw(chart){
+    const { ctx } = chart;
+    const labels = [];
+    chart.data.datasets.forEach((ds, i) => {
+      if (!ds._hl) return;
+      const meta = chart.getDatasetMeta(i);
+      for (let k = ds.data.length - 1; k >= 0; k--){
+        if (ds.data[k] != null){ const pt = meta.data[k]; labels.push({ x: pt.x, y: pt.y, text: ds._short }); break; }
+      }
+    });
+    labels.sort((a, b) => a.y - b.y);
+    for (let k = 1; k < labels.length; k++){ if (labels[k].y - labels[k - 1].y < 12) labels[k].y = labels[k - 1].y + 12; }
+    ctx.save();
+    ctx.font = "700 10px 'IBM Plex Mono',monospace";
+    ctx.fillStyle = '#211D17';
+    ctx.textBaseline = 'middle';
+    labels.forEach(l => ctx.fillText(l.text, l.x + 6, l.y));
+    ctx.restore();
+  }
+};
+
+function drawSeasonChart(list, series, hl, animate){
+  if (!window.Chart) return;
+  const { data, who, measure } = seasonState;
+  const ctx = $('seasonChart'); if (!ctx) return;
+  const anyHl = hl.size > 0;
+  const datasets = list.map((e, i) => {
+    const on = hl.has(e.id);
+    const colour = teamHex(who === 'drivers' ? e.team : e.name);
+    return {
+      label: who === 'drivers' ? e.code : e.name,
+      data: series[i],
+      _id: e.id, _hl: on, _short: who === 'drivers' ? e.code : e.name.replace(/ F1 Team$/, ''),
+      borderColor: on || !anyHl ? colour : SEASON_MUTED,
+      backgroundColor: on || !anyHl ? colour : SEASON_MUTED,
+      borderWidth: on ? 2.25 : 1.25,
+      borderDash: e.dash ? [6, 4] : [],
+      pointRadius: 0, pointHoverRadius: on ? 4 : 0, pointHitRadius: 8,
+      tension: 0, spanGaps: false,
+      order: on ? 0 : 1,          // lower order draws on top
+    };
+  });
+
+  const base = chartBase({ yTitle: measure === 'gap' ? 'pts behind leader' : 'points' });
+  base.layout = { padding: { right: who === 'drivers' ? 34 : 84, top: 6 } };
+  if (!animate) base.animation = false;
+  base.interaction = { mode: 'index', intersect: false };
+  base.scales.x.grid.color = 'transparent';
+  base.scales.x.ticks.callback = (_, i) => data.rounds[i] ? data.rounds[i].code + (data.rounds[i].sprint ? '*' : '') : '';
+  base.scales.y.ticks.precision = 0;
+  base.plugins.tooltip = {
+    ...base.plugins.tooltip,
+    itemSort: (a, b) => b.parsed.y - a.parsed.y,
+    filter: (item) => !anyHl || item.dataset._hl,
+    callbacks: {
+      title: (items) => { const r = data.rounds[items[0].dataIndex]; return r ? `R${r.round} · ${r.name}${r.sprint ? ' (+ sprint)' : ''}` : ''; },
+      label: (item) => {
+        const e = list[item.datasetIndex];
+        const gained = e.pts[item.dataIndex] || 0;
+        const v = item.parsed.y;
+        return ` ${item.dataset.label}  ${measure === 'gap' ? (v === 0 ? 'leader' : v) : v}  (+${gained} this round)`;
+      },
+    },
+  };
+  base.onClick = (evt, _els, chart) => {
+    const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false)[0];
+    if (hit) toggleSeasonHighlight(chart.data.datasets[hit.datasetIndex]._id);
+  };
+
+  destroyChart('season');
+  state.charts.season = new Chart(ctx, { type: 'line', data: { labels: data.rounds.map(r => r.round), datasets }, options: base, plugins: [seasonEndLabels] });
+}
+
+function toggleSeasonHighlight(id){
+  const hl = seasonState.hl[seasonState.who];
+  if (hl.has(id)) hl.delete(id); else hl.add(id);
+  renderSeason(false);      // no replayed animation for a highlight change
+}
+
+$('seasonBox').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  if (b.dataset.seasonWho){ seasonState.who = b.dataset.seasonWho; renderSeason(); }
+  else if (b.dataset.seasonMeasure){ seasonState.measure = b.dataset.seasonMeasure; renderSeason(); }
+  else if (b.dataset.seasonId){ toggleSeasonHighlight(b.dataset.seasonId); }
+});
 
 /* ============================================================
    DRIVERS lookup (OpenF1, once per session)

@@ -113,6 +113,25 @@ h1{font-size:clamp(38px,7vw,64px);font-weight:800;letter-spacing:-0.045em;line-h
 .col-head{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);padding:14px 14px 0;}
 .tbl-scroll{max-height:520px;overflow:auto;}
 
+/* season-so-far chart (sits under the standings split) */
+.season{border-top:1.5px solid var(--line);}
+.season-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:14px 16px 4px;}
+.season-head .pane-head{padding:0;}
+.season-ctrls{display:flex;flex-wrap:wrap;gap:8px;}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:999px;overflow:hidden;}
+.seg button{font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.04em;padding:5px 12px;background:var(--card);color:var(--ink-2);border:0;cursor:pointer;transition:background .15s,color .15s;}
+.seg button+button{border-left:1.5px solid var(--line);}
+.seg button:hover{color:var(--accent);}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--card);}
+.season-chart{height:clamp(260px,52vw,400px);position:relative;padding:8px 8px 4px 16px;}
+.season-legend{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 10px;}
+.sl-chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border:1px solid var(--line-soft);border-radius:999px;background:transparent;color:var(--ink-3);cursor:pointer;transition:border-color .12s,color .12s,background .12s;}
+.sl-chip i{display:inline-block;width:16px;height:0;border-top:2.5px solid var(--team,var(--ink-4));}
+.sl-chip.dash i{border-top-style:dashed;}
+.sl-chip:hover{border-color:var(--ink-3);}
+.sl-chip[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:var(--card-2);}
+.season-note{padding:0 16px 14px;font-size:11.5px;color:var(--ink-3);}
+
 /* ---------- race control feed ---------- */
 .feed{max-height:440px;overflow:auto;list-style:none;}
 .feed-row{display:grid;grid-template-columns:84px 52px 1fr;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line-soft);border-left:3px solid transparent;align-items:start;}

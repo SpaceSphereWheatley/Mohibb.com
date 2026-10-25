@@ -23,6 +23,12 @@ changes).
   standings are re-polled every 5 min (`STANDINGS_POLL_MS`) while a session is
   live. Jolpica is volunteer-run and rate-limited, so it's polled at this slow
   cadence and never faster.
+- **Season so far**: a cumulative-points-per-round chart under the standings
+  (drivers/constructors, points or gap to leader; top 5 highlighted, tap to
+  highlight others). Built from `{season}/results.json` + `sprint.json`
+  (paginated, ~8 requests) and cached in localStorage keyed on a standings
+  signature (season, round, total points), so it's only re-fetched when the
+  standings actually change.
 - **Liveness**: `sessions?session_key=latest` decides LIVE (now between
   `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case and
   is a designed screen (next-race countdown in Europe/Oslo time), not an

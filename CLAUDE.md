@@ -151,6 +151,12 @@ projection, estimated pit loss), toggled by `#viewTabs`.
     (`STANDINGS_POLL_MS`) while a session is live. Jolpica is volunteer-run
     and rate-limited, so it's polled at this slow cadence (not the live 3s
     cadence) and never faster.
+  - Season so far: under the standings, a Chart.js line chart of cumulative
+    points per round (drivers/constructors × points/gap-to-leader, top 5
+    highlighted, teammates dashed). Built from Jolpica race + sprint results
+    (paginated, not per-round standings) and cached in localStorage
+    (`pitwall.season`) keyed on a standings signature — only re-fetched when
+    the standings change. Not spoiler-gated, same as the standings table.
   - Liveness: `sessions?session_key=latest` decides LIVE (now between
     `date_start`/`date_end` + 10 min grace) vs IDLE. IDLE is the common case
     and is a designed screen (next-race countdown in Europe/Oslo time), not
