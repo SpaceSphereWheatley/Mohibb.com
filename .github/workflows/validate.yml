@@ -97,7 +97,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # html-validate 11+ needs Node ^22.22; on Node 20 npx falls back to an
+          # older release whose peer-dep install crashes npm 10.8 ("edgesOut")
+          node-version: 22
       - name: html-validate
         run: npx --yes html-validate "**/*.html"
 
