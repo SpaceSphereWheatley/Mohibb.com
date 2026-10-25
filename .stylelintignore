@@ -1,0 +1,5 @@
+# Atlas authors its CSS against Tailwind v4, whose at-rules (@theme, @apply,
+# @import "tailwindcss") stylelint-config-recommended rejects as unknown. The
+# file is compiled by the Next build, which is where its errors would surface.
+atlas-src/**/*.css
+atlas/**

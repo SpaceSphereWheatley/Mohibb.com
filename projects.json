@@ -25,6 +25,13 @@
           "status": "live"
         },
         {
+          "name": "Atlas",
+          "category": "Analysis · telemetry",
+          "description": "A post-race engineering dashboard — distance-synchronised telemetry, fuel-corrected stint degradation, cumulative race traces, corner decomposition and a pit-execution audit, all in the browser.",
+          "url": "/atlas/",
+          "status": "wip"
+        },
+        {
           "name": "F1 Dashboard",
           "category": "Analysis · full",
           "description": "The full F1 analysis suite — deep qualifying analysis and race telemetry built on FastF1.",
